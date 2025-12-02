@@ -1,0 +1,44 @@
+/**
+ * Server actions index
+ * Re-export all server actions from a single entry point
+ */
+
+export {
+  processInvoiceAction,
+  getInvoiceByIdAction,
+  getInvoiceDataUriAction,
+  updateInvoiceStatusAction,
+  getInvoicesAction,
+  flagInvoiceForReviewAction,
+  addInvoiceCommentAction,
+  updateInvoiceCaseNumberAction,
+} from './invoice.actions';
+
+export {
+  getVendorsAction,
+  getVendorByIdAction,
+  getVendorByNameAction,
+  getSuggestedVendorTypesAction,
+  saveVendorAction,
+  deleteVendorAction,
+  getVendorTypesAction,
+  createVendorTypeAction,
+  checkVendorExistsAction,
+} from './vendor.actions';
+
+export {
+  getPendingVendorsAction,
+  getPendingVendorByIdAction,
+  getPendingVendorByInvoiceIdAction,
+  completeVendorSetupAction,
+  rejectPendingVendorAction,
+} from './pending-vendor.actions';
+
+export {
+  getDashboardStatsAction,
+  getDashboardTimeComparisonAction,
+  getDuplicateAlertsAction,
+  getOcrConfidenceDataAction,
+  getInvoiceUrgencyDataAction,
+} from './dashboard.actions';
+
