@@ -35,6 +35,7 @@ import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriActio
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { ConfidenceBadge } from '@/components/invoice/confidence-badge';
+import { VendorSetupDialog } from '@/components/dialogs/vendor-setup-dialog';
 import { decodeId } from '@/lib/utils/id-utils';
 import { getDocumentTypeBadgeClass, getDocumentTypeDescription } from '@/lib/utils/document-type-utils';
 import { parseInvoiceAmount, formatTotalAmount } from '@/lib/utils/invoice-utils';
@@ -70,11 +71,6 @@ export default function InvoiceDetailPage() {
   const [isVendorSetupDialogOpen, setIsVendorSetupDialogOpen] = useState(false);
   const [pendingVendor, setPendingVendor] = useState<any>(null);
   const [vendorTypes, setVendorTypes] = useState<Array<{ name: string; description?: string }>>([]);
-  const [vendorType, setVendorType] = useState('');
-  const [vendorEmail, setVendorEmail] = useState('');
-  const [vendorPhone, setVendorPhone] = useState('');
-  const [vendorAddress, setVendorAddress] = useState('');
-  const [requires1099, setRequires1099] = useState(true);
   const [isProcessingVendor, setIsProcessingVendor] = useState(false);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -243,24 +239,23 @@ export default function InvoiceDetailPage() {
     }
   }
 
-  const handleCompleteVendorSetup = async () => {
-    if (!pendingVendor || !vendorType) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Please select a vendor type.',
-      });
-      return;
-    }
+  const handleCompleteVendorSetup = async (data: {
+    vendorType: string;
+    email: string;
+    phone: string;
+    address: string;
+    requires1099: boolean;
+  }) => {
+    if (!pendingVendor) return;
 
     setIsProcessingVendor(true);
     try {
       const result = await completeVendorSetupAction(pendingVendor.id, {
-        vendorType,
-        email: vendorEmail || undefined,
-        phone: vendorPhone || undefined,
-        address: vendorAddress || undefined,
-        requires1099,
+        vendorType: data.vendorType,
+        email: data.email || undefined,
+        phone: data.phone || undefined,
+        address: data.address || undefined,
+        requires1099: data.requires1099,
       });
 
       if (result.success) {
@@ -971,87 +966,14 @@ export default function InvoiceDetailPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Vendor Setup Dialog */}
-      <Dialog open={isVendorSetupDialogOpen} onOpenChange={setIsVendorSetupDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Complete Vendor Setup</DialogTitle>
-            <DialogDescription>
-              Vendor "{pendingVendor?.name || invoiceData?.vendorName?.value}" needs to be added to your vendor list before this invoice can be processed.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Vendor Type *</Label>
-              <Select value={vendorType} onValueChange={setVendorType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select vendor type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vendorTypes.map((type) => (
-                    <SelectItem key={type.name} value={type.name}>
-                      {type.name}
-                      {type.description && (
-                        <span className="text-xs text-muted-foreground ml-2">
-                          - {type.description}
-                        </span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                placeholder="vendor@example.com"
-                value={vendorEmail}
-                onChange={(e) => setVendorEmail(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Phone</Label>
-              <Input
-                type="tel"
-                placeholder="(555) 123-4567"
-                value={vendorPhone}
-                onChange={(e) => setVendorPhone(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Address</Label>
-              <Input
-                placeholder="123 Main St, City, State ZIP"
-                value={vendorAddress}
-                onChange={(e) => setVendorAddress(e.target.value)}
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="requires1099"
-                checked={requires1099}
-                onCheckedChange={(checked) => setRequires1099(checked === true)}
-              />
-              <Label htmlFor="requires1099" className="cursor-pointer">
-                Requires 1099 form
-              </Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsVendorSetupDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCompleteVendorSetup} disabled={!vendorType || isProcessingVendor}>
-              {isProcessingVendor ? 'Processing...' : 'Complete Setup'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <VendorSetupDialog
+        open={isVendorSetupDialogOpen}
+        onOpenChange={setIsVendorSetupDialogOpen}
+        vendor={pendingVendor}
+        vendorTypes={vendorTypes}
+        isProcessing={isProcessingVendor}
+        onSubmit={handleCompleteVendorSetup}
+      />
     </div>
   );
 }
