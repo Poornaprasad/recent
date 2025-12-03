@@ -3,7 +3,7 @@
  * Run this to initialize the database: npm run db:init
  */
 
-import { initDb, checkDbHealth, closeDb } from './index';
+import { initDb, checkDbHealth, closeDb } from './script';
 
 async function main() {
   try {
