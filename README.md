@@ -125,7 +125,7 @@ This application follows **Clean Architecture** principles with clear separation
 ### Prerequisites
 
 - **Node.js**: 18.x or higher
-- **PostgreSQL**: 14.x or higher
+- **PostgreSQL**: 14.x or higher ⚠️ **Required - This app uses PostgreSQL, not SQLite**
 - **npm**: 9.x or higher
 - **Google AI API Key**: For invoice data extraction
 
@@ -142,16 +142,26 @@ This application follows **Clean Architecture** principles with clear separation
    npm install
    ```
 
-3. **Set up environment variables**
+3. **Set up PostgreSQL** ⚠️ **Critical Step**
+
    ```bash
-   cp .env.example .env
+   # macOS
+   brew install postgresql@14
+   brew services start postgresql@14
+
+   # Linux (Ubuntu/Debian)
+   sudo apt install postgresql-14 postgresql-contrib-14
+   sudo systemctl start postgresql
+
+   # Verify PostgreSQL is running
+   pg_isready
+   # Should output: "accepting connections"
    ```
 
-   Edit `.env` and configure all required variables (see [Environment Variables](#-environment-variables))
+   **Having issues?** See [POSTGRESQL_SETUP.md](./POSTGRESQL_SETUP.md) for detailed troubleshooting.
 
-4. **Set up PostgreSQL database**
+4. **Create database**
    ```bash
-   # Create database
    createdb invoice_management
 
    # Or using psql
@@ -160,9 +170,21 @@ This application follows **Clean Architecture** principles with clear separation
    \q
    ```
 
-5. **Initialize database**
+5. **Set up environment variables**
    ```bash
-   # Test connection
+   cp .env.example .env
+   ```
+
+   Edit `.env` and configure:
+   ```env
+   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/invoice_management
+   GOOGLE_AI_API_KEY=your_google_ai_api_key_here
+   # ... other variables
+   ```
+
+6. **Initialize and setup database**
+   ```bash
+   # Test PostgreSQL connection
    npm run db:init
 
    # Push schema to database
@@ -172,14 +194,39 @@ This application follows **Clean Architecture** principles with clear separation
    npm run db:studio
    ```
 
-6. **Start development server**
+   **Expected output:**
+   ```
+   Initializing database...
+   [Database] ✓ PostgreSQL connection successful
+   [Database] PostgreSQL version: 14.x
+   ✓ Database initialized
+   ✓ Database health check passed
+   ```
+
+7. **Start development server**
    ```bash
    npm run dev
    ```
 
-7. **Open application**
+8. **Open application**
 
    Navigate to [http://localhost:3000](http://localhost:3000)
+
+### Common Setup Issues
+
+**Issue: PostgreSQL service won't start**
+```bash
+# macOS fix
+brew services stop postgresql@14
+pkill -9 postgres
+rm -f /usr/local/var/postgresql@14/postmaster.pid
+brew services start postgresql@14
+```
+
+**Issue: "server-only" import error with db:init**
+✅ Already fixed in latest version! Update your code if you see this error.
+
+**For more troubleshooting**, see [POSTGRESQL_SETUP.md](./POSTGRESQL_SETUP.md)
 
 ## 🔐 Environment Variables
 
