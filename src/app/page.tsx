@@ -139,7 +139,6 @@ export default function InvoiceProcessorPage() {
       }
     };
     reader.onerror = (error) => {
-      console.error("FileReader error: ", error);
       setError("Failed to read the file.");
       toast({
         variant: "destructive",

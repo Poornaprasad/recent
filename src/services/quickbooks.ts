@@ -15,9 +15,7 @@ const FAKE_QUICKBOOKS_DB: { [invoiceNumber: string]: QuickBooksInvoiceStatus } =
 
 
 export async function getQuickBooksInvoiceStatus(invoiceNumber: string): Promise<QuickBooksInvoiceStatus | null> {
-    console.log('Checking QuickBooks for invoice:', invoiceNumber);
-
     const status = FAKE_QUICKBOOKS_DB[invoiceNumber];
-    
+
     return Promise.resolve(status || null);
 }

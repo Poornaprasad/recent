@@ -92,13 +92,11 @@ export default function InvoicesPage() {
       try {
         const result = await getInvoicesAction();
         if (result.error) {
-          console.error('Error loading invoices:', result.error);
           setInvoices([]);
         } else if (result.data) {
           setInvoices(result.data);
         }
       } catch (error) {
-        console.error('Error loading invoices:', error);
         setInvoices([]);
       } finally {
         setIsLoading(false);

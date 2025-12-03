@@ -105,7 +105,6 @@ export class InvoiceService {
       try {
         filePath = await saveInvoiceFile(input.invoiceDataUri, invoiceId);
       } catch (fileError) {
-        console.error('Error saving invoice file:', fileError);
         filePath = input.invoiceDataUri;
       }
       
@@ -121,7 +120,6 @@ export class InvoiceService {
         try {
           recurringAnalysis = await analyzeRecurringBill(vendorName, invoiceAmount, invoiceDate);
         } catch (error) {
-          console.error('Error analyzing recurring bill:', error);
           // Continue without recurring analysis if it fails
         }
       }
@@ -139,17 +137,15 @@ export class InvoiceService {
               // Create pending vendor record
               await createPendingVendor({
                 name: vendorName,
-                email: data.vendorAddress?.value || undefined, // Use vendor address as email if available
+                email: data.vendorAddress?.value || undefined,
                 invoiceId: invoiceId,
                 status: 'Pending',
               });
-              console.log(`Created pending vendor "${vendorName}" for invoice ${invoiceId}`);
             }
           } else if (vendorCheck.requires1099) {
             vendorRequires1099 = true;
           }
         } catch (error) {
-          console.error('Error checking vendor:', error);
           // Continue processing even if vendor check fails
         }
       }
@@ -184,7 +180,6 @@ export class InvoiceService {
 
       return { data: finalInvoice };
     } catch (error) {
-      console.error('Error processing invoice:', error);
       let message: string;
       if (error instanceof Error) {
         if (error.cause && typeof error.cause === 'object' && 'message' in error.cause && typeof error.cause.message === 'string') {

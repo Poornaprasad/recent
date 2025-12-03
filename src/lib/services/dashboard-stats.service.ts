@@ -19,16 +19,13 @@ function filterInvoicesByAccess(
   userPermissions?: UserPermissions
 ): Awaited<ReturnType<typeof findAllInvoices>> {
   if (!userPermissions) {
-    // No user context - return all (for backward compatibility)
     return invoices;
   }
 
-  // Admin, Director, Manager can see all invoices
   if (rbacService.isElevatedRole(userPermissions.role)) {
     return invoices;
   }
 
-  // Account role - filter by assigned states
   if (userPermissions.role === 'account' && userPermissions.assignedStates) {
     return invoices.filter(inv => {
       const invoiceState = inv.state as State | undefined;
@@ -36,9 +33,7 @@ function filterInvoicesByAccess(
     });
   }
 
-  // User role - only see invoices they created or are assigned to
   if (userPermissions.role === 'user') {
-    // This would need userId to filter - for now return all
     // TODO: Add userId parameter and filter by createdBy or assignedTo
     return invoices;
   }
@@ -63,8 +58,6 @@ export async function calculateDashboardStats(
   // Calculate processing time (days between createdAt and now for pending/review invoices)
   let totalProcessingDays = 0;
   let processingCount = 0;
-  
-  // Count invoices by status
   let pendingCount = 0;
   let reviewCount = 0;
   let totalAmountDue = 0;
@@ -73,39 +66,35 @@ export async function calculateDashboardStats(
   let highValueCount = 0;
   let duplicateCount = 0;
   let urgentCount = 0;
-  
+
   for (const invoice of filteredInvoices) {
-    // Status counts
     if (invoice.status === 'Pending') {
       pendingCount++;
     } else if (invoice.status === 'Review') {
       reviewCount++;
       urgentCount++;
     }
-    
-    // Total amount due (pending + review invoices)
+
     if ((invoice.status === 'Pending' || invoice.status === 'Review') && invoice.totalAmount?.value) {
       const amount = parseInvoiceAmount(invoice.totalAmount.value);
       totalAmountDue += amount;
     }
-    
-    // Processing time calculation
+
     if ((invoice.status === 'Pending' || invoice.status === 'Review') && invoice.createdAt) {
       const createdDate = invoice.createdAt instanceof Date ? invoice.createdAt : new Date(invoice.createdAt);
       const daysDiff = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
       totalProcessingDays += daysDiff;
       processingCount++;
     }
-    
-    // Processing today (invoices created today)
+
     if (invoice.createdAt) {
       const createdDate = invoice.createdAt instanceof Date ? invoice.createdAt : new Date(invoice.createdAt);
       if (createdDate.getTime() >= todayStart) {
         processingToday++;
       }
     }
-    
-    // Overdue invoices (pending invoices older than 30 days)
+
+    // Overdue: pending invoices older than 30 days
     if (invoice.status === 'Pending' && invoice.createdAt) {
       const createdDate = invoice.createdAt instanceof Date ? invoice.createdAt : new Date(invoice.createdAt);
       const daysOld = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
@@ -114,18 +103,16 @@ export async function calculateDashboardStats(
         urgentCount++;
       }
     }
-    
-    // High value invoices (requires escalation)
+
     if (invoice.isHighValue || invoice.requiresEscalation) {
       highValueCount++;
     }
-    
-    // Duplicate alerts
+
     if (invoice.isDuplicate) {
       duplicateCount++;
     }
-    
-    // Urgent (high value, duplicates, or review status)
+
+    // Urgent: high value, duplicates, or review status
     if (invoice.isHighValue || invoice.isDuplicate || invoice.status === 'Review') {
       urgentCount++;
     }
@@ -202,7 +189,145 @@ export async function calculateTimeComparison(
   };
 }
 
+export interface DuplicateAlert {
+  invoiceId: string;
+  invoiceNumber: string;
+  vendorName: string;
+  amount: number;
+  date: string;
+  confidence: number;
+  duplicateReason?: string;
+}
 
+export interface OcrConfidenceData {
+  high: number; // >90%
+  medium: number; // 70-90%
+  low: number; // <70%
+  failed: number; // 0% or null
+  total: number;
+  actionRequired: number;
+}
 
+export interface InvoiceUrgencyData {
+  days: number; // Days until due (negative = overdue)
+  amount: number;
+  urgency: 'Overdue' | 'Due Soon' | 'Due Today' | 'This Week' | '>7 Days';
+}
 
+/**
+ * Get duplicate alerts for dashboard
+ */
+export async function getDuplicateAlerts(
+  limit: number = 5,
+  userPermissions?: UserPermissions
+): Promise<DuplicateAlert[]> {
+  const allInvoices = await findAllInvoices();
+  const filteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+
+  const duplicates = filteredInvoices
+    .filter(inv => inv.isDuplicate)
+    .slice(0, limit)
+    .map(inv => ({
+      invoiceId: inv.id,
+      invoiceNumber: inv.invoiceNumber?.value || 'N/A',
+      vendorName: inv.vendorName?.value || 'Unknown',
+      amount: parseInvoiceAmount(inv.totalAmount?.value),
+      date: inv.invoiceDate?.value || 'N/A',
+      confidence: getOverallConfidence(inv),
+      duplicateReason: inv.duplicateReason,
+    }));
+
+  return duplicates;
+}
+
+/**
+ * Get OCR confidence distribution
+ */
+export async function getOcrConfidenceData(
+  userPermissions?: UserPermissions
+): Promise<OcrConfidenceData> {
+  const allInvoices = await findAllInvoices();
+  const filteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+
+  let high = 0;
+  let medium = 0;
+  let low = 0;
+  let failed = 0;
+  let actionRequired = 0;
+
+  for (const invoice of filteredInvoices) {
+    const confidence = getOverallConfidence(invoice);
+
+    if (confidence === 0 || isNaN(confidence)) {
+      failed++;
+      actionRequired++;
+    } else if (confidence < 0.7) {
+      low++;
+      actionRequired++;
+    } else if (confidence < 0.9) {
+      medium++;
+      actionRequired++;
+    } else {
+      high++;
+    }
+  }
+
+  return {
+    high,
+    medium,
+    low,
+    failed,
+    total: filteredInvoices.length,
+    actionRequired,
+  };
+}
+
+/**
+ * Get invoice urgency matrix data
+ */
+export async function getInvoiceUrgencyData(
+  userPermissions?: UserPermissions
+): Promise<InvoiceUrgencyData[]> {
+  const allInvoices = await findAllInvoices();
+  const filteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const now = new Date();
+
+  const urgencyData: InvoiceUrgencyData[] = [];
+
+  for (const invoice of filteredInvoices) {
+    if (invoice.status !== 'Pending' && invoice.status !== 'Review') {
+      continue;
+    }
+
+    let daysUntilDue = 30;
+    if (invoice.createdAt) {
+      const createdDate = invoice.createdAt instanceof Date ? invoice.createdAt : new Date(invoice.createdAt);
+      const daysSinceCreation = Math.floor((now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+      daysUntilDue = 30 - daysSinceCreation;
+    }
+
+    const amount = parseInvoiceAmount(invoice.totalAmount?.value);
+
+    let urgency: InvoiceUrgencyData['urgency'];
+    if (daysUntilDue < 0) {
+      urgency = 'Overdue';
+    } else if (daysUntilDue === 0) {
+      urgency = 'Due Today';
+    } else if (daysUntilDue <= 3) {
+      urgency = 'Due Soon';
+    } else if (daysUntilDue <= 7) {
+      urgency = 'This Week';
+    } else {
+      urgency = '>7 Days';
+    }
+
+    urgencyData.push({
+      days: daysUntilDue,
+      amount,
+      urgency,
+    });
+  }
+
+  return urgencyData;
+}
 
