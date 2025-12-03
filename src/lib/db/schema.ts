@@ -16,6 +16,11 @@ export const invoices = pgTable('invoices', {
   totalAmount: real('total_amount'),
   paymentTerms: text('payment_terms'),
   lineItems: text('line_items'), // JSON string
+  // New extracted fields
+  amount: real('amount'), // Alternative field name for totalAmount
+  clientName: text('client_name'), // Alternative field name for customerName
+  description: text('description'), // High-level description of the invoice/receipt
+  dueDate: text('due_date'), // Payment due date
   status: text('status', { enum: ['Paid', 'Pending', 'Review', 'Draft'] }).notNull(),
   documentType: text('document_type', { enum: ['Webhook Source', 'Invoice', 'Receipt', 'Per Diem', 'Other', 'Office Disbursement', 'Office Reimbursement', 'Case Details', 'Reimbursement', 'Office Credit Card Bill'] }),
   invoiceDataUri: text('invoice_data_uri').notNull(),
@@ -56,6 +61,11 @@ export const invoices = pgTable('invoices', {
   paymentTermsMeta: text('payment_terms_meta'),
   lineItemsMeta: text('line_items_meta'),
   documentTypeMeta: text('document_type_meta'),
+  // Metadata for new fields
+  amountMeta: text('amount_meta'), // {confidence, reasoning, bbox}
+  clientNameMeta: text('client_name_meta'),
+  descriptionMeta: text('description_meta'),
+  dueDateMeta: text('due_date_meta'),
 
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

@@ -18,8 +18,8 @@ export async function convertPdfToImageClient(pdfDataUri: string): Promise<strin
     const pdfjsLib = await import('pdfjs-dist');
     
     // Set up worker for browser environment
-    // Use jsdelivr CDN with the correct .js extension (not .mjs)
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
+    // Use local worker file from public folder instead of CDN to avoid fetch errors
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
     
     // Extract base64 data from data URI
     const base64Data = pdfDataUri.split(',')[1];

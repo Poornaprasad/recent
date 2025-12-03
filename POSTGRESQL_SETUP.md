@@ -222,23 +222,77 @@ CREATE DATABASE invoice_management;
 **Error:**
 ```
 Error: password authentication failed for user "postgres"
+# OR
+createdb: error: connection to server on socket "/tmp/.s.PGSQL.5432" failed: FATAL: password authentication failed for user "likhithkumar"
 ```
 
 **Solutions:**
 
+#### Solution 1: Create database using psql (Recommended)
 ```bash
-# Method 1: Update .env with correct credentials
-# Edit .env file:
-DATABASE_URL=postgresql://YOUR_USERNAME:YOUR_PASSWORD@localhost:5432/invoice_management
+# Connect to PostgreSQL (will prompt for password if needed)
+psql postgres
 
-# Method 2: Reset postgres password
+# Once connected, create the database:
+CREATE DATABASE invoice_management;
+
+# Exit psql
+\q
+```
+
+#### Solution 2: Fix peer authentication (macOS/Linux)
+If you want to use `createdb` without passwords, configure PostgreSQL to use peer authentication:
+
+```bash
+# Find your pg_hba.conf file location
+psql -U postgres -c "SHOW hba_file;"
+
+# Edit pg_hba.conf (usually at /usr/local/var/postgresql@14/pg_hba.conf or /opt/homebrew/var/postgresql@14/pg_hba.conf)
+# Change this line:
+# host    all             all             127.0.0.1/32            password
+# To:
+# host    all             all             127.0.0.1/32            trust
+
+# Also ensure local connections use peer:
+# local   all             all                                     peer
+
+# Restart PostgreSQL
+brew services restart postgresql@14
+
+# Now createdb should work without password
+createdb invoice_management
+```
+
+#### Solution 3: Create PostgreSQL user for your macOS user
+```bash
+# Connect as postgres user (you may need to set a password first)
 psql -U postgres
-ALTER USER postgres WITH PASSWORD 'your_new_password';
+
+# Create a user matching your macOS username
+CREATE USER likhithkumar WITH CREATEDB;
+
+# Grant necessary permissions
+ALTER USER likhithkumar WITH SUPERUSER;
+
+# Exit
 \q
 
-# Method 3: Use peer authentication (macOS/Linux)
-# Connect without password:
-psql -U $(whoami) postgres
+# Now you can use createdb
+createdb invoice_management
+```
+
+#### Solution 4: Use postgres user with password
+```bash
+# Set password for postgres user
+psql -U postgres
+ALTER USER postgres WITH PASSWORD 'your_password';
+\q
+
+# Use createdb with password
+PGPASSWORD=your_password createdb -U postgres invoice_management
+
+# Or update .env file:
+DATABASE_URL=postgresql://postgres:your_password@localhost:5432/invoice_management
 ```
 
 ### Issue 6: Multiple PostgreSQL versions

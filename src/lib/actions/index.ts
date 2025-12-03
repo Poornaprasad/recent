@@ -52,3 +52,7 @@ export {
   getUsersByRoleAction,
 } from './user.actions';
 
+export {
+  getAllAuditLogsAction,
+} from './audit.actions';
+

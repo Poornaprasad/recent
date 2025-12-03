@@ -54,8 +54,12 @@ export function parseInvoiceAmount(value: unknown): number {
   }
   
   if (typeof value === 'string') {
-    // Remove currency symbols, commas, and whitespace, then parse
-    const cleanedAmount = value.replace(/[$,\s]/g, '');
+    // Remove currency symbols ($, €, £, etc.), commas, whitespace, and common currency codes (USD, EUR, GBP, etc.)
+    // First remove currency symbols and formatting
+    let cleanedAmount = value.replace(/[$€£¥,\s]/g, '');
+    // Remove common currency codes (case-insensitive)
+    cleanedAmount = cleanedAmount.replace(/\b(USD|EUR|GBP|JPY|CAD|AUD|CHF|CNY|INR)\b/gi, '');
+    // Parse the remaining numeric value
     const parsed = parseFloat(cleanedAmount);
     return isNaN(parsed) ? 0 : parsed;
   }

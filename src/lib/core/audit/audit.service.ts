@@ -186,6 +186,30 @@ class AuditService {
       return [];
     }
   }
+
+  /**
+   * Get all audit logs
+   */
+  async getAllAuditLogs(limit: number = 1000): Promise<any[]> {
+    try {
+      await initDb();
+      const db = getDb();
+
+      const logs = await db
+        .select()
+        .from(auditLogs)
+        .orderBy(desc(auditLogs.timestamp))
+        .limit(limit);
+
+      return logs.map((log) => ({
+        ...log,
+        details: log.details ? JSON.parse(log.details) : null,
+      }));
+    } catch (error) {
+      logger.error('Failed to get all audit logs', {}, error instanceof Error ? error : new Error(String(error)));
+      return [];
+    }
+  }
 }
 
 // Export singleton instance

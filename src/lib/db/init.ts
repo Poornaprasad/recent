@@ -3,6 +3,7 @@
  * Run this to initialize the database: npm run db:init
  */
 
+import 'dotenv/config';
 import { initDb, checkDbHealth, closeDb } from './script';
 
 async function main() {

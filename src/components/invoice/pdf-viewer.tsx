@@ -1,22 +1,24 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-// Set up the worker
-// This is critical for react-pdf to work with Next.js/Webpack
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.js`;
-
 interface PDFViewerProps {
   file: string;
 }
 
 export function PDFViewer({ file }: PDFViewerProps) {
+  // Set up the worker
+  // This is critical for react-pdf to work with Next.js/Turbopack
+  // Use local worker file from public folder instead of CDN to avoid fetch errors
+  useEffect(() => {
+    pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+  }, []);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
 

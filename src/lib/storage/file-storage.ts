@@ -76,7 +76,15 @@ export async function saveInvoiceFile(
 }
 
 export async function readInvoiceFile(filePath: string): Promise<string> {
-  const fullPath = path.join(process.cwd(), 'data', filePath);
+  // Handle paths like /uploads/filename.png
+  let filename = filePath;
+  if (filePath.startsWith('/uploads/')) {
+    filename = filePath.replace('/uploads/', '');
+  } else if (filePath.startsWith('uploads/')) {
+    filename = filePath.replace('uploads/', '');
+  }
+  
+  const fullPath = path.join(UPLOADS_DIR, filename);
   
   try {
     const buffer = await fs.readFile(fullPath);
@@ -101,7 +109,15 @@ function getMimeTypeFromPath(filePath: string): string {
 }
 
 export async function deleteInvoiceFile(filePath: string): Promise<void> {
-  const fullPath = path.join(process.cwd(), 'data', filePath);
+  // Handle paths like /uploads/filename.png
+  let filename = filePath;
+  if (filePath.startsWith('/uploads/')) {
+    filename = filePath.replace('/uploads/', '');
+  } else if (filePath.startsWith('uploads/')) {
+    filename = filePath.replace('uploads/', '');
+  }
+  
+  const fullPath = path.join(UPLOADS_DIR, filename);
   try {
     await fs.unlink(fullPath);
   } catch (error) {

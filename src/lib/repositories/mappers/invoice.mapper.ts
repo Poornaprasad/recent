@@ -5,6 +5,7 @@
 
 import type { Invoice } from '../../db/schema';
 import type { StoredInvoice, ExtractedField } from '../../domain/types';
+import { parseInvoiceAmount } from '../../utils/invoice-utils';
 
 /**
  * Parse metadata JSON string
@@ -97,6 +98,16 @@ export function mapDbRowToInvoice(row: Invoice): StoredInvoice {
  */
 export function mapInvoiceToDbRow(invoice: Partial<StoredInvoice>): Partial<Invoice> {
   const extractValue = (field: any) => field?.value ?? null;
+  
+  // Special extractor for totalAmount that parses string values to numbers
+  // The database expects a real (number) type, so we parse string values like "$5.44 USD" to numbers
+  const extractTotalAmount = (field: any): number | null => {
+    if (!field || field.value === null || field.value === undefined) {
+      return null;
+    }
+    // Parse the value - handles both string (e.g., "$5.44 USD") and number types
+    return parseInvoiceAmount(field.value);
+  };
 
   return {
     id: invoice.id,
@@ -136,7 +147,7 @@ export function mapInvoiceToDbRow(invoice: Partial<StoredInvoice>): Partial<Invo
     vendorAddressMeta: serializeMeta(invoice.vendorAddress),
     customerName: extractValue(invoice.customerName),
     customerNameMeta: serializeMeta(invoice.customerName),
-    totalAmount: extractValue(invoice.totalAmount),
+    totalAmount: extractTotalAmount(invoice.totalAmount),
     totalAmountMeta: serializeMeta(invoice.totalAmount),
     paymentTerms: extractValue(invoice.paymentTerms),
     paymentTermsMeta: serializeMeta(invoice.paymentTerms),

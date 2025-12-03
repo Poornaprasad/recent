@@ -41,9 +41,15 @@ export const ExtractInvoiceDataOutputSchema = z.object({
   invoiceDate: ExtractedFieldSchema,
   vendorName: ExtractedFieldSchema,
   vendorAddress: ExtractedFieldSchema,
-  customerName: ExtractedFieldSchema,
-  totalAmount: ExtractedFieldSchema,
   lineItems: ExtractedFieldSchema,
+  // Primary fields (new naming)
+  amount: ExtractedFieldSchema,
+  clientName: ExtractedFieldSchema,
+  description: ExtractedFieldSchema.optional(),
+  dueDate: ExtractedFieldSchema.optional(),
+  // Legacy fields (optional for backward compatibility)
+  customerName: ExtractedFieldSchema.optional(),
+  totalAmount: ExtractedFieldSchema.optional(),
 }).describe('The extracted invoice or receipt data.');
 
 

@@ -26,18 +26,36 @@ import {
     SelectValue,
   } from "@/components/ui/select"
 import { Input } from "@/components/ui/input";
-import { getAuditLogs, type AuditLog } from '@/lib/db/schema';
+import { type AuditLog } from '@/lib/db/schema';
+import { getAllAuditLogsAction } from '@/lib/actions';
 import { cn } from '@/lib/utils/utils';
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Eye, Download, Search, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function AuditLogsPage() {
-  const [logs, setLogs] = useState<AuditLog[]>(getAuditLogs());
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [severityFilter, setSeverityFilter] = useState('all');
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
+  useEffect(() => {
+    const fetchLogs = async () => {
+      setIsLoading(true);
+      try {
+        const result = await getAllAuditLogsAction();
+        if (result.data) {
+          setLogs(result.data);
+        }
+      } catch (error) {
+        console.error('Failed to fetch audit logs:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchLogs();
+  }, []);
 
   const getSeverityBadgeClass = (severity: string) => {
     switch (severity.toLowerCase()) {
@@ -58,12 +76,16 @@ export default function AuditLogsPage() {
     return logs
         .filter(log => {
             const searchTermLower = searchTerm.toLowerCase();
+            const detailsStr = typeof log.details === 'object' 
+              ? JSON.stringify(log.details) 
+              : (log.details || '').toLowerCase();
+            const ipAddressStr = (log.ipAddress || '').toLowerCase();
             return (
-                log.user.toLowerCase().includes(searchTermLower) ||
-                log.action.toLowerCase().includes(searchTermLower) ||
-                log.resource.toLowerCase().includes(searchTermLower) ||
-                log.details.toLowerCase().includes(searchTermLower) ||
-                log.ipAddress.toLowerCase().includes(searchTermLower)
+                (log.user || '').toLowerCase().includes(searchTermLower) ||
+                (log.action || '').toLowerCase().includes(searchTermLower) ||
+                (log.resource || '').toLowerCase().includes(searchTermLower) ||
+                detailsStr.includes(searchTermLower) ||
+                ipAddressStr.includes(searchTermLower)
             );
         })
         .filter(log => {
@@ -133,7 +155,11 @@ export default function AuditLogsPage() {
             </div>
         </CardHeader>
         <CardContent>
-          {paginatedLogs.length > 0 ? (
+          {isLoading ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">Loading audit logs...</p>
+            </div>
+          ) : paginatedLogs.length > 0 ? (
              <Table>
                 <TableHeader>
                   <TableRow>
@@ -148,14 +174,23 @@ export default function AuditLogsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedLogs.map((log) => (
+                  {paginatedLogs.map((log) => {
+                    const timestamp = log.timestamp instanceof Date 
+                      ? log.timestamp.toLocaleString() 
+                      : typeof log.timestamp === 'string' 
+                        ? new Date(log.timestamp).toLocaleString() 
+                        : String(log.timestamp || '');
+                    const details = typeof log.details === 'object' 
+                      ? JSON.stringify(log.details) 
+                      : log.details || '';
+                    return (
                       <TableRow key={log.id}>
-                        <TableCell className="whitespace-nowrap">{log.timestamp}</TableCell>
+                        <TableCell className="whitespace-nowrap">{timestamp}</TableCell>
                         <TableCell>{log.user}</TableCell>
                         <TableCell>{log.action}</TableCell>
                         <TableCell>{log.resource}</TableCell>
-                        <TableCell>{log.details}</TableCell>
-                        <TableCell>{log.ipAddress}</TableCell>
+                        <TableCell className="max-w-xs truncate" title={details}>{details}</TableCell>
+                        <TableCell>{log.ipAddress || '-'}</TableCell>
                         <TableCell>
                             <Badge variant="outline" className={cn(getSeverityBadgeClass(log.severity))}>
                                 {log.severity}
@@ -170,7 +205,8 @@ export default function AuditLogsPage() {
                             </Button>
                         </TableCell>
                       </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
           ) : (

@@ -68,7 +68,7 @@ export function ReviewView({
 }: ReviewViewProps) {
   const [highlightBox, setHighlightBox] = useState<BoundingBox | null>(null);
   const [hoveredField, setHoveredField] = useState<string | null>(null);
-  const [caseNumber, setCaseNumber] = useState<string | undefined>(data.caseNumber);
+  const [caseNumber, setCaseNumber] = useState<string>(data.caseNumber || '');
 
   const initialFields = useMemo(() => {
     const fields = [];
@@ -79,10 +79,19 @@ export function ReviewView({
              fields.push({
                 fieldName: key,
                 originalFieldName: key,
-                ...value,
+                value: value.value,
+                confidence: value.confidence ?? 0,
+                reasoning: value.reasoning ?? '',
+                bbox: value.bbox ?? null,
             });
         } else if (value && typeof value === 'object') {
-            fields.push({ fieldName: key, ...value });
+            fields.push({ 
+              fieldName: key, 
+              value: value.value ?? '',
+              confidence: value.confidence ?? 0,
+              reasoning: value.reasoning ?? '',
+              bbox: value.bbox ?? null,
+            });
         }
     }
     return fields;
@@ -135,42 +144,85 @@ export function ReviewView({
   };
   
   const renderField = (field: any, index: number) => {
-    const { value } = form.watch(`fields.${index}`);
-
     if (field.fieldName === 'lineItems') {
-         if (!Array.isArray(value)) return null;
+      return (
+        <FormField
+          control={form.control}
+          name={`fields.${index}.value`}
+          render={({ field: formField }) => {
+            const fieldValue = formField.value ?? [];
+            if (!Array.isArray(fieldValue)) return null;
          return (
+              <FormControl>
             <div className="space-y-2">
-                {value.map((item: any, itemIndex: number) => (
+                  {fieldValue.map((item: any, itemIndex: number) => (
                      <Card key={itemIndex} className="p-3 bg-muted/50">
                         <div className="space-y-2">
                         {typeof item === 'object' && item !== null ? 
                             Object.entries(item).map(([subKey, subValue]) => (
                                 <div key={subKey} className="flex items-center gap-2 text-sm">
                                     <Label className="w-1/3 text-muted-foreground">{toTitleCase(subKey)}</Label>
-                                    <Input defaultValue={String(subValue)} onChange={(e) => {
-                                        const newFormValues = [...form.getValues().fields];
-                                        ((newFormValues[index].value as any[])[itemIndex] as any)[subKey] = e.target.value;
-                                        form.setValue('fields', newFormValues);
-                                    }} />
+                              <Input 
+                                value={subValue !== null && subValue !== undefined ? String(subValue) : ''} 
+                                onChange={(e) => {
+                                  const newValue = [...fieldValue];
+                                  (newValue[itemIndex] as any)[subKey] = e.target.value;
+                                  formField.onChange(newValue);
+                                }} 
+                              />
                                 </div>
                             ))
-                            : <p>{String(item)}</p>
+                          : <p>{String(item ?? '')}</p>
                         }
                         </div>
                     </Card>
                 ))}
             </div>
-         )
+              </FormControl>
+            );
+          }}
+        />
+      );
     }
 
-    if (typeof value === 'string' && value.length > 100) {
-      return <Textarea {...form.register(`fields.${index}.value`)} rows={4} />;
-    }
+    return (
+      <FormField
+        control={form.control}
+        name={`fields.${index}.value`}
+        render={({ field: formField }) => {
+          // Ensure value is never undefined
+          const safeValue = formField.value === null || formField.value === undefined 
+            ? (typeof field.value === 'number' ? 0 : '') 
+            : formField.value;
+          
+          const isLongText = typeof safeValue === 'string' && safeValue.length > 100;
+          const fieldType = typeof safeValue === 'number' ? 'number' : 'text';
 
-    const fieldType = typeof value === 'number' ? 'number' : 'text';
+          if (isLongText) {
+            return (
+              <FormControl>
+                <Textarea 
+                  {...formField}
+                  value={safeValue}
+                  rows={4}
+                />
+              </FormControl>
+            );
+          }
 
-    return <Input {...form.register(`fields.${index}.value`)} type={fieldType} step={fieldType === 'number' ? '0.01' : undefined} />;
+          return (
+            <FormControl>
+              <Input 
+                {...formField}
+                type={fieldType} 
+                step={fieldType === 'number' ? '0.01' : undefined}
+                value={safeValue}
+              />
+            </FormControl>
+          );
+        }}
+      />
+    );
   }
 
   const isPdf = invoicePreviewUrl.startsWith('data:application/pdf');
@@ -218,7 +270,7 @@ export function ReviewView({
                           <Label htmlFor="case-number" className="mb-2 block">Case Number</Label>
                           <Input
                             id="case-number"
-                            value={caseNumber}
+                            value={caseNumber || ''}
                             onChange={(e) => setCaseNumber(e.target.value)}
                             placeholder="Enter case number..."
                           />
@@ -256,11 +308,9 @@ export function ReviewView({
                                   </div>
                                 )}
                               </div>
-                              <FormControl>
                                   <div className="flex items-center gap-2">
                                     {renderField(field, index)}
                                   </div>
-                              </FormControl>
                               <FormMessage />
                             </FormItem>
                           );
