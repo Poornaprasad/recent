@@ -52,12 +52,12 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils/utils';
 import Link from "next/link";
 import { CircularProgressBadge } from "@/components/invoice/circular-progress-badge";
-import { getInvoicesAction } from "@/lib/actions";
-import type { StoredInvoice } from "@/lib/invoice-types";
-import { getStatusBadgeClass } from "@/lib/status-utils";
+import { getInvoicesAction } from '@/lib/actions/index';
+import type { StoredInvoice } from '@/lib/domain/types';
+import { getStatusBadgeClass } from '@/lib/utils/status-utils';
 import { 
   getOverallConfidence, 
   getFieldsExtractedCount, 
@@ -67,7 +67,7 @@ import {
   getUniqueVendors,
   type SortField,
   type SortDirection
-} from "@/lib/invoice-utils";
+} from '@/lib/utils/invoice-utils';
 import { exportInvoicesToCSVFile } from "@/lib/utils/export-utils";
 import { encodeId } from "@/lib/utils/id-utils";
 import { getDocumentTypeBadgeClass } from "@/lib/utils/document-type-utils";

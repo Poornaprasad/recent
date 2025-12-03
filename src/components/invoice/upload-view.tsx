@@ -7,7 +7,7 @@ import { UploadCloud, FileText, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils/utils';
 
 interface UploadViewProps {
   onFileSelect: (file: File) => void;

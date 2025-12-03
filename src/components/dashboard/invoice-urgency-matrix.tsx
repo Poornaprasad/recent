@@ -13,7 +13,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { getInvoiceUrgencyDataAction } from '@/lib/actions';
+import { getInvoiceUrgencyDataAction } from '@/lib/actions/index';
 
 const COLORS = {
   Overdue: 'hsl(var(--destructive))',

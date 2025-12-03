@@ -8,8 +8,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getInvoices } from "@/lib/invoice-store";
-import type { StoredInvoice } from "@/lib/invoice-types";
+import { findAllInvoices } from "@/lib/repositories/invoice.repository";
+import type { StoredInvoice } from '@/lib/domain/types';
 import { encodeId } from "@/lib/utils/id-utils";
 import {
   Table,
@@ -21,16 +21,16 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { getStatusBadgeClass } from "@/lib/status-utils";
-import { getOverallConfidence } from "@/lib/invoice-utils";
+import { cn } from '@/lib/utils/utils';
+import { getStatusBadgeClass } from '@/lib/utils/status-utils';
+import { getOverallConfidence } from '@/lib/utils/invoice-utils';
 import Link from "next/link";
 import { CircularProgressBadge } from "@/components/invoice/circular-progress-badge";
 import { Eye, Check, X } from "lucide-react";
 import { ApprovalActions } from "./_components/approval-actions";
 
 export default async function ApprovalsPage() {
-    const allInvoices = await getInvoices();
+    const allInvoices = await findAllInvoices();
     const invoicesForReview = allInvoices.filter(inv => inv.status === 'Review');
 
   return (

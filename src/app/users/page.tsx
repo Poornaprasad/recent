@@ -27,8 +27,8 @@ import {
 import { Button, buttonVariants } from "@/components/ui/button";
 import { MoreHorizontal, PlusCircle } from "lucide-react";
 import { getUsers, type User, addUser, updateUser, deleteUser } from "@/lib/user-store";
-import { cn } from "@/lib/utils";
-import { getStatusBadgeClass } from "@/lib/status-utils";
+import { cn } from '@/lib/utils/utils';
+import { getStatusBadgeClass } from '@/lib/utils/status-utils';
 import { useState, useEffect } from "react";
 import { UserForm } from "@/components/user/user-form";
 import {

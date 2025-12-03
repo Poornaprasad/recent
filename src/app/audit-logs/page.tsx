@@ -26,8 +26,8 @@ import {
     SelectValue,
   } from "@/components/ui/select"
 import { Input } from "@/components/ui/input";
-import { getAuditLogs, type AuditLog } from "@/lib/audit-log-store";
-import { cn } from "@/lib/utils";
+import { getAuditLogs, type AuditLog } from '@/lib/db/schema';
+import { cn } from '@/lib/utils/utils';
 import { useState, useMemo } from "react";
 import { Eye, Download, Search, ChevronLeft, ChevronRight } from "lucide-react";
 

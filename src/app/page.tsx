@@ -3,8 +3,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import type { StoredInvoice } from "@/lib/invoice-types";
-import { processInvoiceAction, getPendingVendorByInvoiceIdAction, completeVendorSetupAction, getVendorTypesAction } from "@/lib/actions";
+import type { StoredInvoice } from '@/lib/domain/types';
+import { processInvoiceAction, getPendingVendorByInvoiceIdAction, completeVendorSetupAction, getVendorTypesAction } from '@/lib/actions/index';
 import { useToast } from "@/hooks/use-toast";
 import { UploadView } from "@/components/invoice/upload-view";
 import { ReviewView } from "@/components/invoice/review-view";
