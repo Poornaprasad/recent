@@ -23,6 +23,7 @@ export {
   getVendorTypesAction,
   createVendorTypeAction,
   checkVendorExistsAction,
+  syncVendorTypesFromCrmAction,
   getPendingVendorsAction,
   getPendingVendorByIdAction,
   getPendingVendorByInvoiceIdAction,

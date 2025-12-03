@@ -25,6 +25,11 @@ export type StoredInvoice = BaseEntity & ExtractedDataOnly & {
   highValueReason?: string;
   requiresEscalation?: boolean;
   escalationLevel?: 'standard' | 'high' | 'critical';
+  escalationReason?: 'low_accuracy' | 'duplicate' | 'multiple_vendors' | 'no_clarity';
+  hasMultipleVendors?: boolean;
+  accuracyScore?: number; // 0-100 score for extraction accuracy
+  requiresSpecialHandling?: boolean;
+  specialHandlingReason?: 'per_diem' | 'mixed_document_types' | 'other';
   comment?: string; // User comments/notes
   caseNumber?: string; // SmartAdvocate case number
   state?: 'CA' | 'NY'; // State: CA (California) or NY (New York)
@@ -35,7 +40,7 @@ export type StoredInvoice = BaseEntity & ExtractedDataOnly & {
   createdBy?: string; // User ID who created/uploaded
   assignedTo?: string; // User ID assigned to process
   vendorRequires1099?: boolean; // Flag indicating vendor requires 1099 (not in vendor list or marked as requiring 1099)
-  documentType?: 'Invoice' | 'Receipt' | 'Reimbursement' | 'Office Credit Card Bill'; // Document type classification
+  documentType?: 'Webhook Source' | 'Invoice' | 'Receipt' | 'Per Diem' | 'Other' | 'Office Disbursement' | 'Office Reimbursement' | 'Case Details' | 'Reimbursement' | 'Office Credit Card Bill'; // Document type classification
 };
 
 export type User = BaseEntity & {
@@ -53,6 +58,13 @@ export type Vendor = BaseEntity & {
   address?: string;
   vendorType?: string; // Vendor type name
   requires1099?: boolean; // Flag for 1099 requirement
+  requiresW9?: boolean; // Flag for W9 requirement
+  w9Status?: 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
+  w9ReceivedDate?: Date;
+  w9ExpiryDate?: Date;
+  isPaused?: boolean;
+  pausedReason?: string;
+  pausedUntil?: Date;
   status: 'Active' | 'Inactive';
 };
 
@@ -84,10 +96,13 @@ export type AuditLog = BaseEntity & {
 
 // Invoice status types
 export type InvoiceStatus = 'Paid' | 'Pending' | 'Review' | 'Draft';
-export type DocumentType = 'Invoice' | 'Receipt' | 'Reimbursement' | 'Office Credit Card Bill';
+export type DocumentType = 'Webhook Source' | 'Invoice' | 'Receipt' | 'Per Diem' | 'Other' | 'Office Disbursement' | 'Office Reimbursement' | 'Case Details' | 'Reimbursement' | 'Office Credit Card Bill';
 export type UserStatus = 'Active' | 'Inactive' | 'Invited';
 export type VendorStatus = 'Active' | 'Inactive';
 export type AuditSeverity = 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';
+export type W9Status = 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
+export type EscalationReason = 'low_accuracy' | 'duplicate' | 'multiple_vendors' | 'no_clarity';
+export type SpecialHandlingReason = 'per_diem' | 'mixed_document_types' | 'other';
 
 // Extracted field structure
 export type ExtractedField<T = unknown> = {

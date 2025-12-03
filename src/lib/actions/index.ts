@@ -24,6 +24,7 @@ export {
   getVendorTypesAction,
   createVendorTypeAction,
   checkVendorExistsAction,
+  syncVendorTypesFromCrmAction,
 } from './vendor.actions';
 
 export {

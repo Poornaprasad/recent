@@ -143,6 +143,35 @@ export async function checkVendorExistsAction(vendorName: string): Promise<{ exi
   }
 }
 
+/**
+ * Sync vendor types from CRM
+ * TODO: Implement CRM integration
+ */
+export async function syncVendorTypesFromCrmAction(): Promise<{ 
+  success: boolean; 
+  message?: string; 
+  synced?: number; 
+  errors?: string[] 
+}> {
+  try {
+    // TODO: Implement actual CRM sync logic
+    // This is a placeholder implementation
+    return {
+      success: false,
+      message: 'CRM sync is not yet implemented. Please add vendor types manually.',
+      errors: ['CRM integration not configured'],
+    };
+  } catch (error) {
+    console.error('Error syncing vendor types from CRM:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to sync vendor types from CRM.';
+    return {
+      success: false,
+      message: errorMessage,
+      errors: [errorMessage],
+    };
+  }
+}
+
 
 
 

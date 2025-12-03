@@ -120,15 +120,16 @@ export const InvoiceUrgencyMatrix = () => {
       </CardHeader>
       <CardContent className="h-[calc(100%-120px)]">
         {data.length > 0 ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart
-              margin={{
-                top: 20,
-                right: 20,
-                bottom: 40,
-                left: 20,
-              }}
-            >
+          <div className="w-full h-[400px] min-h-[400px] max-h-[400px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart
+                margin={{
+                  top: 20,
+                  right: 20,
+                  bottom: 40,
+                  left: 20,
+                }}
+              >
               <XAxis
                 type="number"
                 dataKey="days"
@@ -156,6 +157,7 @@ export const InvoiceUrgencyMatrix = () => {
               </Scatter>
             </ScatterChart>
           </ResponsiveContainer>
+          </div>
         ) : (
           <div className="flex items-center justify-center h-full text-muted-foreground">
             <p>No pending invoices to display</p>

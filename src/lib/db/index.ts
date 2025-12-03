@@ -92,7 +92,7 @@ function runMigrationsSync(sqlite: DatabaseType) {
       payment_terms TEXT,
       line_items TEXT,
       status TEXT NOT NULL CHECK(status IN ('Paid', 'Pending', 'Review', 'Draft')),
-      document_type TEXT CHECK(document_type IN ('Invoice', 'Receipt', 'Reimbursement', 'Office Credit Card Bill')),
+      document_type TEXT CHECK(document_type IN ('Webhook Source', 'Invoice', 'Receipt', 'Per Diem', 'Other', 'Office Disbursement', 'Office Reimbursement', 'Case Details', 'Reimbursement', 'Office Credit Card Bill')),
       invoice_data_uri TEXT NOT NULL,
       is_duplicate INTEGER DEFAULT 0,
       duplicate_reason TEXT,
@@ -106,6 +106,11 @@ function runMigrationsSync(sqlite: DatabaseType) {
       high_value_reason TEXT,
       requires_escalation INTEGER DEFAULT 0,
       escalation_level TEXT,
+      escalation_reason TEXT,
+      has_multiple_vendors INTEGER DEFAULT 0,
+      accuracy_score REAL,
+      requires_special_handling INTEGER DEFAULT 0,
+      special_handling_reason TEXT,
       comment TEXT,
       case_number TEXT,
       state TEXT CHECK(state IN ('CA', 'NY')),
@@ -156,6 +161,13 @@ function runMigrationsSync(sqlite: DatabaseType) {
       address TEXT,
       vendor_type TEXT,
       requires_1099 INTEGER DEFAULT 0,
+      requires_w9 INTEGER DEFAULT 0,
+      w9_status TEXT CHECK(w9_status IN ('Not Required', 'Required', 'Received', 'Pending', 'Expired')) DEFAULT 'Not Required',
+      w9_received_date INTEGER,
+      w9_expiry_date INTEGER,
+      is_paused INTEGER DEFAULT 0,
+      paused_reason TEXT,
+      paused_until INTEGER,
       status TEXT NOT NULL CHECK(status IN ('Active', 'Inactive')) DEFAULT 'Active',
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       updated_at INTEGER NOT NULL DEFAULT (unixepoch())
@@ -199,6 +211,126 @@ function runMigrationsSync(sqlite: DatabaseType) {
     CREATE INDEX IF NOT EXISTS idx_invoices_approval_status ON invoices(approval_status);
     CREATE INDEX IF NOT EXISTS idx_invoices_created_by ON invoices(created_by);
     CREATE INDEX IF NOT EXISTS idx_invoices_assigned_to ON invoices(assigned_to);
+
+    CREATE TABLE IF NOT EXISTS disbursement_types (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS disbursement_statuses (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      is_active INTEGER DEFAULT 1,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS bank_accounts (
+      id TEXT PRIMARY KEY,
+      account_name TEXT NOT NULL,
+      account_number TEXT,
+      routing_number TEXT,
+      bank_name TEXT NOT NULL,
+      account_type TEXT CHECK(account_type IN ('Checking', 'Savings', 'Money Market', 'Other')),
+      state TEXT CHECK(state IN ('CA', 'NY')),
+      is_active INTEGER DEFAULT 1,
+      last_updated_by TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS expense_accounts (
+      id TEXT PRIMARY KEY,
+      account_code TEXT NOT NULL UNIQUE,
+      account_name TEXT NOT NULL,
+      description TEXT,
+      account_type TEXT CHECK(account_type IN ('Expense', 'Asset', 'Liability', 'Revenue', 'Equity')),
+      parent_account_id TEXT,
+      state TEXT CHECK(state IN ('CA', 'NY')),
+      is_active INTEGER DEFAULT 1,
+      last_updated_by TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS vendor_w9_status (
+      id TEXT PRIMARY KEY,
+      vendor_id TEXT NOT NULL,
+      is_required INTEGER DEFAULT 0,
+      status TEXT CHECK(status IN ('Not Required', 'Required', 'Received', 'Pending', 'Expired')) DEFAULT 'Not Required',
+      received_date INTEGER,
+      expiry_date INTEGER,
+      document_path TEXT,
+      threshold_amount REAL DEFAULT 600,
+      notes TEXT,
+      last_updated_by TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS credit_authorizations (
+      id TEXT PRIMARY KEY,
+      invoice_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      threshold_amount REAL DEFAULT 5000,
+      requested_by TEXT NOT NULL,
+      authorized_by TEXT,
+      authorization_status TEXT CHECK(authorization_status IN ('Pending', 'Approved', 'Rejected', 'Expired')) DEFAULT 'Pending',
+      authorization_date INTEGER,
+      expiry_date INTEGER,
+      reason TEXT,
+      notes TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS approval_audit_logs (
+      id TEXT PRIMARY KEY,
+      invoice_id TEXT,
+      user_id TEXT NOT NULL,
+      action TEXT NOT NULL CHECK(action IN ('Approved', 'Rejected', 'Requested Approval', 'Edited', 'Created', 'Deleted', 'Assigned', 'Unassigned')),
+      resource_type TEXT NOT NULL CHECK(resource_type IN ('Invoice', 'Vendor', 'User', 'Disbursement', 'Other')),
+      resource_id TEXT NOT NULL,
+      previous_value TEXT,
+      new_value TEXT,
+      changed_fields TEXT,
+      reason TEXT,
+      ip_address TEXT,
+      user_agent TEXT,
+      timestamp INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE TABLE IF NOT EXISTS daily_run_updates (
+      id TEXT PRIMARY KEY,
+      run_date INTEGER NOT NULL,
+      update_type TEXT NOT NULL CHECK(update_type IN ('Disbursement Type', 'Disbursement Status', 'Bank Account', 'Expense Account', 'Vendor', 'Other')),
+      resource_id TEXT NOT NULL,
+      previous_value TEXT,
+      new_value TEXT,
+      updated_by TEXT,
+      notes TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_vendor_w9_status_vendor ON vendor_w9_status(vendor_id);
+    CREATE INDEX IF NOT EXISTS idx_vendor_w9_status_status ON vendor_w9_status(status);
+    CREATE INDEX IF NOT EXISTS idx_credit_authorizations_invoice ON credit_authorizations(invoice_id);
+    CREATE INDEX IF NOT EXISTS idx_credit_authorizations_status ON credit_authorizations(authorization_status);
+    CREATE INDEX IF NOT EXISTS idx_approval_audit_logs_invoice ON approval_audit_logs(invoice_id);
+    CREATE INDEX IF NOT EXISTS idx_approval_audit_logs_user ON approval_audit_logs(user_id);
+    CREATE INDEX IF NOT EXISTS idx_approval_audit_logs_resource ON approval_audit_logs(resource_type, resource_id);
+    CREATE INDEX IF NOT EXISTS idx_approval_audit_logs_timestamp ON approval_audit_logs(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_daily_run_updates_date ON daily_run_updates(run_date);
+    CREATE INDEX IF NOT EXISTS idx_daily_run_updates_type ON daily_run_updates(update_type);
+    CREATE INDEX IF NOT EXISTS idx_bank_accounts_state ON bank_accounts(state);
+    CREATE INDEX IF NOT EXISTS idx_expense_accounts_state ON expense_accounts(state);
+    CREATE INDEX IF NOT EXISTS idx_vendors_w9_required ON vendors(requires_w9);
+    CREATE INDEX IF NOT EXISTS idx_vendors_is_paused ON vendors(is_paused);
   `;
 
   sqlite.exec(createTables);
@@ -277,6 +409,21 @@ function runMigrationsSync(sqlite: DatabaseType) {
     if (!columnNames.includes('assigned_to')) {
       migrations.push('ALTER TABLE invoices ADD COLUMN assigned_to TEXT');
     }
+    if (!columnNames.includes('escalation_reason')) {
+      migrations.push('ALTER TABLE invoices ADD COLUMN escalation_reason TEXT');
+    }
+    if (!columnNames.includes('has_multiple_vendors')) {
+      migrations.push('ALTER TABLE invoices ADD COLUMN has_multiple_vendors INTEGER DEFAULT 0');
+    }
+    if (!columnNames.includes('accuracy_score')) {
+      migrations.push('ALTER TABLE invoices ADD COLUMN accuracy_score REAL');
+    }
+    if (!columnNames.includes('requires_special_handling')) {
+      migrations.push('ALTER TABLE invoices ADD COLUMN requires_special_handling INTEGER DEFAULT 0');
+    }
+    if (!columnNames.includes('special_handling_reason')) {
+      migrations.push('ALTER TABLE invoices ADD COLUMN special_handling_reason TEXT');
+    }
 
     // Migrate users table
     const userTableInfo = sqlite.prepare("PRAGMA table_info(users)").all() as Array<{ name: string }>;
@@ -337,6 +484,27 @@ function runMigrationsSync(sqlite: DatabaseType) {
     if (!vendorColumnNames.includes('requires_1099')) {
       migrations.push('ALTER TABLE vendors ADD COLUMN requires_1099 INTEGER DEFAULT 0');
     }
+    if (!vendorColumnNames.includes('requires_w9')) {
+      migrations.push('ALTER TABLE vendors ADD COLUMN requires_w9 INTEGER DEFAULT 0');
+    }
+    if (!vendorColumnNames.includes('w9_status')) {
+      migrations.push('ALTER TABLE vendors ADD COLUMN w9_status TEXT DEFAULT \'Not Required\'');
+    }
+    if (!vendorColumnNames.includes('w9_received_date')) {
+      migrations.push('ALTER TABLE vendors ADD COLUMN w9_received_date INTEGER');
+    }
+    if (!vendorColumnNames.includes('w9_expiry_date')) {
+      migrations.push('ALTER TABLE vendors ADD COLUMN w9_expiry_date INTEGER');
+    }
+    if (!vendorColumnNames.includes('is_paused')) {
+      migrations.push('ALTER TABLE vendors ADD COLUMN is_paused INTEGER DEFAULT 0');
+    }
+    if (!vendorColumnNames.includes('paused_reason')) {
+      migrations.push('ALTER TABLE vendors ADD COLUMN paused_reason TEXT');
+    }
+    if (!vendorColumnNames.includes('paused_until')) {
+      migrations.push('ALTER TABLE vendors ADD COLUMN paused_until INTEGER');
+    }
 
     // Check if pending_vendors table exists
     const pendingVendorsTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='pending_vendors'").all() as Array<{ name: string }>;
@@ -355,6 +523,164 @@ function runMigrationsSync(sqlite: DatabaseType) {
           updated_at INTEGER NOT NULL DEFAULT (unixepoch())
         )
       `);
+    }
+
+    // Create new tables if they don't exist
+    const disbursementTypesTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='disbursement_types'").all() as Array<{ name: string }>;
+    if (disbursementTypesTable.length === 0) {
+      migrations.push(`
+        CREATE TABLE disbursement_types (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          description TEXT,
+          is_active INTEGER DEFAULT 1,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `);
+    }
+
+    const disbursementStatusesTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='disbursement_statuses'").all() as Array<{ name: string }>;
+    if (disbursementStatusesTable.length === 0) {
+      migrations.push(`
+        CREATE TABLE disbursement_statuses (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL UNIQUE,
+          description TEXT,
+          is_active INTEGER DEFAULT 1,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `);
+    }
+
+    const bankAccountsTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='bank_accounts'").all() as Array<{ name: string }>;
+    if (bankAccountsTable.length === 0) {
+      migrations.push(`
+        CREATE TABLE bank_accounts (
+          id TEXT PRIMARY KEY,
+          account_name TEXT NOT NULL,
+          account_number TEXT,
+          routing_number TEXT,
+          bank_name TEXT NOT NULL,
+          account_type TEXT CHECK(account_type IN ('Checking', 'Savings', 'Money Market', 'Other')),
+          state TEXT CHECK(state IN ('CA', 'NY')),
+          is_active INTEGER DEFAULT 1,
+          last_updated_by TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `);
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_bank_accounts_state ON bank_accounts(state)');
+    }
+
+    const expenseAccountsTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='expense_accounts'").all() as Array<{ name: string }>;
+    if (expenseAccountsTable.length === 0) {
+      migrations.push(`
+        CREATE TABLE expense_accounts (
+          id TEXT PRIMARY KEY,
+          account_code TEXT NOT NULL UNIQUE,
+          account_name TEXT NOT NULL,
+          description TEXT,
+          account_type TEXT CHECK(account_type IN ('Expense', 'Asset', 'Liability', 'Revenue', 'Equity')),
+          parent_account_id TEXT,
+          state TEXT CHECK(state IN ('CA', 'NY')),
+          is_active INTEGER DEFAULT 1,
+          last_updated_by TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `);
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_expense_accounts_state ON expense_accounts(state)');
+    }
+
+    const vendorW9StatusTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='vendor_w9_status'").all() as Array<{ name: string }>;
+    if (vendorW9StatusTable.length === 0) {
+      migrations.push(`
+        CREATE TABLE vendor_w9_status (
+          id TEXT PRIMARY KEY,
+          vendor_id TEXT NOT NULL,
+          is_required INTEGER DEFAULT 0,
+          status TEXT CHECK(status IN ('Not Required', 'Required', 'Received', 'Pending', 'Expired')) DEFAULT 'Not Required',
+          received_date INTEGER,
+          expiry_date INTEGER,
+          document_path TEXT,
+          threshold_amount REAL DEFAULT 600,
+          notes TEXT,
+          last_updated_by TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `);
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_vendor_w9_status_vendor ON vendor_w9_status(vendor_id)');
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_vendor_w9_status_status ON vendor_w9_status(status)');
+    }
+
+    const creditAuthorizationsTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='credit_authorizations'").all() as Array<{ name: string }>;
+    if (creditAuthorizationsTable.length === 0) {
+      migrations.push(`
+        CREATE TABLE credit_authorizations (
+          id TEXT PRIMARY KEY,
+          invoice_id TEXT NOT NULL,
+          amount REAL NOT NULL,
+          threshold_amount REAL DEFAULT 5000,
+          requested_by TEXT NOT NULL,
+          authorized_by TEXT,
+          authorization_status TEXT CHECK(authorization_status IN ('Pending', 'Approved', 'Rejected', 'Expired')) DEFAULT 'Pending',
+          authorization_date INTEGER,
+          expiry_date INTEGER,
+          reason TEXT,
+          notes TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `);
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_credit_authorizations_invoice ON credit_authorizations(invoice_id)');
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_credit_authorizations_status ON credit_authorizations(authorization_status)');
+    }
+
+    const approvalAuditLogsTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='approval_audit_logs'").all() as Array<{ name: string }>;
+    if (approvalAuditLogsTable.length === 0) {
+      migrations.push(`
+        CREATE TABLE approval_audit_logs (
+          id TEXT PRIMARY KEY,
+          invoice_id TEXT,
+          user_id TEXT NOT NULL,
+          action TEXT NOT NULL CHECK(action IN ('Approved', 'Rejected', 'Requested Approval', 'Edited', 'Created', 'Deleted', 'Assigned', 'Unassigned')),
+          resource_type TEXT NOT NULL CHECK(resource_type IN ('Invoice', 'Vendor', 'User', 'Disbursement', 'Other')),
+          resource_id TEXT NOT NULL,
+          previous_value TEXT,
+          new_value TEXT,
+          changed_fields TEXT,
+          reason TEXT,
+          ip_address TEXT,
+          user_agent TEXT,
+          timestamp INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `);
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_approval_audit_logs_invoice ON approval_audit_logs(invoice_id)');
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_approval_audit_logs_user ON approval_audit_logs(user_id)');
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_approval_audit_logs_resource ON approval_audit_logs(resource_type, resource_id)');
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_approval_audit_logs_timestamp ON approval_audit_logs(timestamp)');
+    }
+
+    const dailyRunUpdatesTable = sqlite.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='daily_run_updates'").all() as Array<{ name: string }>;
+    if (dailyRunUpdatesTable.length === 0) {
+      migrations.push(`
+        CREATE TABLE daily_run_updates (
+          id TEXT PRIMARY KEY,
+          run_date INTEGER NOT NULL,
+          update_type TEXT NOT NULL CHECK(update_type IN ('Disbursement Type', 'Disbursement Status', 'Bank Account', 'Expense Account', 'Vendor', 'Other')),
+          resource_id TEXT NOT NULL,
+          previous_value TEXT,
+          new_value TEXT,
+          updated_by TEXT,
+          notes TEXT,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch())
+        )
+      `);
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_daily_run_updates_date ON daily_run_updates(run_date)');
+      migrations.push('CREATE INDEX IF NOT EXISTS idx_daily_run_updates_type ON daily_run_updates(update_type)');
     }
 
     // Check if vendor_types table exists
