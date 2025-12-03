@@ -71,7 +71,7 @@ import {
 import { exportInvoicesToCSVFile } from "@/lib/utils/export-utils";
 import { encodeId } from "@/lib/utils/id-utils";
 import { getDocumentTypeBadgeClass } from "@/lib/utils/document-type-utils";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback, memo } from "react";
 
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
@@ -170,49 +170,52 @@ export default function InvoicesPage() {
     ];
   }, [invoices, filteredInvoices]);
 
-  const handleSort = (field: SortField) => {
+  const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
     } else {
       setSortField(field);
       setSortDirection('desc');
     }
-  };
+  }, [sortField]);
 
-  const handleSelectAll = (checked: boolean) => {
+  const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
       setSelectedInvoices(new Set(paginatedInvoices.map(inv => inv.id)));
     } else {
       setSelectedInvoices(new Set());
     }
-  };
+  }, [paginatedInvoices]);
 
-  const handleSelectInvoice = (invoiceId: string, checked: boolean) => {
-    const newSelected = new Set(selectedInvoices);
-    if (checked) {
-      newSelected.add(invoiceId);
-    } else {
-      newSelected.delete(invoiceId);
-    }
-    setSelectedInvoices(newSelected);
-  };
+  const handleSelectInvoice = useCallback((invoiceId: string, checked: boolean) => {
+    setSelectedInvoices(prev => {
+      const newSelected = new Set(prev);
+      if (checked) {
+        newSelected.add(invoiceId);
+      } else {
+        newSelected.delete(invoiceId);
+      }
+      return newSelected;
+    });
+  }, []);
 
-  const handleExport = () => {
+  const handleExport = useCallback(() => {
     const dataToExport = selectedInvoices.size > 0
       ? invoices.filter(inv => selectedInvoices.has(inv.id))
       : filteredInvoices;
 
     exportInvoicesToCSVFile(dataToExport);
-  };
+  }, [selectedInvoices, invoices, filteredInvoices]);
 
-  const SortIcon = ({ field }: { field: SortField }) => {
+  const SortIcon = memo(({ field }: { field: SortField }) => {
     if (sortField !== field) {
       return <ArrowUpDown className="ml-1 h-3 w-3 opacity-50" />;
     }
-    return sortDirection === 'asc' 
+    return sortDirection === 'asc'
       ? <ArrowUp className="ml-1 h-3 w-3" />
       : <ArrowDown className="ml-1 h-3 w-3" />;
-  };
+  });
+  SortIcon.displayName = 'SortIcon';
 
   if (isLoading) {
     return (
