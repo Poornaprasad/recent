@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache';
 import { invoiceService } from '../services/invoice.service';
 import { getInvoiceDataUri } from '../storage/file-utils';
 import type { StoredInvoice } from '../domain/types';
+import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
 
 /**
  * Process a new invoice upload
@@ -17,75 +18,63 @@ export async function processInvoiceAction(
   input: { invoiceDataUri: string }
 ): Promise<{ data?: StoredInvoice; error?: string }> {
   const result = await invoiceService.processInvoice(input);
-  
+
   if (result.data) {
     revalidatePath('/invoices');
     revalidatePath('/approvals');
     revalidatePath('/dashboard');
   }
-  
+
   return result;
 }
 
 /**
  * Get invoice by ID
  */
-export async function getInvoiceByIdAction(id: string): Promise<{ data?: StoredInvoice; error?: string }> {
-  try {
+export async function getInvoiceByIdAction(id: string): Promise<ActionResult<StoredInvoice>> {
+  return withActionHandler(async () => {
     const invoice = await invoiceService.getInvoiceById(id);
     if (!invoice) {
-      return { error: 'Invoice not found' };
+      throw new Error('Invoice not found');
     }
-    return { data: invoice };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch invoice.';
-    return { error: errorMessage };
-  }
+    return invoice;
+  }, 'Failed to fetch invoice');
 }
 
 /**
  * Get invoice data URI (file path to data URI conversion)
  */
 export async function getInvoiceDataUriAction(uri: string): Promise<{ dataUri?: string; error?: string }> {
-  try {
-    const dataUri = await getInvoiceDataUri(uri);
-    return { dataUri };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to get invoice file.';
-    return { error: errorMessage };
-  }
+  return withActionHandler(
+    () => getInvoiceDataUri(uri).then(dataUri => ({ dataUri })),
+    'Failed to get invoice file'
+  );
 }
 
 /**
  * Update invoice status
  */
 export async function updateInvoiceStatusAction(
-  id: string, 
+  id: string,
   status: 'Pending' | 'Draft'
 ): Promise<{ success: boolean, error?: string}> {
-  try {
+  return withActionHandler(async () => {
     await invoiceService.updateStatus(id, status);
     revalidatePath('/approvals');
     revalidatePath('/invoices');
     revalidatePath(`/invoices/${id}`);
     return { success: true };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to update invoice status.';
-    return { success: false, error: errorMessage };
-  }
+  }, 'Failed to update invoice status');
 }
 
 /**
  * Get all invoices
  */
-export async function getInvoicesAction(): Promise<{ data?: StoredInvoice[]; error?: string }> {
-  try {
-    const invoices = await invoiceService.getAllInvoices();
-    return { data: invoices };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch invoices.';
-    return { error: errorMessage };
-  }
+export async function getInvoicesAction(): Promise<ActionResult<StoredInvoice[]>> {
+  return withActionHandler(
+    () => invoiceService.getAllInvoices(),
+    'Failed to fetch invoices'
+  );
 }
 
 /**
@@ -94,16 +83,13 @@ export async function getInvoicesAction(): Promise<{ data?: StoredInvoice[]; err
 export async function flagInvoiceForReviewAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
-  try {
+  return withActionHandler(async () => {
     await invoiceService.updateStatus(id, 'Review');
     revalidatePath('/approvals');
     revalidatePath('/invoices');
     revalidatePath(`/invoices/${id}`);
     return { success: true };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to flag invoice for review.';
-    return { success: false, error: errorMessage };
-  }
+  }, 'Failed to flag invoice for review');
 }
 
 /**
@@ -113,14 +99,11 @@ export async function addInvoiceCommentAction(
   id: string,
   comment: string
 ): Promise<{ success: boolean; error?: string }> {
-  try {
+  return withActionHandler(async () => {
     await invoiceService.addComment(id, comment);
     revalidatePath(`/invoices/${id}`);
     return { success: true };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to add comment.';
-    return { success: false, error: errorMessage };
-  }
+  }, 'Failed to add comment');
 }
 
 /**
@@ -130,14 +113,11 @@ export async function updateInvoiceCaseNumberAction(
   id: string,
   caseNumber: string | undefined
 ): Promise<{ success: boolean; error?: string }> {
-  try {
+  return withActionHandler(async () => {
     await invoiceService.updateCaseNumber(id, caseNumber);
     revalidatePath(`/invoices/${id}`);
     revalidatePath('/approvals');
     return { success: true };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to update case number.';
-    return { success: false, error: errorMessage };
-  }
+  }, 'Failed to update case number');
 }
 

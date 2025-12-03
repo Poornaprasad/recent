@@ -18,30 +18,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, CheckCircle, XCircle, Eye } from "lucide-react";
-import { getPendingVendorsAction, completeVendorSetupAction, rejectPendingVendorAction, getPendingVendorByInvoiceIdAction } from '@/lib/actions/index';
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
-import { getVendorTypesAction } from '@/lib/actions/index';
-import type { PendingVendor } from "@/lib/domain/types";
+import { getPendingVendorsAction, completeVendorSetupAction, rejectPendingVendorAction, getVendorTypesAction } from "@/lib/actions/index";
+import { VendorSetupDialog } from "@/components/dialogs/vendor-setup-dialog";
+import type { PendingVendor, VendorType } from "@/lib/domain/types";
 import Link from "next/link";
 import { encodeId } from "@/lib/utils/id-utils";
 
@@ -52,12 +34,7 @@ export default function PendingVendorsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<PendingVendor | null>(null);
-  const [vendorTypes, setVendorTypes] = useState<Array<{ name: string; description?: string }>>([]);
-  const [vendorType, setVendorType] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [requires1099, setRequires1099] = useState(true);
+  const [vendorTypes, setVendorTypes] = useState<VendorType[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
@@ -101,32 +78,26 @@ export default function PendingVendorsPage() {
 
   const handleCompleteSetup = (vendor: PendingVendor) => {
     setSelectedVendor(vendor);
-    setVendorType(vendor.vendorType || '');
-    setEmail(vendor.email || '');
-    setPhone(vendor.phone || '');
-    setAddress(vendor.address || '');
-    setRequires1099(true);
     setIsDialogOpen(true);
   };
 
-  const handleSubmitSetup = async () => {
-    if (!selectedVendor || !vendorType) {
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Please select a vendor type.',
-      });
-      return;
-    }
+  const handleSubmitSetup = async (data: {
+    vendorType: string;
+    email: string;
+    phone: string;
+    address: string;
+    requires1099: boolean;
+  }) => {
+    if (!selectedVendor) return;
 
     setIsProcessing(true);
     try {
       const result = await completeVendorSetupAction(selectedVendor.id, {
-        vendorType,
-        email: email || undefined,
-        phone: phone || undefined,
-        address: address || undefined,
-        requires1099,
+        vendorType: data.vendorType,
+        email: data.email || undefined,
+        phone: data.phone || undefined,
+        address: data.address || undefined,
+        requires1099: data.requires1099,
       });
 
       if (result.success) {
@@ -284,87 +255,14 @@ export default function PendingVendorsPage() {
         </Card>
       </div>
 
-      {/* Complete Setup Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Complete Vendor Setup</DialogTitle>
-            <DialogDescription>
-              Add vendor type and complete information to add "{selectedVendor?.name}" to your vendor list.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Vendor Type *</Label>
-              <Select value={vendorType} onValueChange={setVendorType}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select vendor type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vendorTypes.map((type) => (
-                    <SelectItem key={type.name} value={type.name}>
-                      {type.name}
-                      {type.description && (
-                        <span className="text-xs text-muted-foreground ml-2">
-                          - {type.description}
-                        </span>
-                      )}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input
-                type="email"
-                placeholder="vendor@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Phone</Label>
-              <Input
-                type="tel"
-                placeholder="(555) 123-4567"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Address</Label>
-              <Input
-                placeholder="123 Main St, City, State ZIP"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-              />
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id="requires1099"
-                checked={requires1099}
-                onCheckedChange={(checked) => setRequires1099(checked === true)}
-              />
-              <Label htmlFor="requires1099" className="cursor-pointer">
-                Requires 1099 form
-              </Label>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSubmitSetup} disabled={!vendorType || isProcessing}>
-              {isProcessing ? 'Processing...' : 'Complete Setup'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <VendorSetupDialog
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        vendor={selectedVendor}
+        vendorTypes={vendorTypes}
+        isProcessing={isProcessing}
+        onSubmit={handleSubmitSetup}
+      />
     </>
   );
 }
