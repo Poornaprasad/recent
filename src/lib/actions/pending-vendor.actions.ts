@@ -8,47 +8,39 @@
 import { revalidatePath } from 'next/cache';
 import { pendingVendorService } from '../services/pending-vendor.service';
 import type { PendingVendor } from '../domain/types';
+import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
 
 /**
  * Get all pending vendors
  */
-export async function getPendingVendorsAction(): Promise<{ data?: PendingVendor[]; error?: string }> {
-  try {
-    const vendors = await pendingVendorService.getAllPendingVendors();
-    return { data: vendors };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch pending vendors.';
-    return { error: errorMessage };
-  }
+export async function getPendingVendorsAction(): Promise<ActionResult<PendingVendor[]>> {
+  return withActionHandler(
+    () => pendingVendorService.getAllPendingVendors(),
+    'Failed to fetch pending vendors'
+  );
 }
 
 /**
  * Get pending vendor by ID
  */
-export async function getPendingVendorByIdAction(id: string): Promise<{ data?: PendingVendor; error?: string }> {
-  try {
+export async function getPendingVendorByIdAction(id: string): Promise<ActionResult<PendingVendor>> {
+  return withActionHandler(async () => {
     const vendor = await pendingVendorService.getPendingVendorById(id);
     if (!vendor) {
-      return { error: 'Pending vendor not found' };
+      throw new Error('Pending vendor not found');
     }
-    return { data: vendor };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch pending vendor.';
-    return { error: errorMessage };
-  }
+    return vendor;
+  }, 'Failed to fetch pending vendor');
 }
 
 /**
  * Get pending vendor by invoice ID
  */
-export async function getPendingVendorByInvoiceIdAction(invoiceId: string): Promise<{ data?: PendingVendor; error?: string }> {
-  try {
-    const vendor = await pendingVendorService.getPendingVendorByInvoiceId(invoiceId);
-    return { data: vendor };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch pending vendor.';
-    return { error: errorMessage };
-  }
+export async function getPendingVendorByInvoiceIdAction(invoiceId: string): Promise<ActionResult<PendingVendor>> {
+  return withActionHandler(
+    () => pendingVendorService.getPendingVendorByInvoiceId(invoiceId),
+    'Failed to fetch pending vendor'
+  );
 }
 
 /**
@@ -64,30 +56,24 @@ export async function completeVendorSetupAction(
     requires1099?: boolean;
   }
 ): Promise<{ success: boolean; vendorId?: string; error?: string }> {
-  try {
+  return withActionHandler(async () => {
     const result = await pendingVendorService.completeVendorSetup(pendingVendorId, vendorData);
     revalidatePath('/1099-requests');
     revalidatePath('/vendors');
     revalidatePath('/invoices');
     return result;
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to complete vendor setup.';
-    return { success: false, error: errorMessage };
-  }
+  }, 'Failed to complete vendor setup');
 }
 
 /**
  * Reject pending vendor
  */
 export async function rejectPendingVendorAction(id: string): Promise<{ success: boolean; error?: string }> {
-  try {
+  return withActionHandler(async () => {
     await pendingVendorService.rejectPendingVendor(id);
     revalidatePath('/1099-requests');
     return { success: true };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Failed to reject pending vendor.';
-    return { success: false, error: errorMessage };
-  }
+  }, 'Failed to reject pending vendor');
 }
 
 
