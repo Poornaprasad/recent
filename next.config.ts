@@ -21,13 +21,7 @@ const nextConfig: NextConfig = {
   output: 'standalone',
   // Configure webpack to handle canvas properly (server-side only)
   webpack: (config, { isServer }) => {
-    if (isServer) {
-      // Don't externalize canvas - we need it bundled for server actions
-      // But mark it as a server-only module
-      config.resolve.alias = {
-        ...config.resolve.alias,
-      };
-    } else {
+    if (!isServer) {
       // Exclude canvas from client bundle
       config.resolve.fallback = {
         ...config.resolve.fallback,
@@ -36,8 +30,15 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
+  // Turbopack configuration (stable in Next.js 15)
+  turbopack: {
+    resolveAlias: {
+      // Map canvas to an empty module for client-side
+      canvas: './empty-module.js',
+    },
+  },
   // Ensure these packages are treated as server-only
-  serverExternalPackages: ['pdf-img-convert'],
+  serverExternalPackages: ['pdf-img-convert', 'canvas'],
 };
 
 export default nextConfig;
