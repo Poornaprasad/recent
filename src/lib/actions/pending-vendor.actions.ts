@@ -17,7 +17,6 @@ export async function getPendingVendorsAction(): Promise<{ data?: PendingVendor[
     const vendors = await pendingVendorService.getAllPendingVendors();
     return { data: vendors };
   } catch (error) {
-    console.error('Error fetching pending vendors:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch pending vendors.';
     return { error: errorMessage };
   }
@@ -34,7 +33,6 @@ export async function getPendingVendorByIdAction(id: string): Promise<{ data?: P
     }
     return { data: vendor };
   } catch (error) {
-    console.error('Error fetching pending vendor:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch pending vendor.';
     return { error: errorMessage };
   }
@@ -48,7 +46,6 @@ export async function getPendingVendorByInvoiceIdAction(invoiceId: string): Prom
     const vendor = await pendingVendorService.getPendingVendorByInvoiceId(invoiceId);
     return { data: vendor };
   } catch (error) {
-    console.error('Error fetching pending vendor:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch pending vendor.';
     return { error: errorMessage };
   }
@@ -74,7 +71,6 @@ export async function completeVendorSetupAction(
     revalidatePath('/invoices');
     return result;
   } catch (error) {
-    console.error('Error completing vendor setup:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to complete vendor setup.';
     return { success: false, error: errorMessage };
   }
@@ -89,7 +85,6 @@ export async function rejectPendingVendorAction(id: string): Promise<{ success: 
     revalidatePath('/1099-requests');
     return { success: true };
   } catch (error) {
-    console.error('Error rejecting pending vendor:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to reject pending vendor.';
     return { success: false, error: errorMessage };
   }

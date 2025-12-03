@@ -96,7 +96,6 @@ export default function PendingVendorsPage() {
         setVendorTypes(result.data.map(t => ({ name: t.name, description: t.description })));
       }
     } catch (error) {
-      console.error('Error loading vendor types:', error);
     }
   };
 

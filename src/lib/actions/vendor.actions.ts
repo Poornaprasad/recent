@@ -17,7 +17,6 @@ export async function getVendorsAction(): Promise<{ data?: Vendor[]; error?: str
     const vendors = await vendorService.getAllVendors();
     return { data: vendors };
   } catch (error) {
-    console.error('Error fetching vendors:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch vendors.';
     return { error: errorMessage };
   }
@@ -34,7 +33,6 @@ export async function getVendorByIdAction(id: string): Promise<{ data?: Vendor; 
     }
     return { data: vendor };
   } catch (error) {
-    console.error('Error fetching vendor:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch vendor.';
     return { error: errorMessage };
   }
@@ -48,7 +46,6 @@ export async function getVendorByNameAction(name: string): Promise<{ data?: Vend
     const vendor = await vendorService.getVendorByName(name);
     return { data: vendor };
   } catch (error) {
-    console.error('Error fetching vendor:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch vendor.';
     return { error: errorMessage };
   }
@@ -62,7 +59,6 @@ export async function getSuggestedVendorTypesAction(vendorName: string): Promise
     const types = await vendorService.getSuggestedVendorTypes(vendorName);
     return { data: types };
   } catch (error) {
-    console.error('Error fetching suggested vendor types:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch suggested types.';
     return { error: errorMessage };
   }
@@ -77,7 +73,6 @@ export async function saveVendorAction(vendor: Vendor): Promise<{ success: boole
     revalidatePath('/vendors');
     return { success: true };
   } catch (error) {
-    console.error('Error saving vendor:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to save vendor.';
     return { success: false, error: errorMessage };
   }
@@ -92,7 +87,6 @@ export async function deleteVendorAction(id: string): Promise<{ success: boolean
     revalidatePath('/vendors');
     return { success: true };
   } catch (error) {
-    console.error('Error deleting vendor:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to delete vendor.';
     return { success: false, error: errorMessage };
   }
@@ -106,7 +100,6 @@ export async function getVendorTypesAction(): Promise<{ data?: VendorType[]; err
     const types = await vendorService.getAllVendorTypes();
     return { data: types };
   } catch (error) {
-    console.error('Error fetching vendor types:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch vendor types.';
     return { error: errorMessage };
   }
@@ -123,7 +116,6 @@ export async function createVendorTypeAction(
     revalidatePath('/vendors');
     return { data: created };
   } catch (error) {
-    console.error('Error creating vendor type:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to create vendor type.';
     return { error: errorMessage };
   }
@@ -137,7 +129,6 @@ export async function checkVendorExistsAction(vendorName: string): Promise<{ exi
     const result = await vendorService.checkVendorExists(vendorName);
     return result;
   } catch (error) {
-    console.error('Error checking vendor:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to check vendor.';
     return { exists: false, error: errorMessage };
   }
@@ -162,7 +153,6 @@ export async function syncVendorTypesFromCrmAction(): Promise<{
       errors: ['CRM integration not configured'],
     };
   } catch (error) {
-    console.error('Error syncing vendor types from CRM:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to sync vendor types from CRM.';
     return {
       success: false,

@@ -18,10 +18,8 @@ export async function checkCrmForInvoice(
     customerName: string,
     totalAmount: number
 ): Promise<CrmInvoiceStatus | null> {
-    console.log('Checking CRM for invoice:', invoiceNumber, 'customer:', customerName, 'amount:', totalAmount);
-
     const status = FAKE_CRM_DB[invoiceNumber];
-    
+
     return Promise.resolve(status || null);
 }
 

@@ -94,15 +94,6 @@ export default function InvoiceDetailPage() {
           setInvoiceDataUri('');
         } else if (result.data) {
           // Debug: Log the invoice data to check for bounding boxes
-          console.log('Fetched invoice data:', result.data);
-          console.log('Invoice number:', result.data.invoiceNumber);
-          console.log('Invoice number bbox:', result.data.invoiceNumber?.bbox);
-          console.log('Vendor name:', result.data.vendorName);
-          console.log('Vendor name bbox:', result.data.vendorName?.bbox);
-          console.log('Customer name:', result.data.customerName);
-          console.log('Customer name bbox:', result.data.customerName?.bbox);
-          console.log('Total amount:', result.data.totalAmount);
-          console.log('Total amount bbox:', result.data.totalAmount?.bbox);
           
           setInvoiceData(result.data);
           // Convert file path to data URI if needed
@@ -430,7 +421,6 @@ export default function InvoiceDetailPage() {
                       
                       const { minX: normalizedMinX, maxX: normalizedMaxX, minY: normalizedMinY, maxY: normalizedMaxY } = normalized;
                       
-                      console.log('Rendering bounding box:', {
                         normalized: { normalizedMinX, normalizedMaxX, normalizedMinY, normalizedMaxY },
                         imageDimensions,
                         isPdf,
@@ -675,7 +665,6 @@ export default function InvoiceDetailPage() {
                           if (hasBbox) {
                             // Validate bounding box coordinates
                             const bbox = value.bbox;
-                            console.log(`Hovering over field ${key}, bbox:`, bbox);
                             if (Array.isArray(bbox) && bbox.length >= 4) {
                               // Check if all points have valid x and y coordinates
                               const isValid = bbox.every(p => 
@@ -693,7 +682,6 @@ export default function InvoiceDetailPage() {
                                   // We'll assume they're already normalized for now
                                   return { x: p.x, y: p.y };
                                 });
-                                console.log(`Setting highlight box for ${key}:`, normalizedBbox);
                                 setHighlightBox(normalizedBbox);
                                 setHoveredField(key);
                                 setHoveredConfidence(confidence || null);
@@ -704,7 +692,6 @@ export default function InvoiceDetailPage() {
                               console.warn(`Bounding box for ${key} is not a valid array or has < 4 points:`, bbox);
                             }
                           } else {
-                            console.log(`Field ${key} has no bounding box. hasBbox:`, hasBbox, 'value:', value);
                           }
                         }}
                         onMouseLeave={() => {

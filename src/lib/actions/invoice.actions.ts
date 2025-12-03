@@ -38,7 +38,6 @@ export async function getInvoiceByIdAction(id: string): Promise<{ data?: StoredI
     }
     return { data: invoice };
   } catch (error) {
-    console.error('Error fetching invoice:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch invoice.';
     return { error: errorMessage };
   }
@@ -52,7 +51,6 @@ export async function getInvoiceDataUriAction(uri: string): Promise<{ dataUri?: 
     const dataUri = await getInvoiceDataUri(uri);
     return { dataUri };
   } catch (error) {
-    console.error('Error getting invoice data URI:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to get invoice file.';
     return { error: errorMessage };
   }
@@ -72,7 +70,6 @@ export async function updateInvoiceStatusAction(
     revalidatePath(`/invoices/${id}`);
     return { success: true };
   } catch (error) {
-    console.error('Error updating invoice status:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update invoice status.';
     return { success: false, error: errorMessage };
   }
@@ -86,7 +83,6 @@ export async function getInvoicesAction(): Promise<{ data?: StoredInvoice[]; err
     const invoices = await invoiceService.getAllInvoices();
     return { data: invoices };
   } catch (error) {
-    console.error('Error fetching invoices:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to fetch invoices.';
     return { error: errorMessage };
   }
@@ -105,7 +101,6 @@ export async function flagInvoiceForReviewAction(
     revalidatePath(`/invoices/${id}`);
     return { success: true };
   } catch (error) {
-    console.error('Error flagging invoice for review:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to flag invoice for review.';
     return { success: false, error: errorMessage };
   }
@@ -123,7 +118,6 @@ export async function addInvoiceCommentAction(
     revalidatePath(`/invoices/${id}`);
     return { success: true };
   } catch (error) {
-    console.error('Error adding comment:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to add comment.';
     return { success: false, error: errorMessage };
   }
@@ -142,7 +136,6 @@ export async function updateInvoiceCaseNumberAction(
     revalidatePath('/approvals');
     return { success: true };
   } catch (error) {
-    console.error('Error updating case number:', error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to update case number.';
     return { success: false, error: errorMessage };
   }
