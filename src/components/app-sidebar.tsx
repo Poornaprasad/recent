@@ -31,7 +31,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import * as Accordion from "@radix-ui/react-accordion";
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils/utils';
 import React, { useState, useEffect } from "react";
 import { Button } from "./ui/button";
 

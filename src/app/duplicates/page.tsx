@@ -8,8 +8,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { getInvoices } from "@/lib/invoice-store";
-import type { StoredInvoice } from "@/lib/invoice-types";
+import { findAllInvoices } from "@/lib/repositories/invoice.repository";
+import type { StoredInvoice } from '@/lib/domain/types';
 import { encodeId } from "@/lib/utils/id-utils";
 import {
   Table,
@@ -25,7 +25,7 @@ import Link from "next/link";
 import { Eye, AlertTriangle } from "lucide-react";
 
 export default async function DuplicatesPage() {
-    const allInvoices = await getInvoices();
+    const allInvoices = await findAllInvoices();
     const duplicateInvoices = allInvoices.filter(inv => inv.isDuplicate);
 
   return (

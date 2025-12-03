@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { getOcrConfidenceDataAction } from '@/lib/actions';
+import { getOcrConfidenceDataAction } from '@/lib/actions/index';
 
 const COLORS = {
   high: '#22C55E', // green-500

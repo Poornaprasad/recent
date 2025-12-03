@@ -28,16 +28,16 @@ import {
 } from '@/components/ui/dialog';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Image from 'next/image';
-import { type StoredInvoice } from '@/lib/invoice-types';
-import { cn } from '@/lib/utils';
+import { type StoredInvoice } from '@/lib/domain/types';
+import { cn } from '@/lib/utils/utils';
 import dynamic from 'next/dynamic';
-import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, getPendingVendorByInvoiceIdAction, completeVendorSetupAction, getVendorTypesAction, updateInvoiceCaseNumberAction } from '@/lib/actions';
+import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, getPendingVendorByInvoiceIdAction, completeVendorSetupAction, getVendorTypesAction, updateInvoiceCaseNumberAction } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { ConfidenceBadge } from '@/components/invoice/confidence-badge';
 import { decodeId } from '@/lib/utils/id-utils';
 import { getDocumentTypeBadgeClass, getDocumentTypeDescription } from '@/lib/utils/document-type-utils';
-import { parseInvoiceAmount, formatTotalAmount } from '@/lib/invoice-utils';
+import { parseInvoiceAmount, formatTotalAmount } from '@/lib/utils/invoice-utils';
 import { normalizeBoundingBox, type BoundingBox } from '@/lib/utils/bbox-utils';
 
 const PDFViewer = dynamic(() => import('@/components/invoice/pdf-viewer').then(mod => mod.PDFViewer), {

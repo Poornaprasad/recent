@@ -14,7 +14,7 @@ import { StatCard } from "@/components/dashboard/stat-card";
 import { InvoiceUrgencyMatrix } from "@/components/dashboard/invoice-urgency-matrix";
 import { OcrConfidenceChart } from "@/components/dashboard/ocr-confidence-chart";
 import { Button } from "@/components/ui/button";
-import { getDashboardStatsAction, getDashboardTimeComparisonAction, getDuplicateAlertsAction } from "@/lib/actions";
+import { getDashboardStatsAction, getDashboardTimeComparisonAction, getDuplicateAlertsAction } from '@/lib/actions/index';
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";

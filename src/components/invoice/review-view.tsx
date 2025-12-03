@@ -1,7 +1,7 @@
 
 "use client";
 
-import type { StoredInvoice } from "@/lib/invoice-types";
+import type { StoredInvoice } from '@/lib/domain/types';
 import { useForm, useFieldArray } from "react-hook-form";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +33,7 @@ import { useState, useMemo } from "react";
 import { Label } from "../ui/label";
 import { Textarea } from "../ui/textarea";
 import Image from "next/image";
-import { cn } from "@/lib/utils";
+import { cn } from '@/lib/utils/utils';
 import dynamic from 'next/dynamic';
 import { CircularProgressBadge } from "./circular-progress-badge";
 

@@ -3,7 +3,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { updateInvoiceStatusAction } from "@/lib/actions";
+import { updateInvoiceStatusAction } from '@/lib/actions/index';
 import { Check, Eye, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";

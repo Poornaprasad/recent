@@ -18,7 +18,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, CheckCircle, XCircle, Eye } from "lucide-react";
-import { getPendingVendorsAction, completeVendorSetupAction, rejectPendingVendorAction, getPendingVendorByInvoiceIdAction } from "@/lib/actions";
+import { getPendingVendorsAction, completeVendorSetupAction, rejectPendingVendorAction, getPendingVendorByInvoiceIdAction } from '@/lib/actions/index';
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
@@ -40,7 +40,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { getVendorTypesAction } from "@/lib/actions";
+import { getVendorTypesAction } from '@/lib/actions/index';
 import type { PendingVendor } from "@/lib/domain/types";
 import Link from "next/link";
 import { encodeId } from "@/lib/utils/id-utils";

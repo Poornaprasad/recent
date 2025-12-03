@@ -25,10 +25,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { MoreHorizontal, PlusCircle, AlertTriangle, RefreshCw } from "lucide-react";
-import { getVendorsAction, deleteVendorAction, syncVendorTypesFromCrmAction } from "@/lib/actions";
+import { getVendorsAction, deleteVendorAction, syncVendorTypesFromCrmAction } from '@/lib/actions/index';
 import type { Vendor as DomainVendor } from "@/lib/domain/types";
-import { cn } from "@/lib/utils";
-import { getStatusBadgeClass } from "@/lib/status-utils";
+import { cn } from '@/lib/utils/utils';
+import { getStatusBadgeClass } from '@/lib/utils/status-utils';
 import { useState, useEffect } from "react";
 import { VendorForm } from "@/components/vendor/vendor-form";
 import {
