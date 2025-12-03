@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
@@ -9,56 +8,27 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/componen
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { useState, useEffect, useMemo, useRef } from 'react';
-import Image from 'next/image';
+import { useState, useEffect } from 'react';
 import { type StoredInvoice } from '@/lib/domain/types';
 import { cn } from '@/lib/utils/utils';
-import dynamic from 'next/dynamic';
-import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, getPendingVendorByInvoiceIdAction, completeVendorSetupAction, getVendorTypesAction, updateInvoiceCaseNumberAction } from '@/lib/actions/index';
+import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, updateInvoiceCaseNumberAction, completeVendorSetupAction, getVendorTypesAction } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
-import { ConfidenceBadge } from '@/components/invoice/confidence-badge';
 import { VendorSetupDialog } from '@/components/dialogs/vendor-setup-dialog';
+import { CommentDialog } from '@/components/dialogs/comment-dialog';
+import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
+import { FieldsList } from '@/components/invoice/fields-list';
 import { decodeId } from '@/lib/utils/id-utils';
 import { getDocumentTypeBadgeClass, getDocumentTypeDescription } from '@/lib/utils/document-type-utils';
-import { parseInvoiceAmount, formatTotalAmount } from '@/lib/utils/invoice-utils';
-import { normalizeBoundingBox, type BoundingBox } from '@/lib/utils/bbox-utils';
-
-const PDFViewer = dynamic(() => import('@/components/invoice/pdf-viewer').then(mod => mod.PDFViewer), {
-  ssr: false,
-  loading: () => <p>Loading PDF...</p>
-});
-
-const toTitleCase = (str: string) => {
-  if (!str) return '';
-  str = str.replace(/([A-Z])/g, ' $1');
-  str = str.replace(/(\d+)/g, ' $1');
-  return str.replace(/^./, (s) => s.toUpperCase());
-};
+import { formatTotalAmount } from '@/lib/utils/invoice-utils';
+import type { BoundingBox } from '@/lib/utils/bbox-utils';
 
 export default function InvoiceDetailPage() {
   const params = useParams();
-  // Decode the ID from URL (handles URL-encoded IDs)
   const id = decodeId(params.id as string);
   const router = useRouter();
   const { toast } = useToast();
+
   const [invoiceData, setInvoiceData] = useState<StoredInvoice | null>(null);
   const [invoiceDataUri, setInvoiceDataUri] = useState<string>('');
   const [highlightBox, setHighlightBox] = useState<BoundingBox | null>(null);
@@ -66,19 +36,15 @@ export default function InvoiceDetailPage() {
   const [hoveredConfidence, setHoveredConfidence] = useState<number | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
   const [isCommentDialogOpen, setIsCommentDialogOpen] = useState(false);
-  const [commentText, setCommentText] = useState('');
   const [isAddingComment, setIsAddingComment] = useState(false);
   const [isVendorSetupDialogOpen, setIsVendorSetupDialogOpen] = useState(false);
   const [pendingVendor, setPendingVendor] = useState<any>(null);
   const [vendorTypes, setVendorTypes] = useState<Array<{ name: string; description?: string }>>([]);
   const [isProcessingVendor, setIsProcessingVendor] = useState(false);
-  const imageRef = useRef<HTMLImageElement | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number; left: number; top: number } | null>(null);
 
   useEffect(() => {
     const fetchInvoice = async () => {
-    if (id) {
+      if (id) {
         const result = await getInvoiceByIdAction(id);
         if (result.error) {
           toast({
@@ -89,10 +55,7 @@ export default function InvoiceDetailPage() {
           setInvoiceData(null);
           setInvoiceDataUri('');
         } else if (result.data) {
-          // Debug: Log the invoice data to check for bounding boxes
-          
           setInvoiceData(result.data);
-          // Convert file path to data URI if needed
           const uriResult = await getInvoiceDataUriAction(result.data.invoiceDataUri);
           if (uriResult.dataUri) {
             setInvoiceDataUri(uriResult.dataUri);
@@ -105,78 +68,42 @@ export default function InvoiceDetailPage() {
     fetchInvoice();
   }, [id, toast]);
 
-  // Update image dimensions when window resizes or highlight box changes
   useEffect(() => {
-    const updateImageDimensions = () => {
-      if (imageRef.current && containerRef.current) {
-        const img = imageRef.current;
-        const container = containerRef.current;
-        const rect = img.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        setImageDimensions({
-          width: rect.width,
-          height: rect.height,
-          left: rect.left - containerRect.left,
-          top: rect.top - containerRect.top,
-        });
-      } else if (containerRef.current) {
-        // Try to find the image element
-        const img = containerRef.current.querySelector('img');
-        if (img) {
-          imageRef.current = img;
-          const rect = img.getBoundingClientRect();
-          const containerRect = containerRef.current.getBoundingClientRect();
-          setImageDimensions({
-            width: rect.width,
-            height: rect.height,
-            left: rect.left - containerRect.left,
-            top: rect.top - containerRect.top,
-          });
-        }
+    const loadVendorTypes = async () => {
+      const result = await getVendorTypesAction();
+      if (result.data) {
+        setVendorTypes(result.data);
       }
     };
-
-    // Update immediately
-    const timeout = setTimeout(updateImageDimensions, 100);
-    
-    window.addEventListener('resize', updateImageDimensions);
-    // Update periodically to catch image load and layout changes
-    const interval = setInterval(updateImageDimensions, 300);
-
-    return () => {
-      clearTimeout(timeout);
-      window.removeEventListener('resize', updateImageDimensions);
-      clearInterval(interval);
-    };
-  }, [invoiceDataUri, highlightBox]);
+    loadVendorTypes();
+  }, []);
 
   const handleStatusUpdate = async (status: 'Pending' | 'Draft') => {
     if (!invoiceData) return;
     setIsUpdating(true);
     try {
-        await updateInvoiceStatusAction(invoiceData.id, status);
-        toast({
-            title: `Invoice ${status === 'Pending' ? 'Approved' : 'Rejected'}`,
-            description: status === 'Pending' 
-              ? 'The invoice has been approved and moved to the invoices list.'
-              : 'The invoice has been rejected and marked as draft.',
-        });
-        // Redirect based on status: approved goes to invoices, rejected stays on approvals
-        if (status === 'Pending') {
-          router.push('/invoices');
-        } else {
+      await updateInvoiceStatusAction(invoiceData.id, status);
+      toast({
+        title: `Invoice ${status === 'Pending' ? 'Approved' : 'Rejected'}`,
+        description: status === 'Pending'
+          ? 'The invoice has been approved and moved to the invoices list.'
+          : 'The invoice has been rejected and marked as draft.',
+      });
+      if (status === 'Pending') {
+        router.push('/invoices');
+      } else {
         router.push('/approvals');
-        }
+      }
     } catch (error) {
-        toast({
-            variant: 'destructive',
-            title: 'Update Failed',
-            description: 'Could not update the invoice status.',
-        });
+      toast({
+        variant: 'destructive',
+        title: 'Update Failed',
+        description: 'Could not update the invoice status.',
+      });
     } finally {
-        setIsUpdating(false);
+      setIsUpdating(false);
     }
-  }
+  };
 
   const handleFlagForReview = async () => {
     if (!invoiceData) return;
@@ -188,7 +115,6 @@ export default function InvoiceDetailPage() {
           title: 'Invoice Flagged for Review',
           description: 'The invoice has been flagged for review and moved to the approvals queue.',
         });
-        // Refresh invoice data
         const updatedResult = await getInvoiceByIdAction(invoiceData.id);
         if (updatedResult.data) {
           setInvoiceData(updatedResult.data);
@@ -206,24 +132,22 @@ export default function InvoiceDetailPage() {
     } finally {
       setIsUpdating(false);
     }
-  }
+  };
 
-  const handleAddComment = async () => {
-    if (!invoiceData || !commentText.trim()) return;
+  const handleAddComment = async (comment: string) => {
+    if (!invoiceData) return;
     setIsAddingComment(true);
     try {
-      const result = await addInvoiceCommentAction(invoiceData.id, commentText.trim());
+      const result = await addInvoiceCommentAction(invoiceData.id, comment);
       if (result.success) {
         toast({
           title: 'Comment Added',
           description: 'Your comment has been added to the invoice.',
         });
-        // Refresh invoice data
         const updatedResult = await getInvoiceByIdAction(invoiceData.id);
         if (updatedResult.data) {
           setInvoiceData(updatedResult.data);
         }
-        setCommentText('');
         setIsCommentDialogOpen(false);
       } else {
         throw new Error(result.error || 'Failed to add comment');
@@ -237,7 +161,7 @@ export default function InvoiceDetailPage() {
     } finally {
       setIsAddingComment(false);
     }
-  }
+  };
 
   const handleCompleteVendorSetup = async (data: {
     vendorType: string;
@@ -265,7 +189,6 @@ export default function InvoiceDetailPage() {
         });
         setIsVendorSetupDialogOpen(false);
         setPendingVendor(null);
-        // Refresh invoice data
         if (invoiceData) {
           const updatedResult = await getInvoiceByIdAction(invoiceData.id);
           if (updatedResult.data) {
@@ -291,24 +214,11 @@ export default function InvoiceDetailPage() {
     }
   };
 
-  const fieldsToRender = useMemo(() => {
-    if (!invoiceData) return [];
-    
-    // This will flatten all fields except for lineItems and documentType, which will be handled separately.
-    const fields = Object.entries(invoiceData)
-      .filter(([key, value]) => value !== null && !['id', 'invoiceDataUri', 'status', 'isDuplicate', 'duplicateReason', 'lineItems', 'documentType'].includes(key))
-      .map(([key, value]) => ({ key, title: toTitleCase(key), value }));
-
-    return fields;
-  }, [invoiceData]);
-
-  const lineItems = useMemo(() => {
-      if (!invoiceData || !invoiceData.lineItems || !Array.isArray(invoiceData.lineItems.value)) {
-          return [];
-      }
-      return invoiceData.lineItems.value;
-  }, [invoiceData]);
-
+  const handleFieldHover = (field: string | null, bbox: BoundingBox | null, confidence: number | null) => {
+    setHoveredField(field);
+    setHighlightBox(bbox);
+    setHoveredConfidence(confidence);
+  };
 
   if (!invoiceData) {
     return (
@@ -332,20 +242,6 @@ export default function InvoiceDetailPage() {
     );
   }
 
-  const renderField = (fieldValue: any) => {
-      const value = fieldValue?.value;
-      // Convert null/undefined to empty string for input components
-      const safeValue = value === null || value === undefined ? '' : String(value);
-      
-      if (typeof value === 'string' && value.length > 100) {
-          return <Textarea value={safeValue} readOnly rows={4} />;
-      }
-      const fieldType = typeof value === 'number' ? 'number' : 'text';
-      return <Input value={safeValue} readOnly type={fieldType} />;
-  };
-
-  const isPdf = invoiceDataUri && invoiceDataUri.startsWith('data:application/pdf');
-
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
       <div className="p-4 md:p-8 md:pb-4 pb-4 border-b">
@@ -356,12 +252,12 @@ export default function InvoiceDetailPage() {
             </Link>
           </Button>
           <div className="flex items-center gap-3">
-          <h2 className="text-3xl font-bold tracking-tight">
+            <h2 className="text-3xl font-bold tracking-tight">
               {invoiceData.documentType || 'Invoice'} {invoiceData.invoiceNumber?.value || id}
             </h2>
             {invoiceData.documentType && (
-              <Badge 
-                variant="outline" 
+              <Badge
+                variant="outline"
                 className={cn(getDocumentTypeBadgeClass(invoiceData.documentType))}
               >
                 {invoiceData.documentType}
@@ -371,112 +267,13 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
       <div className="flex-1 flex flex-row overflow-hidden">
-        <div className="w-1/2 border-r p-4 flex items-center justify-center bg-muted/40 relative" ref={containerRef}>
-            {isPdf ? (
-                 <div className="relative w-full h-full">
-                   <PDFViewer file={invoiceDataUri} />
-                 </div>
-            ) : (
-                <div className="relative w-full h-full">
-                    <Image
-                        src={invoiceDataUri || 'https://placehold.co/595x842.png'}
-                        alt={"Invoice " + id}
-                        data-ai-hint="invoice document"
-                        width={0}
-                        height={0}
-                        sizes="100vw"
-                        className="w-full h-full object-contain"
-                        onLoad={(e) => {
-                          const img = e.currentTarget;
-                          imageRef.current = img;
-                          if (containerRef.current) {
-                            const rect = img.getBoundingClientRect();
-                            const containerRect = containerRef.current.getBoundingClientRect();
-                            setImageDimensions({
-                              width: rect.width,
-                              height: rect.height,
-                              left: rect.left - containerRect.left,
-                              top: rect.top - containerRect.top,
-                            });
-                          }
-                        }}
-                        />
-                </div>
-            )}
-            {highlightBox && highlightBox.length >= 4 && (() => {
-                      const normalized = normalizeBoundingBox(
-                        highlightBox,
-                        imageDimensions ? { width: imageDimensions.width, height: imageDimensions.height } : undefined
-                      );
-                      
-                      if (!normalized) {
-                        console.warn('Invalid bounding box points:', highlightBox);
-                        return null;
-                      }
-                      
-                      const { minX: normalizedMinX, maxX: normalizedMaxX, minY: normalizedMinY, maxY: normalizedMaxY } = normalized;
-                      
-                        normalized: { normalizedMinX, normalizedMaxX, normalizedMinY, normalizedMaxY },
-                        imageDimensions,
-                        isPdf,
-                        hoveredField
-                      });
-                      
-                      // For PDFs, always use percentage-based positioning
-                      // For images, use pixel-based if dimensions are available
-                      if (!isPdf && imageDimensions && imageDimensions.width > 0 && imageDimensions.height > 0) {
-                        // Use normalized coordinates
-                        const boxLeft = imageDimensions.left + normalizedMinX * imageDimensions.width;
-                        const boxTop = imageDimensions.top + normalizedMinY * imageDimensions.height;
-                        const boxWidth = (normalizedMaxX - normalizedMinX) * imageDimensions.width;
-                        const boxHeight = (normalizedMaxY - normalizedMinY) * imageDimensions.height;
-                        
-                        return (
-                          <div
-                            className="absolute border-2 border-green-500 bg-green-500/20 pointer-events-none z-10"
-                            style={{
-                              left: `${boxLeft}px`,
-                              top: `${boxTop}px`,
-                              width: `${boxWidth}px`,
-                              height: `${boxHeight}px`,
-                            }}
-                          >
-                            <div className="absolute -top-6 left-0 bg-green-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap flex items-center gap-2">
-                              <span>{hoveredField && toTitleCase(hoveredField)}</span>
-                              {hoveredConfidence !== null && (
-                                <span className="font-mono bg-green-600 px-1.5 py-0.5 rounded">
-                                  {Math.round(hoveredConfidence * 100)}%
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      } else {
-                        // Fallback to percentage-based positioning (works for both PDFs and images)
-                        // Coordinates are already normalized and clamped
-                        return (
-                          <div
-                            className="absolute border-2 border-green-500 bg-green-500/20 pointer-events-none z-10"
-                style={{
-                              left: `${normalizedMinX * 100}%`,
-                              top: `${normalizedMinY * 100}%`,
-                              width: `${(normalizedMaxX - normalizedMinX) * 100}%`,
-                              height: `${(normalizedMaxY - normalizedMinY) * 100}%`,
-                            }}
-                          >
-                            <div className="absolute -top-6 left-0 bg-green-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap flex items-center gap-2">
-                              <span>{hoveredField && toTitleCase(hoveredField)}</span>
-                              {hoveredConfidence !== null && (
-                                <span className="font-mono bg-green-600 px-1.5 py-0.5 rounded">
-                                  {Math.round(hoveredConfidence * 100)}%
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        );
-                      }
-                    })()}
-        </div>
+        <InvoiceViewer
+          invoiceDataUri={invoiceDataUri}
+          invoiceId={id}
+          highlightBox={highlightBox}
+          hoveredField={hoveredField}
+          hoveredConfidence={hoveredConfidence}
+        />
         <div className="w-1/2">
           <ScrollArea className="h-full">
             <div className="p-4 sm:p-6 lg:p-8">
@@ -516,40 +313,37 @@ export default function InvoiceDetailPage() {
                         </div>
                       </div>
                       <p className="text-xs text-destructive/80 mt-2">
-                        {invoiceData.vendorName?.value 
+                        {invoiceData.vendorName?.value
                           ? `Vendor "${invoiceData.vendorName.value}" is not in your vendor list. Please complete vendor setup to proceed with this invoice.`
                           : 'This vendor is not in your vendor list. Please complete vendor setup to proceed.'}
                       </p>
                     </div>
                   )}
                   {invoiceData.requiresEscalation && invoiceData.highValueReason && (
-                    <div className={`p-3 rounded-md border ${
-                      invoiceData.escalationLevel === 'critical'
-                        ? 'border-red-500/50 bg-red-500/10'
-                        : invoiceData.escalationLevel === 'high'
+                    <div className={`p-3 rounded-md border ${invoiceData.escalationLevel === 'critical'
+                      ? 'border-red-500/50 bg-red-500/10'
+                      : invoiceData.escalationLevel === 'high'
                         ? 'border-orange-500/50 bg-orange-500/10'
                         : 'border-yellow-500/50 bg-yellow-500/10'
-                    }`}>
+                      }`}>
                       <div className="flex items-center justify-between mb-2">
-                        <Label className={`font-medium ${
-                          invoiceData.escalationLevel === 'critical'
-                            ? 'text-red-700 dark:text-red-400'
-                            : invoiceData.escalationLevel === 'high'
+                        <Label className={`font-medium ${invoiceData.escalationLevel === 'critical'
+                          ? 'text-red-700 dark:text-red-400'
+                          : invoiceData.escalationLevel === 'high'
                             ? 'text-orange-700 dark:text-orange-400'
                             : 'text-yellow-700 dark:text-yellow-400'
-                        }`}>
-                          {invoiceData.escalationLevel === 'critical' 
+                          }`}>
+                          {invoiceData.escalationLevel === 'critical'
                             ? 'Critical: Executive Approval Required'
                             : invoiceData.escalationLevel === 'high'
-                            ? 'High Value: Manager Approval Required'
-                            : 'High Value: Review Required'}
+                              ? 'High Value: Manager Approval Required'
+                              : 'High Value: Review Required'}
                         </Label>
-                        <Badge 
-                          variant="outline" 
-                          className={
-                            invoiceData.escalationLevel === 'critical'
-                              ? 'border-red-500 text-red-700 dark:text-red-400'
-                              : invoiceData.escalationLevel === 'high'
+                        <Badge
+                          variant="outline"
+                          className={invoiceData.escalationLevel === 'critical'
+                            ? 'border-red-500 text-red-700 dark:text-red-400'
+                            : invoiceData.escalationLevel === 'high'
                               ? 'border-orange-500 text-orange-700 dark:text-orange-400'
                               : 'border-yellow-500 text-yellow-700 dark:text-yellow-400'
                           }
@@ -557,13 +351,12 @@ export default function InvoiceDetailPage() {
                           {invoiceData.escalationLevel ? invoiceData.escalationLevel.toUpperCase() : 'HIGH VALUE'}
                         </Badge>
                       </div>
-                      <p className={`text-xs mt-2 ${
-                        invoiceData.escalationLevel === 'critical'
-                          ? 'text-red-700/80 dark:text-red-400/80'
-                          : invoiceData.escalationLevel === 'high'
+                      <p className={`text-xs mt-2 ${invoiceData.escalationLevel === 'critical'
+                        ? 'text-red-700/80 dark:text-red-400/80'
+                        : invoiceData.escalationLevel === 'high'
                           ? 'text-orange-700/80 dark:text-orange-400/80'
                           : 'text-yellow-700/80 dark:text-yellow-400/80'
-                      }`}>
+                        }`}>
                         {invoiceData.highValueReason}
                       </p>
                     </div>
@@ -581,7 +374,7 @@ export default function InvoiceDetailPage() {
                       </p>
                       {invoiceData.expectedAmount !== undefined && (
                         <p className="text-xs text-orange-700/60 dark:text-orange-400/60 mt-1">
-                          Expected: ${invoiceData.expectedAmount.toFixed(2)} | 
+                          Expected: ${invoiceData.expectedAmount.toFixed(2)} |
                           Current: ${formatTotalAmount(invoiceData.totalAmount?.value)}
                         </p>
                       )}
@@ -604,8 +397,8 @@ export default function InvoiceDetailPage() {
                     <div className="p-3 rounded-md border bg-muted/50">
                       <div className="flex items-center justify-between mb-2">
                         <Label className="font-medium">Document Type</Label>
-                        <Badge 
-                          variant="outline" 
+                        <Badge
+                          variant="outline"
                           className={cn(getDocumentTypeBadgeClass(invoiceData.documentType))}
                         >
                           {invoiceData.documentType}
@@ -626,7 +419,6 @@ export default function InvoiceDetailPage() {
                         if (invoiceData) {
                           const result = await updateInvoiceCaseNumberAction(invoiceData.id, caseNumber);
                           if (result.success) {
-                            // Refresh invoice data
                             const updatedResult = await getInvoiceByIdAction(invoiceData.id);
                             if (updatedResult.data) {
                               setInvoiceData(updatedResult.data);
@@ -647,286 +439,51 @@ export default function InvoiceDetailPage() {
                       placeholder="Enter case number..."
                     />
                   </div>
-                  {fieldsToRender.map(({key, title, value}) => {
-                    const confidence = value?.confidence;
-                    const reasoning = value?.reasoning;
-                    const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
-                    
-                    return (
-                    <div
-                      key={key}
-                        className={cn("p-3 rounded-md transition-colors border", hoveredField === key ? 'bg-green-100 dark:bg-green-900/20 border-green-300 dark:border-green-700' : 'border-border')}
-                        onMouseEnter={() => {
-                          if (hasBbox) {
-                            // Validate bounding box coordinates
-                            const bbox = value.bbox;
-                            if (Array.isArray(bbox) && bbox.length >= 4) {
-                              // Check if all points have valid x and y coordinates
-                              const isValid = bbox.every(p => 
-                                typeof p === 'object' && 
-                                p !== null && 
-                                typeof p.x === 'number' && 
-                                typeof p.y === 'number' &&
-                                !isNaN(p.x) && 
-                                !isNaN(p.y)
-                              );
-                              if (isValid) {
-                                // Normalize coordinates if they're not already (0-1 range)
-                                const normalizedBbox = bbox.map(p => {
-                                  // If coordinates are > 1, they might be in pixel format
-                                  // We'll assume they're already normalized for now
-                                  return { x: p.x, y: p.y };
-                                });
-                                setHighlightBox(normalizedBbox);
-                                setHoveredField(key);
-                                setHoveredConfidence(confidence || null);
-                              } else {
-                                console.warn(`Invalid bounding box for field ${key}:`, bbox);
-                              }
-                            } else {
-                              console.warn(`Bounding box for ${key} is not a valid array or has < 4 points:`, bbox);
-                            }
-                          } else {
-                          }
-                        }}
-                        onMouseLeave={() => {
-                          setHighlightBox(null);
-                          setHoveredField(null);
-                          setHoveredConfidence(null);
-                        }}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <Label className={cn('font-medium', hoveredField === key && 'text-green-600 dark:text-green-400')}>
-                            {title}
-                          </Label>
-                          {confidence !== undefined && (
-                            <div className="flex items-center gap-2">
-                              <div
-                                onMouseEnter={() => {
-                                  if (hasBbox) {
-                                    const bbox = value.bbox;
-                                    if (Array.isArray(bbox) && bbox.length >= 4) {
-                                      const isValid = bbox.every(p => 
-                                        typeof p === 'object' && 
-                                        p !== null && 
-                                        typeof p.x === 'number' && 
-                                        typeof p.y === 'number' &&
-                                        !isNaN(p.x) && 
-                                        !isNaN(p.y)
-                                      );
-                                      if (isValid) {
-                                        setHighlightBox(bbox);
-                                        setHoveredField(key);
-                                        setHoveredConfidence(confidence);
-                                      }
-                                    }
-                                  }
-                                }}
-                                onMouseLeave={() => {
-                                  setHighlightBox(null);
-                                  setHoveredField(null);
-                                  setHoveredConfidence(null);
-                                }}
-                                className="cursor-pointer"
-                              >
-                                <ConfidenceBadge score={confidence} />
-                              </div>
-                              {hasBbox && (
-                                <Badge 
-                                  variant="outline" 
-                                  className="text-xs cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/20"
-                      onMouseEnter={() => {
-                                    if (hasBbox) {
-                                      const bbox = value.bbox;
-                                      if (Array.isArray(bbox) && bbox.length >= 4) {
-                                        const isValid = bbox.every(p => 
-                                          typeof p === 'object' && 
-                                          p !== null && 
-                                          typeof p.x === 'number' && 
-                                          typeof p.y === 'number' &&
-                                          !isNaN(p.x) && 
-                                          !isNaN(p.y)
-                                        );
-                                        if (isValid) {
-                                          setHighlightBox(bbox);
-                          setHoveredField(key);
-                                          setHoveredConfidence(confidence);
-                                        }
-                                      }
-                        }
-                      }}
-                      onMouseLeave={() => {
-                        setHighlightBox(null);
-                        setHoveredField(null);
-                                    setHoveredConfidence(null);
-                                  }}
-                                >
-                                  📍 Located
-                                </Badge>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      <div className="mt-1">
-                        {renderField(value)}
-                        </div>
-                        {reasoning && (
-                          <p className="text-xs text-muted-foreground mt-2 italic">
-                            {reasoning}
-                          </p>
-                        )}
-                      </div>
-                    );
-                  })}
-                  
-                  {lineItems.length > 0 && invoiceData.lineItems && (
-                     <div 
-                        className={cn("p-3 rounded-md transition-colors border", hoveredField === 'lineItems' ? 'bg-green-100 dark:bg-green-900/20 border-green-300 dark:border-green-700' : 'border-border')}
-                        onMouseEnter={() => {
-                            if (invoiceData.lineItems?.bbox && Array.isArray(invoiceData.lineItems.bbox) && invoiceData.lineItems.bbox.length >= 4) {
-                                const bbox = invoiceData.lineItems.bbox;
-                                const isValid = bbox.every(p => 
-                                  typeof p === 'object' && 
-                                  p !== null && 
-                                  typeof p.x === 'number' && 
-                                  typeof p.y === 'number' &&
-                                  !isNaN(p.x) && 
-                                  !isNaN(p.y)
-                                );
-                                if (isValid) {
-                                  setHighlightBox(bbox);
-                                setHoveredField('lineItems');
-                                  setHoveredConfidence(invoiceData.lineItems.confidence || null);
-                                }
-                            }
-                        }}
-                        onMouseLeave={() => {
-                            setHighlightBox(null);
-                            setHoveredField(null);
-                            setHoveredConfidence(null);
-                        }}
-                    >
-                         <div className="flex items-center justify-between mb-2">
-                           <Label className={cn('font-medium', hoveredField === 'lineItems' && 'text-green-600 dark:text-green-400')}>
-                             Line Items
-                           </Label>
-                           {invoiceData.lineItems.confidence !== undefined && (
-                             <div className="flex items-center gap-2">
-                               <div
-                                 onMouseEnter={() => {
-                                   if (invoiceData.lineItems?.bbox && Array.isArray(invoiceData.lineItems.bbox) && invoiceData.lineItems.bbox.length >= 4) {
-                                     setHighlightBox(invoiceData.lineItems.bbox);
-                                     setHoveredField('lineItems');
-                                     setHoveredConfidence(invoiceData.lineItems.confidence);
-                                   }
-                                 }}
-                                 onMouseLeave={() => {
-                                   setHighlightBox(null);
-                                   setHoveredField(null);
-                                   setHoveredConfidence(null);
-                                 }}
-                                 className="cursor-pointer"
-                               >
-                                 <ConfidenceBadge score={invoiceData.lineItems.confidence} />
-                               </div>
-                               {invoiceData.lineItems.bbox && Array.isArray(invoiceData.lineItems.bbox) && invoiceData.lineItems.bbox.length >= 4 && (
-                                 <Badge 
-                                   variant="outline" 
-                                   className="text-xs cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/20"
-                                 onMouseEnter={() => {
-                                   if (invoiceData.lineItems?.bbox && Array.isArray(invoiceData.lineItems.bbox) && invoiceData.lineItems.bbox.length >= 4) {
-                                     const bbox = invoiceData.lineItems.bbox;
-                                     const isValid = bbox.every(p => 
-                                       typeof p === 'object' && 
-                                       p !== null && 
-                                       typeof p.x === 'number' && 
-                                       typeof p.y === 'number' &&
-                                       !isNaN(p.x) && 
-                                       !isNaN(p.y)
-                                     );
-                                     if (isValid) {
-                                       setHighlightBox(bbox);
-                                       setHoveredField('lineItems');
-                                       setHoveredConfidence(invoiceData.lineItems.confidence || null);
-                                     }
-                                   }
-                                 }}
-                                   onMouseLeave={() => {
-                                     setHighlightBox(null);
-                                     setHoveredField(null);
-                                     setHoveredConfidence(null);
-                                   }}
-                                 >
-                                   📍 Located
-                                 </Badge>
-                               )}
-                             </div>
-                           )}
-                         </div>
-                         {invoiceData.lineItems.reasoning && (
-                           <p className="text-xs text-muted-foreground mb-2 italic">
-                             {invoiceData.lineItems.reasoning}
-                           </p>
-                         )}
-                         <div className="space-y-2 mt-1">
-                             {lineItems.map((item, index) => (
-                                 <Card key={index} className="p-3 bg-muted/50">
-                                    <div className="space-y-1">
-                                     {typeof item === 'object' && item !== null ? 
-                                         Object.entries(item).map(([itemKey, itemValue]) => (
-                                             <div key={itemKey} className="flex justify-between text-sm">
-                                                 <span className="text-muted-foreground">{toTitleCase(itemKey)}</span>
-                                                 <span className="font-mono text-right">{String(itemValue)}</span>
-                                             </div>
-                                         ))
-                                     : <p>{String(item)}</p>}
-                                     </div>
-                                 </Card>
-                             ))}
-                         </div>
-                     </div>
-                  )}
+                  <FieldsList
+                    invoiceData={invoiceData}
+                    hoveredField={hoveredField}
+                    onFieldHover={handleFieldHover}
+                  />
                   {invoiceData.comment && (
                     <div className="p-3 rounded-md border bg-muted/50">
                       <Label className="font-medium mb-2 block">Comment</Label>
                       <p className="text-sm text-muted-foreground whitespace-pre-wrap">{invoiceData.comment}</p>
                     </div>
                   )}
-
                 </CardContent>
                 <CardFooter className="justify-end gap-2">
-                    {invoiceData.status === 'Review' ? (
-                        <>
-                            <Button variant="outline" size="lg" onClick={() => handleStatusUpdate('Draft')} disabled={isUpdating || invoiceData.vendorRequires1099}>
-                                <X className="mr-2 h-4 w-4" />
-                                Reject
-                            </Button>
-                            <Button size="lg" onClick={() => handleStatusUpdate('Pending')} disabled={isUpdating || invoiceData.vendorRequires1099} title={invoiceData.vendorRequires1099 ? 'Vendor must be set up before approving' : ''}>
-                                <Check className="mr-2 h-4 w-4" />
-                                Approve
-                            </Button>
-                            {invoiceData.vendorRequires1099 && (
-                              <p className="text-xs text-muted-foreground self-center">
-                                Complete vendor setup to approve
-                              </p>
-                            )}
-                        </>
-                    ) : (
-                        <>
-                            <Button variant="outline" onClick={handleFlagForReview} disabled={isUpdating || invoiceData.vendorRequires1099} title={invoiceData.vendorRequires1099 ? 'Vendor must be set up first' : ''}>
-                                <Flag className="mr-2 h-4 w-4" />
-                                Flag for Review
-                            </Button>
-                            <Button variant="outline" onClick={() => setIsCommentDialogOpen(true)}>
-                                <MessageSquare className="mr-2 h-4 w-4" />
-                                Add Comment
-                            </Button>
-                            <Button>
-                                <Download className="mr-2 h-4 w-4" />
-                                Download PDF
-                            </Button>
-                        </>
-                    )}
+                  {invoiceData.status === 'Review' ? (
+                    <>
+                      <Button variant="outline" size="lg" onClick={() => handleStatusUpdate('Draft')} disabled={isUpdating || invoiceData.vendorRequires1099}>
+                        <X className="mr-2 h-4 w-4" />
+                        Reject
+                      </Button>
+                      <Button size="lg" onClick={() => handleStatusUpdate('Pending')} disabled={isUpdating || invoiceData.vendorRequires1099} title={invoiceData.vendorRequires1099 ? 'Vendor must be set up before approving' : ''}>
+                        <Check className="mr-2 h-4 w-4" />
+                        Approve
+                      </Button>
+                      {invoiceData.vendorRequires1099 && (
+                        <p className="text-xs text-muted-foreground self-center">
+                          Complete vendor setup to approve
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <Button variant="outline" onClick={handleFlagForReview} disabled={isUpdating || invoiceData.vendorRequires1099} title={invoiceData.vendorRequires1099 ? 'Vendor must be set up first' : ''}>
+                        <Flag className="mr-2 h-4 w-4" />
+                        Flag for Review
+                      </Button>
+                      <Button variant="outline" onClick={() => setIsCommentDialogOpen(true)}>
+                        <MessageSquare className="mr-2 h-4 w-4" />
+                        Add Comment
+                      </Button>
+                      <Button>
+                        <Download className="mr-2 h-4 w-4" />
+                        Download PDF
+                      </Button>
+                    </>
+                  )}
                 </CardFooter>
               </Card>
             </div>
@@ -934,37 +491,15 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
 
-      {/* Comment Dialog */}
-      <Dialog open={isCommentDialogOpen} onOpenChange={setIsCommentDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Add Comment</DialogTitle>
-            <DialogDescription>
-              Add a comment or note to this invoice. This will be visible to all users reviewing the invoice.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <Textarea
-              placeholder="Enter your comment here..."
-              value={commentText}
-              onChange={(e) => setCommentText(e.target.value)}
-              rows={5}
-              className="resize-none"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setIsCommentDialogOpen(false);
-              setCommentText('');
-            }}>
-              Cancel
-            </Button>
-            <Button onClick={handleAddComment} disabled={!commentText.trim() || isAddingComment}>
-              {isAddingComment ? 'Adding...' : 'Add Comment'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CommentDialog
+        open={isCommentDialogOpen}
+        onOpenChange={setIsCommentDialogOpen}
+        title="Add Comment"
+        description="Add a comment or note to this invoice. This will be visible to all users reviewing the invoice."
+        placeholder="Enter your comment here..."
+        isSubmitting={isAddingComment}
+        onSubmit={handleAddComment}
+      />
 
       <VendorSetupDialog
         open={isVendorSetupDialogOpen}
