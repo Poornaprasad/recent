@@ -1,11 +1,16 @@
 import type { Config } from 'drizzle-kit';
+import * as dotenv from 'dotenv';
+
+dotenv.config();
 
 export default {
   schema: './src/lib/db/schema.ts',
   out: './drizzle',
-  dialect: 'sqlite',
+  dialect: 'postgresql',
   dbCredentials: {
-    url: './data/database.db',
+    url: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/invoice_management',
   },
+  verbose: true,
+  strict: true,
 } satisfies Config;
 
