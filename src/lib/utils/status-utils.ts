@@ -3,8 +3,6 @@
  * Shared utilities for status badge styling
  */
 
-import { cn } from './utils';
-
 export function getStatusBadgeClass(status: string): string {
   switch (status.toLowerCase()) {
     case "active":

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Moon, Settings, Sidebar as SidebarIcon } from "lucide-react";
+import { Sidebar as SidebarIcon } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { UserNav } from "@/components/user-nav";
 import { ThemeToggle } from "./theme-toggle";

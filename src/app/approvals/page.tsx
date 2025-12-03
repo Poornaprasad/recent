@@ -26,7 +26,6 @@ import { getStatusBadgeClass } from '@/lib/utils/status-utils';
 import { getOverallConfidence } from '@/lib/utils/invoice-utils';
 import Link from "next/link";
 import { CircularProgressBadge } from "@/components/invoice/circular-progress-badge";
-import { Eye, Check, X } from "lucide-react";
 import { ApprovalActions } from "./_components/approval-actions";
 
 export default async function ApprovalsPage() {

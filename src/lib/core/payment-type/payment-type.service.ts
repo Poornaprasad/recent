@@ -7,7 +7,6 @@
 import 'server-only';
 
 import { State } from '../state/state-detection.service';
-import { logger } from '../logging/logger.service';
 
 export enum PaymentType {
   RECEIPT = 'Receipt',

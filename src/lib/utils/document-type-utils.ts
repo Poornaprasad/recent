@@ -3,7 +3,6 @@
  * Shared utilities for document type badge styling and descriptions
  */
 
-import { cn } from './utils';
 import type { DocumentType } from '../domain/types';
 
 /**

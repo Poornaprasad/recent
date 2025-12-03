@@ -5,7 +5,7 @@
 
 import 'server-only';
 
-import { rbacService, Permission, UserRole, type UserPermissions } from '../core/auth/rbac.service';
+import { rbacService, Permission, UserRole } from '../core/auth/rbac.service';
 import { logger } from '../core/logging/logger.service';
 
 export interface AuthContext {

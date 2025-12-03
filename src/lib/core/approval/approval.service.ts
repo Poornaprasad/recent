@@ -9,7 +9,7 @@ import { getDb, initDb } from '../../db';
 import { approvalRules } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { rbacService, UserRole, type UserPermissions } from '../auth/rbac.service';
-import { auditService, AuditAction, AuditResource } from '../audit/audit.service';
+import { auditService } from '../audit/audit.service';
 import { logger } from '../logging/logger.service';
 import { State } from '../state/state-detection.service';
 
