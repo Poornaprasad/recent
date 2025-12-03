@@ -1,8 +1,7 @@
 /**
  * Database configuration
+ * Note: No 'server-only' import to allow usage in Node.js scripts
  */
-
-import 'server-only';
 
 export const DATABASE_CONFIG = {
   // PostgreSQL connection string
