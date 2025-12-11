@@ -46,9 +46,9 @@ export type StoredInvoice = BaseEntity & ExtractedDataOnly & {
 export type User = BaseEntity & {
   name: string;
   email: string;
-  role: 'admin' | 'director' | 'manager' | 'account' | 'user';
+  role: 'admin' | 'director' | 'manager' | 'senior_accountant' | 'ny_accountant' | 'ca_accountant';
   status: 'Active' | 'Inactive' | 'Invited';
-  assignedStates?: string[]; // For ACCOUNT role - which states they can access: ["CA", "NY"]
+  assignedStates?: string[]; // For accountant roles - additional states they can access: ["CA", "NY"]
 };
 
 export type Vendor = BaseEntity & {

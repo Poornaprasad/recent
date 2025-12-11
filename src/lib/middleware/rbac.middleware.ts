@@ -25,7 +25,7 @@ export function requirePermission(
     throw new Error('Authentication required');
   }
 
-  const userPermissions = rbacService.getUserPermissions(
+  const userPermissions = rbacService.getUserPermissionsSync(
     authContext.userRole,
     authContext.assignedStates
   );
@@ -51,7 +51,7 @@ export function requireStateAccess(
     throw new Error('Authentication required');
   }
 
-  const userPermissions = rbacService.getUserPermissions(
+  const userPermissions = rbacService.getUserPermissionsSync(
     authContext.userRole,
     authContext.assignedStates
   );

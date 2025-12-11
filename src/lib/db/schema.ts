@@ -80,9 +80,9 @@ export const users = pgTable('users', {
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
   password: text('password'), // Hashed password (nullable for OAuth users)
-  role: text('role', { enum: ['admin', 'director', 'manager', 'account', 'user'] }).notNull(),
+  role: text('role', { enum: ['admin', 'director', 'manager', 'senior_accountant', 'ny_accountant', 'ca_accountant'] }).notNull(),
   status: text('status', { enum: ['Active', 'Inactive', 'Invited'] }).notNull(),
-  assignedStates: text('assigned_states'), // JSON array of states for ACCOUNT role: ["CA", "NY"]
+  assignedStates: text('assigned_states'), // JSON array of states for accountant roles: ["CA", "NY"]
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -341,3 +341,18 @@ export const caseVendorDisbursementTypes = pgTable('case_vendor_disbursement_typ
 
 export type CaseVendorDisbursementType = typeof caseVendorDisbursementTypes.$inferSelect;
 export type NewCaseVendorDisbursementType = typeof caseVendorDisbursementTypes.$inferInsert;
+
+// Permission matrix table (stores role-permission mappings, editable only by Admin and Director)
+export const permissionMatrix = pgTable('permission_matrix', {
+  id: text('id').primaryKey(),
+  role: text('role', { enum: ['admin', 'director', 'manager', 'senior_accountant', 'ny_accountant', 'ca_accountant'] }).notNull(),
+  permission: text('permission').notNull(), // Permission name (e.g., 'view_invoices', 'edit_invoices')
+  isGranted: boolean('is_granted').default(true).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  createdBy: text('created_by'), // User ID who created this permission mapping
+  updatedBy: text('updated_by'), // User ID who last updated this permission mapping
+});
+
+export type PermissionMatrix = typeof permissionMatrix.$inferSelect;
+export type NewPermissionMatrix = typeof permissionMatrix.$inferInsert;

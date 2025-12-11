@@ -45,7 +45,7 @@ export async function getUserByIdAction(id: string): Promise<ActionResult<User>>
 export async function createUserAction(input: {
   name: string;
   email: string;
-  role: 'admin' | 'director' | 'manager' | 'account' | 'user';
+  role: 'admin' | 'director' | 'manager' | 'senior_accountant' | 'ny_accountant' | 'ca_accountant';
   status: 'Active' | 'Inactive' | 'Invited';
   assignedStates?: string;
 }): Promise<ActionResult<User>> {
@@ -67,7 +67,7 @@ export async function updateUserAction(
   input: {
     name?: string;
     email?: string;
-    role?: 'admin' | 'director' | 'manager' | 'account' | 'user';
+    role?: 'admin' | 'director' | 'manager' | 'senior_accountant' | 'ny_accountant' | 'ca_accountant';
     status?: 'Active' | 'Inactive' | 'Invited';
     assignedStates?: string;
   }

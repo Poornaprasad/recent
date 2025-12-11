@@ -26,16 +26,27 @@ function filterInvoicesByAccess(
     return invoices;
   }
 
-  if (userPermissions.role === 'account' && userPermissions.assignedStates) {
+  // Senior Accountant has access to all states
+  if (userPermissions.role === 'senior_accountant') {
+    return invoices;
+  }
+
+  // NY Accountant - has access to NY by default, and other states if assigned
+  if (userPermissions.role === 'ny_accountant') {
     return invoices.filter(inv => {
       const invoiceState = inv.state as State | undefined;
+      if (invoiceState === 'NY') return true;
       return invoiceState && userPermissions.assignedStates?.includes(invoiceState);
     });
   }
 
-  if (userPermissions.role === 'user') {
-    // TODO: Add userId parameter and filter by createdBy or assignedTo
-    return invoices;
+  // CA Accountant - has access to CA by default, and other states if assigned
+  if (userPermissions.role === 'ca_accountant') {
+    return invoices.filter(inv => {
+      const invoiceState = inv.state as State | undefined;
+      if (invoiceState === 'CA') return true;
+      return invoiceState && userPermissions.assignedStates?.includes(invoiceState);
+    });
   }
 
   return invoices;

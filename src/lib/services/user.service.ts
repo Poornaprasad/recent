@@ -11,7 +11,7 @@ import type { User } from '../db/schema';
 export interface CreateUserInput {
   name: string;
   email: string;
-  role: 'admin' | 'director' | 'manager' | 'account' | 'user';
+  role: 'admin' | 'director' | 'manager' | 'senior_accountant' | 'ny_accountant' | 'ca_accountant';
   status: 'Active' | 'Inactive' | 'Invited';
   assignedStates?: string;
 }
@@ -19,7 +19,7 @@ export interface CreateUserInput {
 export interface UpdateUserInput {
   name?: string;
   email?: string;
-  role?: 'admin' | 'director' | 'manager' | 'account' | 'user';
+  role?: 'admin' | 'director' | 'manager' | 'senior_accountant' | 'ny_accountant' | 'ca_accountant';
   status?: 'Active' | 'Inactive' | 'Invited';
   assignedStates?: string;
 }
