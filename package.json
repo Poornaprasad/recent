@@ -15,7 +15,9 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "db:clear": "tsx src/lib/db/clear-db.ts",
+    "db:seed": "tsx src/lib/db/seed-test-user.ts"
   },
   "dependencies": {
     "@genkit-ai/compat-oai": "^1.23.0",
@@ -68,7 +70,8 @@
     "server-only": "^0.0.1",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
-    "zod": "^3.24.2"
+    "zod": "^3.24.2",
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",

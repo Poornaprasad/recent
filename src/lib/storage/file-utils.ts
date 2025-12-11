@@ -13,8 +13,13 @@ export async function getInvoiceDataUri(uri: string): Promise<string> {
     try {
       return await readInvoiceFile(uri);
     } catch (error) {
-      console.error('Error reading local file:', error);
+      // Log the error for debugging
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.warn(`Warning: Could not read local file ${uri}. ${errorMessage}`);
+      console.warn('This may be a legacy invoice with a data URI stored in the database, or the file was deleted.');
       // Fallback to original URI if file read fails
+      // If the original URI is also a file path, it will be returned as-is
+      // The caller should handle this case appropriately
       return uri;
     }
   }

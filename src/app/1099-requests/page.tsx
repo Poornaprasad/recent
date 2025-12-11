@@ -21,9 +21,9 @@ import { AlertTriangle, CheckCircle, XCircle, Eye } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
-import { getPendingVendorsAction, completeVendorSetupAction, rejectPendingVendorAction, getVendorTypesAction } from "@/lib/actions/index";
+import { getPendingVendorsAction, completeVendorSetupAction, rejectPendingVendorAction, getInvoiceByIdAction } from "@/lib/actions/index";
 import { VendorSetupDialog } from "@/components/dialogs/vendor-setup-dialog";
-import type { PendingVendor, VendorType } from "@/lib/domain/types";
+import type { PendingVendor } from "@/lib/domain/types";
 import Link from "next/link";
 import { encodeId } from "@/lib/utils/id-utils";
 
@@ -34,12 +34,12 @@ export default function PendingVendorsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedVendor, setSelectedVendor] = useState<PendingVendor | null>(null);
-  const [vendorTypes, setVendorTypes] = useState<VendorType[]>([]);
+  const [caseNumber, setCaseNumber] = useState<string | undefined>(undefined);
+  const [invoiceId, setInvoiceId] = useState<string | undefined>(undefined);
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     loadPendingVendors();
-    loadVendorTypes();
   }, []);
 
   const loadPendingVendors = async () => {
@@ -66,18 +66,22 @@ export default function PendingVendorsPage() {
     }
   };
 
-  const loadVendorTypes = async () => {
-    try {
-      const result = await getVendorTypesAction();
-      if (result.data) {
-        setVendorTypes(result.data.map(t => ({ name: t.name, description: t.description })));
-      }
-    } catch (error) {
-    }
-  };
-
-  const handleCompleteSetup = (vendor: PendingVendor) => {
+  const handleCompleteSetup = async (vendor: PendingVendor) => {
     setSelectedVendor(vendor);
+    
+    // Try to fetch invoice to get case number
+    if (vendor.invoiceId) {
+      try {
+        const invoiceResult = await getInvoiceByIdAction(vendor.invoiceId);
+        if (invoiceResult.data) {
+          setCaseNumber(invoiceResult.data.caseNumber);
+          setInvoiceId(invoiceResult.data.id);
+        }
+      } catch (error) {
+        console.error('Error fetching invoice:', error);
+      }
+    }
+    
     setIsDialogOpen(true);
   };
 
@@ -257,9 +261,16 @@ export default function PendingVendorsPage() {
 
       <VendorSetupDialog
         open={isDialogOpen}
-        onOpenChange={setIsDialogOpen}
+        onOpenChange={(open) => {
+          setIsDialogOpen(open);
+          if (!open) {
+            setCaseNumber(undefined);
+            setInvoiceId(undefined);
+          }
+        }}
         vendor={selectedVendor}
-        vendorTypes={vendorTypes}
+        caseNumber={caseNumber}
+        invoiceId={invoiceId}
         isProcessing={isProcessing}
         onSubmit={handleSubmitSetup}
       />

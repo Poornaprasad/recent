@@ -35,11 +35,14 @@ import { useEffect, useState } from 'react';
 import { 
   getVendorTypesAction, 
   getSuggestedVendorTypesAction,
-  checkVendorExistsAction 
+  checkVendorExistsAction,
+  fetchDisbursementTypesAction,
+  getPreviousDisbursementTypeForVendorAction,
+  saveDisbursementTypeMappingAction,
 } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertTriangle, Plus } from 'lucide-react';
+import { AlertTriangle, Plus, Loader2 } from 'lucide-react';
 import {
   Popover,
   PopoverContent,
@@ -63,15 +66,18 @@ interface VendorFormProps {
   onOpenChange: (isOpen: boolean) => void;
   onSubmit: (data: DomainVendor) => void;
   vendor: DomainVendor | null;
+  caseNumber?: string; // Optional case number for fetching disbursement types
 }
 
-export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor }: VendorFormProps) {
+export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber }: VendorFormProps) {
   const { toast } = useToast();
   const [vendorTypes, setVendorTypes] = useState<Array<{ name: string; description?: string }>>([]);
+  const [disbursementTypes, setDisbursementTypes] = useState<string[]>([]);
   const [suggestedTypes, setSuggestedTypes] = useState<string[]>([]);
   const [showNewTypeInput, setShowNewTypeInput] = useState(false);
   const [newTypeName, setNewTypeName] = useState('');
   const [isCheckingVendor, setIsCheckingVendor] = useState(false);
+  const [isLoadingDisbursementTypes, setIsLoadingDisbursementTypes] = useState(false);
   const [show1099Alert, setShow1099Alert] = useState(false);
 
   const form = useForm<VendorFormData>({
@@ -87,9 +93,12 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor }: VendorFor
     },
   });
 
-  // Load vendor types
+  // Load disbursement types (common across all cases)
   useEffect(() => {
     if (isOpen) {
+      // Always load disbursement types from API (common across cases)
+      loadDisbursementTypes();
+      // Also load traditional vendor types as fallback
       loadVendorTypes();
     }
   }, [isOpen]);
@@ -99,10 +108,43 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor }: VendorFor
     const subscription = form.watch((value, { name }) => {
       if (name === 'name' && value.name && value.name.length >= 2 && !vendor) {
         checkVendorAndLoadTypes(value.name);
+        // Also try to load previous disbursement type for this vendor
+        loadPreviousDisbursementTypeForName(value.name);
       }
     });
     return () => subscription.unsubscribe();
   }, [form, vendor]);
+
+  const loadPreviousDisbursementTypeForName = async (vendorName: string) => {
+    try {
+      const result = await getPreviousDisbursementTypeForVendorAction(vendorName);
+      if (result.data) {
+        form.setValue('vendorType', result.data);
+      }
+    } catch (error) {
+      console.error('Error loading previous disbursement type:', error);
+    }
+  };
+
+  // Load previous disbursement type when vendor name is available
+  useEffect(() => {
+    if (vendor?.name) {
+      loadPreviousDisbursementType();
+    }
+  }, [vendor]);
+
+  const loadPreviousDisbursementType = async () => {
+    if (!vendor?.name) return;
+    
+    try {
+      const result = await getPreviousDisbursementTypeForVendorAction(vendor.name);
+      if (result.data) {
+        form.setValue('vendorType', result.data);
+      }
+    } catch (error) {
+      console.error('Error loading previous disbursement type:', error);
+    }
+  };
 
   const loadVendorTypes = async () => {
     try {
@@ -112,6 +154,31 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor }: VendorFor
       }
     } catch (error) {
       console.error('Error loading vendor types:', error);
+    }
+  };
+
+  const loadDisbursementTypes = async () => {
+    setIsLoadingDisbursementTypes(true);
+    try {
+      const result = await fetchDisbursementTypesAction();
+      if (result.data) {
+        setDisbursementTypes(result.data);
+      } else if (result.error) {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: result.error || 'Failed to load disbursement types',
+        });
+      }
+    } catch (error) {
+      console.error('Error loading disbursement types:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to load disbursement types from API',
+      });
+    } finally {
+      setIsLoadingDisbursementTypes(false);
     }
   };
 
@@ -177,7 +244,22 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor }: VendorFor
     }
   }, [vendor, form, isOpen]);
 
-  const handleFormSubmit = (data: VendorFormData) => {
+  const handleFormSubmit = async (data: VendorFormData) => {
+    // Save the disbursement type mapping if we have case number and type is provided
+    // Note: Type is optional for new vendors since it varies by case
+    if (caseNumber && data.vendorType && data.name) {
+      try {
+        await saveDisbursementTypeMappingAction(
+          caseNumber,
+          data.name,
+          data.vendorType
+        );
+      } catch (error) {
+        console.error('Error saving disbursement type mapping:', error);
+        // Continue even if saving mapping fails
+      }
+    }
+
     const vendorData: DomainVendor = {
       id: vendor?.id || `vendor-${Date.now()}`,
       name: data.name,
@@ -209,9 +291,6 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor }: VendorFor
     });
   };
 
-  const vendorTypeOptions = suggestedTypes.length > 0 
-    ? suggestedTypes.map(type => ({ value: type, label: type }))
-    : vendorTypes.map(type => ({ value: type.name, label: type.name }));
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -262,54 +341,53 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor }: VendorFor
               name="vendorType"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Vendor Type</FormLabel>
+                  <FormLabel>
+                    Vendor Disbursement Type
+                  </FormLabel>
+                  {!vendor && (
+                    <p className="text-xs text-muted-foreground">
+                      Optional - Selection varies by case. Previous selection for this vendor will be pre-filled if available.
+                    </p>
+                  )}
                   <div className="flex gap-2">
                     <FormControl className="flex-1">
                       <Select 
                         onValueChange={field.onChange} 
                         value={field.value || ''}
-                        disabled={isCheckingVendor}
+                        disabled={isCheckingVendor || isLoadingDisbursementTypes}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder={
-                            suggestedTypes.length > 1 
-                              ? "Select type (multiple found)" 
-                              : suggestedTypes.length === 1
-                              ? suggestedTypes[0]
-                              : "Select vendor type"
+                            isLoadingDisbursementTypes
+                              ? "Loading types..."
+                              : disbursementTypes.length === 0
+                              ? "No types available"
+                              : !vendor
+                              ? "Select disbursement type (optional)"
+                              : "Select disbursement type"
                           } />
                         </SelectTrigger>
                         <SelectContent>
-                          {suggestedTypes.length > 0 && (
+                          {isLoadingDisbursementTypes ? (
+                            <div className="flex items-center justify-center p-4">
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            </div>
+                          ) : disbursementTypes.length === 0 ? (
+                            <div className="p-2 text-sm text-muted-foreground">
+                              No disbursement types available
+                            </div>
+                          ) : (
                             <>
-                              {suggestedTypes.map((type) => (
+                              {!vendor && (
+                                <SelectItem value="">None (Optional)</SelectItem>
+                              )}
+                              {disbursementTypes.map((type) => (
                                 <SelectItem key={type} value={type}>
-                                  {type} {suggestedTypes.length > 1 && '(Previously used)'}
+                                  {type}
                                 </SelectItem>
                               ))}
-                              {vendorTypes.filter(t => !suggestedTypes.includes(t.name)).length > 0 && (
-                                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                                  Other Types
-                                </div>
-                              )}
                             </>
                           )}
-                          {vendorTypes
-                            .filter(t => !suggestedTypes.includes(t.name))
-                            .map((type) => (
-                              <SelectItem key={type.name} value={type.name}>
-                                {type.name}
-                                {type.description && (
-                                  <span className="text-xs text-muted-foreground ml-2">
-                                    - {type.description}
-                                  </span>
-                                )}
-                              </SelectItem>
-                            ))}
-                          <SelectItem value="__add_new__" className="text-primary">
-                            <Plus className="inline h-3 w-3 mr-1" />
-                            Add New Type
-                          </SelectItem>
                         </SelectContent>
                       </Select>
                     </FormControl>
@@ -360,9 +438,9 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor }: VendorFor
                       Change Type
                     </Button>
                   )}
-                  {suggestedTypes.length > 1 && (
+                  {caseNumber && field.value && (
                     <p className="text-xs text-muted-foreground">
-                      Multiple types found for this vendor. Please select the appropriate type.
+                      This selection will be remembered for future disbursements in case {caseNumber}
                     </p>
                   )}
                   <FormMessage />

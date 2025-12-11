@@ -208,10 +208,19 @@ You are an expert document data extractor. You will be given a single document (
 Classify the document as exactly one of:
 
 - **Invoice**  
-  Includes payment terms ("Net 30"), due dates, invoice number, line items, "Amount Due", etc.
+  A document requesting payment for goods or services. Includes payment terms ("Net 30"), due dates, invoice number, line items, "Amount Due", "Balance Due", etc. This is a bill that needs to be paid.
 
 - **Receipt**  
-  Includes "Paid", payment method, transaction date, "Thank you", etc.
+  A document confirming payment has been made. Includes "Paid", payment method, transaction date, "Thank you", "Payment Received", etc. This confirms a payment was already made.
+
+- **Per Diem**  
+  A per diem document (daily allowance for expenses like meals, lodging, travel). May include daily rates, dates, locations, and can be processed as either an invoice (if requesting payment) or receipt (if payment already made). Look for keywords like "per diem", "daily allowance", "meal allowance", "lodging allowance", or travel expense documentation.
+
+- **Estate**  
+  Estate-related documents such as probate documents, estate accountings, estate distributions, executor documents, or any document related to estate administration. Look for keywords like "estate", "probate", "executor", "beneficiary", "will", "trust", etc.
+
+- **Other Document**  
+  Documents that are not financial documents (invoices/receipts) or are misclassified. This includes non-financial documents like letters, contracts, case files, medical records, or any document that doesn't fit the other categories. Use this when the document is clearly not a financial transaction document.
 
 - **Reimbursement**  
   Includes "Expense Report", employee name, categories (Travel/Meals/etc.), approval signatures, etc.

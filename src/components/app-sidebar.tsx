@@ -10,9 +10,11 @@ import {
   SidebarContent,
   SidebarMenuSub,
   SidebarMenuSubItem,
-  sidebarMenuButtonVariants,
+  SidebarMenuButton,
   SidebarFooter,
+  sidebarMenuButtonVariants,
 } from "@/components/ui/sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   Upload,
   CheckSquare,
@@ -28,7 +30,9 @@ import {
   LifeBuoy,
   FileText,
   AlertTriangle,
+  Workflow,
 } from "lucide-react";
+import { APP_NAME } from "@/lib/constants";
 import Link from "next/link";
 import * as Accordion from "@radix-ui/react-accordion";
 import { cn } from '@/lib/utils/utils';
@@ -79,18 +83,32 @@ export function AppSidebar() {
 
 
   return (
-    <>
-      <SidebarHeader>
-        {/* Can add a header here if needed */}
+    <TooltipProvider>
+      <SidebarHeader className="border-b border-sidebar-border/50 pb-4 mb-3 px-3">
+        <div className="flex items-center gap-3 px-3 py-3 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2 transition-all hover:from-primary/15 hover:to-primary/10">
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20 text-primary shadow-sm group-data-[collapsible=icon]:mx-auto transition-transform group-hover:scale-105">
+            <Workflow className="h-5 w-5" />
+          </div>
+          <div className="flex flex-col group-data-[collapsible=icon]:hidden min-w-0">
+            <span className="font-bold text-sm leading-tight truncate">{APP_NAME}</span>
+            <span className="text-xs text-muted-foreground mt-0.5 truncate">Invoice Management</span>
+          </div>
+        </div>
       </SidebarHeader>
       <SidebarContent>
         <SidebarMenu>
           {mainLinks.map(({ href, label, icon: Icon }) => (
             <SidebarMenuItem key={href}>
-              <Link href={href} className={cn(sidebarMenuButtonVariants({size: 'default'}), 'h-10 p-3 justify-start w-full')} data-active={pathname === href || (href === "/" && pathname.startsWith("/invoice/"))}>
-                    <Icon className="mr-2 h-4 w-4" />
-                    {label}
-               </Link>
+              <SidebarMenuButton
+                asChild
+                tooltip={label}
+                isActive={pathname === href || (href === "/" && pathname.startsWith("/invoice/"))}
+              >
+                <Link href={href}>
+                  <Icon />
+                  <span>{label}</span>
+                </Link>
+              </SidebarMenuButton>
             </SidebarMenuItem>
           ))}
            <Accordion.Root type="multiple" className="w-full" value={openAccordion} onValueChange={setOpenAccordion}>
@@ -142,19 +160,23 @@ export function AppSidebar() {
       <SidebarFooter className="mt-auto">
         <SidebarMenu>
             <SidebarMenuItem>
-                <Link href="#" className={cn(sidebarMenuButtonVariants({size: 'default'}), 'h-10 p-3 justify-start w-full')}>
-                    <LifeBuoy className="mr-2 h-4 w-4" />
-                    Support
-                </Link>
+                <SidebarMenuButton asChild tooltip="Support">
+                    <Link href="#">
+                        <LifeBuoy />
+                        <span>Support</span>
+                    </Link>
+                </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-                <Link href="#" className={cn(sidebarMenuButtonVariants({size: 'default'}), 'h-10 p-3 justify-start w-full')}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                </Link>
+                <SidebarMenuButton asChild tooltip="Settings">
+                    <Link href="#">
+                        <Settings />
+                        <span>Settings</span>
+                    </Link>
+                </SidebarMenuButton>
             </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
-    </>
+    </TooltipProvider>
   );
 }

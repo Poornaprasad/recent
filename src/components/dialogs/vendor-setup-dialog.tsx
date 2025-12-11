@@ -7,13 +7,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import type { PendingVendor, VendorType } from '@/lib/domain/types';
+import type { PendingVendor } from '@/lib/domain/types';
+import {
+  fetchDisbursementTypesAction,
+  getPreviousDisbursementTypeForVendorAction,
+  saveDisbursementTypeMappingAction,
+} from '@/lib/actions/index';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
 
 interface VendorSetupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   vendor: PendingVendor | null;
-  vendorTypes: VendorType[];
+  caseNumber?: string; // Case number for fetching disbursement types
+  invoiceId?: string; // Optional invoice ID for saving mapping
   isProcessing?: boolean;
   onSubmit: (data: {
     vendorType: string;
@@ -28,15 +36,67 @@ export function VendorSetupDialog({
   open,
   onOpenChange,
   vendor,
-  vendorTypes,
+  caseNumber,
+  invoiceId,
   isProcessing = false,
   onSubmit,
 }: VendorSetupDialogProps) {
+  const { toast } = useToast();
   const [vendorType, setVendorType] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [requires1099, setRequires1099] = useState(false);
+  const [disbursementTypes, setDisbursementTypes] = useState<string[]>([]);
+  const [isLoadingTypes, setIsLoadingTypes] = useState(false);
+
+  // Load disbursement types when dialog opens
+  useEffect(() => {
+    if (open) {
+      loadDisbursementTypes();
+      if (vendor?.name) {
+        loadPreviousType();
+      }
+    }
+  }, [open, vendor]);
+
+  const loadDisbursementTypes = async () => {
+    setIsLoadingTypes(true);
+    try {
+      const result = await fetchDisbursementTypesAction();
+      if (result.data) {
+        setDisbursementTypes(result.data);
+      } else if (result.error) {
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: result.error || 'Failed to load disbursement types',
+        });
+      }
+    } catch (error) {
+      console.error('Error loading disbursement types:', error);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to load disbursement types from API',
+      });
+    } finally {
+      setIsLoadingTypes(false);
+    }
+  };
+
+  const loadPreviousType = async () => {
+    if (!vendor?.name) return;
+    
+    try {
+      const result = await getPreviousDisbursementTypeForVendorAction(vendor.name);
+      if (result.data) {
+        setVendorType(result.data);
+      }
+    } catch (error) {
+      console.error('Error loading previous disbursement type:', error);
+    }
+  };
 
   useEffect(() => {
     if (vendor && open) {
@@ -44,12 +104,26 @@ export function VendorSetupDialog({
       setPhone(vendor.phone || '');
       setAddress(vendor.address || '');
       setRequires1099(vendor.requires1099 || false);
-      setVendorType('');
+      // Don't reset vendorType here - let loadPreviousType handle it
     }
   }, [vendor, open]);
 
   const handleSubmit = async () => {
-    if (!vendorType) return;
+    // Disbursement type is optional for new vendors
+    // Only save mapping if type is provided and we have case number
+    if (vendorType && caseNumber && vendor?.name) {
+      try {
+        await saveDisbursementTypeMappingAction(
+          caseNumber,
+          vendor.name,
+          vendorType,
+          invoiceId
+        );
+      } catch (error) {
+        console.error('Error saving disbursement type mapping:', error);
+        // Continue even if saving mapping fails
+      }
+    }
 
     await onSubmit({
       vendorType,
@@ -78,24 +152,52 @@ export function VendorSetupDialog({
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="vendor-type">Vendor Type *</Label>
-            <Select value={vendorType} onValueChange={setVendorType}>
+            <Label htmlFor="vendor-type">Vendor Disbursement Type</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Optional - Selection varies by case. Previous selection for this vendor will be pre-filled if available.
+            </p>
+            <Select 
+              value={vendorType} 
+              onValueChange={setVendorType}
+              disabled={isLoadingTypes || disbursementTypes.length === 0}
+            >
               <SelectTrigger id="vendor-type">
-                <SelectValue placeholder="Select vendor type" />
+                <SelectValue 
+                  placeholder={
+                    isLoadingTypes 
+                      ? "Loading types..." 
+                      : disbursementTypes.length === 0
+                      ? "No types available"
+                      : "Select disbursement type (optional)"
+                  } 
+                />
               </SelectTrigger>
               <SelectContent>
-                {vendorTypes.map((type) => (
-                  <SelectItem key={type.name} value={type.name}>
-                    {type.name}
-                    {type.description && (
-                      <span className="text-xs text-muted-foreground ml-2">
-                        - {type.description}
-                      </span>
-                    )}
-                  </SelectItem>
-                ))}
+                {isLoadingTypes ? (
+                  <div className="flex items-center justify-center p-4">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  </div>
+                ) : disbursementTypes.length === 0 ? (
+                  <div className="p-2 text-sm text-muted-foreground">
+                    No disbursement types available
+                  </div>
+                ) : (
+                  <>
+                    <SelectItem value="">None (Optional)</SelectItem>
+                    {disbursementTypes.map((type) => (
+                      <SelectItem key={type} value={type}>
+                        {type}
+                      </SelectItem>
+                    ))}
+                  </>
+                )}
               </SelectContent>
             </Select>
+            {vendorType && caseNumber && (
+              <p className="text-xs text-muted-foreground">
+                This selection will be remembered for future disbursements in case {caseNumber}
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -145,7 +247,7 @@ export function VendorSetupDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isProcessing}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!vendorType || isProcessing}>
+          <Button onClick={handleSubmit} disabled={isProcessing}>
             {isProcessing ? 'Processing...' : 'Complete Setup'}
           </Button>
         </DialogFooter>

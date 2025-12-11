@@ -44,56 +44,85 @@ export function UploadView({ onFileSelect, error }: UploadViewProps) {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-3.5rem)] p-4">
-      <div className="w-full max-w-2xl">
-        <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold tracking-tight text-foreground">
+    <div className="flex flex-col items-center justify-center min-h-[calc(100vh-8rem)] p-6 sm:p-8">
+      <div className="w-full max-w-3xl space-y-8">
+        <div className="text-center space-y-3">
+            <h1 className="text-5xl sm:text-6xl font-bold tracking-tight bg-gradient-to-r from-foreground via-foreground/90 to-foreground/70 bg-clip-text text-transparent">
             OCR Review
             </h1>
-            <p className="mt-2 text-lg text-muted-foreground">
-            Upload a document to automatically extract key information.
+            <p className="text-xl text-muted-foreground max-w-xl mx-auto">
+            Upload a document to automatically extract key information with AI-powered OCR
             </p>
         </div>
 
         <div
             {...getRootProps()}
             className={cn(
-                "flex flex-col items-center justify-center p-12 border-2 border-dashed rounded-lg cursor-pointer transition-colors",
-                "bg-input/20 border-border hover:border-primary/50",
-                isDragActive ? "border-primary bg-primary/10" : "border-border hover:border-primary/50",
-                isFocused && "border-primary"
+                "group relative flex flex-col items-center justify-center p-16 border-2 border-dashed rounded-2xl cursor-pointer transition-all duration-300",
+                "bg-gradient-to-br from-card/50 to-card/30 backdrop-blur-sm",
+                "border-border/50 hover:border-primary/60 hover:bg-primary/5",
+                "hover:shadow-2xl hover:shadow-primary/10 hover:scale-[1.01]",
+                isDragActive && "border-primary bg-primary/10 shadow-xl shadow-primary/20 scale-[1.02]",
+                isFocused && "ring-2 ring-primary/50 ring-offset-2 ring-offset-background"
             )}
         >
             <input {...getInputProps()} />
-            <UploadCloud className="w-16 h-16 text-muted-foreground mb-4" />
-            <p className="text-center text-muted-foreground">
+            <div className={cn(
+              "mb-6 transition-all duration-300",
+              isDragActive && "scale-110"
+            )}>
+              <UploadCloud className={cn(
+                "w-20 h-20 transition-colors duration-300",
+                isDragActive ? "text-primary" : "text-muted-foreground group-hover:text-primary/70"
+              )} />
+            </div>
+            <p className="text-lg font-medium text-center text-foreground mb-2">
               {isDragActive
                 ? "Drop the invoice here..."
-                : "Drag & drop an invoice PDF or image here, or click to select a file"}
+                : "Drag & drop an invoice PDF or image here"}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">PDF, PNG, JPG, or HEIC files</p>
+            <p className="text-sm text-muted-foreground mb-4">
+              or <span className="text-primary font-semibold underline underline-offset-2">click to select a file</span>
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+              {["PDF", "PNG", "JPG", "HEIC"].map((type) => (
+                <span key={type} className="px-3 py-1 text-xs font-medium rounded-full bg-primary/10 text-primary border border-primary/20">
+                  {type}
+                </span>
+              ))}
+            </div>
         </div>
 
         {selectedFile && (
-            <div className="mt-6 flex items-center justify-center space-x-3 p-3 bg-secondary rounded-md">
-            <FileText className="w-6 h-6 text-primary" />
-            <span className="font-medium text-secondary-foreground">{selectedFile.name}</span>
+            <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-xl shadow-lg">
+              <div className="flex items-center space-x-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
+                  <FileText className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex flex-col">
+                  <span className="font-semibold text-foreground">{selectedFile.name}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                  </span>
+                </div>
+              </div>
             </div>
         )}
 
         {error && (
-            <Alert variant="destructive" className="mt-6">
+            <Alert variant="destructive" className="mt-6 border-destructive/50 bg-destructive/10">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
             <AlertDescription>{error}</AlertDescription>
             </Alert>
         )}
 
-        <div className="mt-6 text-center">
+        <div className="text-center pt-6">
             <Button
             onClick={handleSubmit}
             disabled={!selectedFile}
             size="lg"
+            className="h-12 px-8 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
             Process Invoice
             </Button>

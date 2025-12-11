@@ -197,7 +197,7 @@ export default function VendorsPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Name</TableHead>
-                    <TableHead>Type</TableHead>
+                    <TableHead>Disbursement Type</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>1099</TableHead>

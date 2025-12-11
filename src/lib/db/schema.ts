@@ -22,7 +22,7 @@ export const invoices = pgTable('invoices', {
   description: text('description'), // High-level description of the invoice/receipt
   dueDate: text('due_date'), // Payment due date
   status: text('status', { enum: ['Paid', 'Pending', 'Review', 'Draft'] }).notNull(),
-  documentType: text('document_type', { enum: ['Webhook Source', 'Invoice', 'Receipt', 'Per Diem', 'Other', 'Office Disbursement', 'Office Reimbursement', 'Case Details', 'Reimbursement', 'Office Credit Card Bill'] }),
+  documentType: text('document_type', { enum: ['Webhook Source', 'Invoice', 'Receipt', 'Per Diem', 'Estate', 'Other Document', 'Other', 'Office Disbursement', 'Office Reimbursement', 'Case Details', 'Reimbursement', 'Office Credit Card Bill'] }),
   invoiceDataUri: text('invoice_data_uri').notNull(),
   isDuplicate: boolean('is_duplicate').default(false),
   duplicateReason: text('duplicate_reason'),
@@ -79,6 +79,7 @@ export const users = pgTable('users', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   email: text('email').notNull().unique(),
+  password: text('password'), // Hashed password (nullable for OAuth users)
   role: text('role', { enum: ['admin', 'director', 'manager', 'account', 'user'] }).notNull(),
   status: text('status', { enum: ['Active', 'Inactive', 'Invited'] }).notNull(),
   assignedStates: text('assigned_states'), // JSON array of states for ACCOUNT role: ["CA", "NY"]
@@ -325,3 +326,18 @@ export const invoiceAttachments = pgTable('invoice_attachments', {
 
 export type InvoiceAttachment = typeof invoiceAttachments.$inferSelect;
 export type NewInvoiceAttachment = typeof invoiceAttachments.$inferInsert;
+
+// Case-vendor-disbursement type mappings table
+// Stores which disbursement type was used for a vendor in a specific case
+export const caseVendorDisbursementTypes = pgTable('case_vendor_disbursement_types', {
+  id: text('id').primaryKey(),
+  caseNumber: text('case_number').notNull(), // SmartAdvocate case number
+  vendorName: text('vendor_name').notNull(), // Vendor name
+  disbursementType: text('disbursement_type').notNull(), // Disbursement type name from API
+  invoiceId: text('invoice_id'), // Optional reference to the invoice that set this mapping
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export type CaseVendorDisbursementType = typeof caseVendorDisbursementTypes.$inferSelect;
+export type NewCaseVendorDisbursementType = typeof caseVendorDisbursementTypes.$inferInsert;

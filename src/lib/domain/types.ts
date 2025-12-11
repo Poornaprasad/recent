@@ -40,7 +40,7 @@ export type StoredInvoice = BaseEntity & ExtractedDataOnly & {
   createdBy?: string; // User ID who created/uploaded
   assignedTo?: string; // User ID assigned to process
   vendorRequires1099?: boolean; // Flag indicating vendor requires 1099 (not in vendor list or marked as requiring 1099)
-  documentType?: 'Webhook Source' | 'Invoice' | 'Receipt' | 'Per Diem' | 'Other' | 'Office Disbursement' | 'Office Reimbursement' | 'Case Details' | 'Reimbursement' | 'Office Credit Card Bill'; // Document type classification
+  documentType?: 'Webhook Source' | 'Invoice' | 'Receipt' | 'Per Diem' | 'Estate' | 'Other Document' | 'Other' | 'Office Disbursement' | 'Office Reimbursement' | 'Case Details' | 'Reimbursement' | 'Office Credit Card Bill'; // Document type classification
 };
 
 export type User = BaseEntity & {
@@ -96,7 +96,7 @@ export type AuditLog = BaseEntity & {
 
 // Invoice status types
 export type InvoiceStatus = 'Paid' | 'Pending' | 'Review' | 'Draft';
-export type DocumentType = 'Webhook Source' | 'Invoice' | 'Receipt' | 'Per Diem' | 'Other' | 'Office Disbursement' | 'Office Reimbursement' | 'Case Details' | 'Reimbursement' | 'Office Credit Card Bill';
+export type DocumentType = 'Webhook Source' | 'Invoice' | 'Receipt' | 'Per Diem' | 'Estate' | 'Other Document' | 'Other' | 'Office Disbursement' | 'Office Reimbursement' | 'Case Details' | 'Reimbursement' | 'Office Credit Card Bill';
 export type UserStatus = 'Active' | 'Inactive' | 'Invited';
 export type VendorStatus = 'Active' | 'Inactive';
 export type AuditSeverity = 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL';

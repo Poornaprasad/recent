@@ -11,7 +11,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useState, useEffect } from 'react';
 import { type StoredInvoice } from '@/lib/domain/types';
 import { cn } from '@/lib/utils/utils';
-import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, updateInvoiceCaseNumberAction, completeVendorSetupAction, getVendorTypesAction } from '@/lib/actions/index';
+import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, updateInvoiceCaseNumberAction, completeVendorSetupAction } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { VendorSetupDialog } from '@/components/dialogs/vendor-setup-dialog';
@@ -39,7 +39,6 @@ export default function InvoiceDetailPage() {
   const [isAddingComment, setIsAddingComment] = useState(false);
   const [isVendorSetupDialogOpen, setIsVendorSetupDialogOpen] = useState(false);
   const [pendingVendor, setPendingVendor] = useState<any>(null);
-  const [vendorTypes, setVendorTypes] = useState<Array<{ name: string; description?: string }>>([]);
   const [isProcessingVendor, setIsProcessingVendor] = useState(false);
 
   useEffect(() => {
@@ -68,15 +67,6 @@ export default function InvoiceDetailPage() {
     fetchInvoice();
   }, [id, toast]);
 
-  useEffect(() => {
-    const loadVendorTypes = async () => {
-      const result = await getVendorTypesAction();
-      if (result.data) {
-        setVendorTypes(result.data);
-      }
-    };
-    loadVendorTypes();
-  }, []);
 
   const handleStatusUpdate = async (status: 'Pending' | 'Draft') => {
     if (!invoiceData) return;
@@ -410,7 +400,12 @@ export default function InvoiceDetailPage() {
                     </div>
                   )}
                   <div className="p-3 rounded-md border bg-muted/30">
-                    <Label htmlFor="case-number" className="mb-2 block">Case Number</Label>
+                    <Label htmlFor="case-number" className="mb-2 block">
+                      Case Number
+                      {(invoiceData.clientName || invoiceData.customerName) && (
+                        <span className="text-destructive ml-1">*</span>
+                      )}
+                    </Label>
                     <Input
                       id="case-number"
                       value={invoiceData.caseNumber || ''}
@@ -422,11 +417,17 @@ export default function InvoiceDetailPage() {
                             const updatedResult = await getInvoiceByIdAction(invoiceData.id);
                             if (updatedResult.data) {
                               setInvoiceData(updatedResult.data);
+                              const stateName = updatedResult.data.state === 'CA' ? 'California' : updatedResult.data.state === 'NY' ? 'New York' : null;
+                              toast({
+                                title: 'Case Number Updated',
+                                description: stateName ? `Case number saved. State auto-detected: ${stateName}.` : 'The case number has been saved.',
+                              });
+                            } else {
+                              toast({
+                                title: 'Case Number Updated',
+                                description: 'The case number has been saved.',
+                              });
                             }
-                            toast({
-                              title: 'Case Number Updated',
-                              description: 'The case number has been saved.',
-                            });
                           } else {
                             toast({
                               variant: 'destructive',
@@ -438,6 +439,16 @@ export default function InvoiceDetailPage() {
                       }}
                       placeholder="Enter case number..."
                     />
+                    {(invoiceData.clientName || invoiceData.customerName) && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Required when plaintiff name is present
+                      </p>
+                    )}
+                    {invoiceData.state && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        State: <span className="font-medium">{invoiceData.state === 'CA' ? 'California' : 'New York'}</span> (auto-detected from case number)
+                      </p>
+                    )}
                   </div>
                   <FieldsList
                     invoiceData={invoiceData}
@@ -505,7 +516,8 @@ export default function InvoiceDetailPage() {
         open={isVendorSetupDialogOpen}
         onOpenChange={setIsVendorSetupDialogOpen}
         vendor={pendingVendor}
-        vendorTypes={vendorTypes}
+        caseNumber={invoiceData?.caseNumber}
+        invoiceId={invoiceData?.id}
         isProcessing={isProcessingVendor}
         onSubmit={handleCompleteVendorSetup}
       />

@@ -87,12 +87,19 @@ export async function readInvoiceFile(filePath: string): Promise<string> {
   const fullPath = path.join(UPLOADS_DIR, filename);
   
   try {
+    // Check if file exists first
+    await fs.access(fullPath);
     const buffer = await fs.readFile(fullPath);
     const mimeType = getMimeTypeFromPath(filePath);
     const base64 = buffer.toString('base64');
     return `data:${mimeType};base64,${base64}`;
   } catch (error) {
-    throw new Error(`Failed to read file: ${fullPath}`);
+    // If file doesn't exist, throw a more descriptive error
+    const errorCode = error && typeof error === 'object' && 'code' in error ? error.code : 'UNKNOWN';
+    if (errorCode === 'ENOENT') {
+      throw new Error(`File not found: ${fullPath}. The file may have been deleted or never saved.`);
+    }
+    throw new Error(`Failed to read file: ${fullPath}. Error: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

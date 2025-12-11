@@ -28,7 +28,7 @@ export const ExtractedFieldSchema = z.object({
 }).nullable();
 
 
-export const DocumentTypeSchema = z.enum(['Invoice', 'Receipt', 'Reimbursement', 'Office Credit Card Bill']).describe('The type of document: Invoice, Receipt, Reimbursement, or Office Credit Card Bill.');
+export const DocumentTypeSchema = z.enum(['Invoice', 'Receipt', 'Per Diem', 'Estate', 'Other Document', 'Reimbursement', 'Office Credit Card Bill']).describe('The type of document: Invoice, Receipt, Per Diem, Estate, Other Document, Reimbursement, or Office Credit Card Bill.');
 
 export const ExtractInvoiceDataOutputSchema = z.object({
   documentType: z.object({

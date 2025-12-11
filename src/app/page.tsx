@@ -193,7 +193,7 @@ export default function InvoiceProcessorPage() {
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Please select a vendor type.',
+        description: 'Please select a vendor disbursement type.',
       });
       return;
     }
@@ -271,10 +271,10 @@ export default function InvoiceProcessorPage() {
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Vendor Type *</Label>
+                <Label>Vendor Disbursement Type *</Label>
                 <Select value={vendorType} onValueChange={setVendorType}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select vendor type" />
+                    <SelectValue placeholder="Select disbursement type" />
                   </SelectTrigger>
                   <SelectContent>
                     {vendorTypes.map((type) => (

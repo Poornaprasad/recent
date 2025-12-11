@@ -3,13 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from '@/lib/utils/utils';
 import { Toaster } from "@/components/ui/toaster";
-import { Header } from "@/components/header";
-import {
-  SidebarProvider,
-  Sidebar,
-  SidebarInset,
-} from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
+import { LayoutWrapper } from "@/components/layout-wrapper";
 import { ThemeProvider } from "@/components/theme-provider";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -51,17 +45,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <SidebarProvider>
-            <Sidebar>
-              <AppSidebar />
-            </Sidebar>
-            <SidebarInset>
-              <div className="relative flex min-h-screen flex-col">
-                <Header />
-                <main className="flex-1">{children}</main>
-              </div>
-            </SidebarInset>
-          </SidebarProvider>
+          <LayoutWrapper>{children}</LayoutWrapper>
           <Toaster />
         </ThemeProvider>
       </body>

@@ -63,3 +63,6 @@ export const PAGINATION = {
   PAGE_SIZE_OPTIONS: [10, 25, 50, 100],
 } as const;
 
+// Application name
+export const APP_NAME = "ReconX";
+

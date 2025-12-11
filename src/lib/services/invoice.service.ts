@@ -18,6 +18,7 @@ import { eq } from 'drizzle-orm';
 import { vendorService } from './vendor.service';
 import { createPendingVendor, findPendingVendorByInvoiceId } from '../repositories/pending-vendor.repository';
 import type { StoredInvoice } from '../domain/types';
+import { stateDetectionService } from '../core/state/state-detection.service';
 
 export class InvoiceService {
   /**
@@ -240,15 +241,51 @@ export class InvoiceService {
 
   /**
    * Update case number
+   * Validates that case number is provided when plaintiff name (clientName/customerName) is present
+   * Auto-sets state based on case number (CA if contains CA, otherwise NY)
    */
   async updateCaseNumber(id: string, caseNumber: string | undefined): Promise<void> {
     await initDb();
     const db = getDb();
     
+    // Get the invoice to check for plaintiff name
+    const invoice = await findInvoiceById(id);
+    if (!invoice) {
+      throw new Error('Invoice not found');
+    }
+    
+    // Check if plaintiff name (clientName or customerName) is present
+    // Helper to extract value from ExtractedField or string
+    const extractValue = (field: any): string | null => {
+      if (!field) return null;
+      if (typeof field === 'string') return field.trim() || null;
+      if (typeof field === 'object' && field !== null && 'value' in field) {
+        const val = field.value;
+        if (typeof val === 'string') return val.trim() || null;
+      }
+      return null;
+    };
+    
+    const plaintiffNameValue = extractValue(invoice.clientName) || extractValue(invoice.customerName);
+    const hasPlaintiffName = plaintiffNameValue !== null && plaintiffNameValue !== '';
+    
+    // Validate: case number is mandatory when plaintiff name is present
+    if (hasPlaintiffName && (!caseNumber || caseNumber.trim() === '')) {
+      throw new Error('Case number is required when plaintiff name is present');
+    }
+    
+    // Auto-detect state based on case number
+    let detectedState: 'CA' | 'NY' | null = null;
+    if (caseNumber && caseNumber.trim() !== '') {
+      const stateResult = stateDetectionService.detectState(caseNumber);
+      detectedState = stateResult.state;
+    }
+    
     await db
       .update(invoices)
       .set({
         caseNumber: caseNumber || null,
+        state: detectedState,
         updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
       })
       .where(eq(invoices.id, id));
