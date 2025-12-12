@@ -31,7 +31,10 @@ import { ApprovalActions } from "./_components/approval-actions";
 
 export default async function ApprovalsPage() {
     const allInvoices = await findAllInvoices();
-    const invoicesForReview = allInvoices.filter(inv => inv.status === 'Review');
+    // Filter for invoices that need review: status is 'Review' AND approvalStatus is not 'Approved'
+    const invoicesForReview = allInvoices.filter(inv => 
+      inv.status === 'Review' && inv.approvalStatus !== 'Approved'
+    );
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">

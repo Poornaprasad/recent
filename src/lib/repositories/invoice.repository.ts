@@ -95,12 +95,24 @@ export async function updateInvoiceStatus(
 ): Promise<void> {
   const db = await getDatabase();
 
+  // When approving (status = 'Pending'), also update approvalStatus to 'Approved'
+  const updateData: any = {
+    status,
+    updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
+  };
+
+  // If approving (changing from Review to Pending), set approvalStatus to Approved
+  if (status === 'Pending') {
+    updateData.approvalStatus = 'Approved';
+    updateData.approvedAt = new Date(Math.floor(Date.now() / 1000) * 1000);
+  } else if (status === 'Draft') {
+    // If rejecting, set approvalStatus to Rejected
+    updateData.approvalStatus = 'Rejected';
+  }
+
   await db
     .update(invoices)
-    .set({
-      status,
-      updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
-    })
+    .set(updateData)
     .where(eq(invoices.id, id));
 }
 

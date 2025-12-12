@@ -197,9 +197,57 @@ export class InvoiceService {
 
   /**
    * Get all invoices
+   * @param userPermissions Optional user permissions for state-based filtering
    */
-  async getAllInvoices(): Promise<StoredInvoice[]> {
-    return await findAllInvoices();
+  async getAllInvoices(userPermissions?: { role: string; assignedStates?: string[] }): Promise<StoredInvoice[]> {
+    const allInvoices = await findAllInvoices();
+    
+    // Apply state-based filtering if user permissions are provided
+    if (userPermissions) {
+      return this.filterInvoicesByAccess(allInvoices, userPermissions);
+    }
+    
+    return allInvoices;
+  }
+
+  /**
+   * Filter invoices based on user permissions and state access
+   */
+  private filterInvoicesByAccess(
+    invoices: StoredInvoice[],
+    userPermissions: { role: string; assignedStates?: string[] }
+  ): StoredInvoice[] {
+    const { role, assignedStates } = userPermissions;
+
+    // Elevated roles (admin, director, manager) have access to all states
+    if (role === 'admin' || role === 'director' || role === 'manager') {
+      return invoices;
+    }
+
+    // Senior Accountant has access to all states
+    if (role === 'senior_accountant') {
+      return invoices;
+    }
+
+    // NY Accountant - has access to NY by default, and other states if assigned
+    if (role === 'ny_accountant') {
+      return invoices.filter(inv => {
+        const invoiceState = inv.state;
+        if (invoiceState === 'NY') return true;
+        return invoiceState && assignedStates?.includes(invoiceState);
+      });
+    }
+
+    // CA Accountant - has access to CA by default, and other states if assigned
+    if (role === 'ca_accountant') {
+      return invoices.filter(inv => {
+        const invoiceState = inv.state;
+        if (invoiceState === 'CA') return true;
+        return invoiceState && assignedStates?.includes(invoiceState);
+      });
+    }
+
+    return invoices;
   }
 
   /**

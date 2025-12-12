@@ -54,9 +54,47 @@ export function FieldsList({ invoiceData, hoveredField, onFieldHover }: FieldsLi
     }
   };
 
-  // Flatten all fields except for lineItems and documentType
+  // Flatten all fields except for lineItems, documentType, and internal/system fields
   const fieldsToRender = Object.entries(invoiceData)
-    .filter(([key, value]) => value !== null && !['id', 'invoiceDataUri', 'status', 'isDuplicate', 'duplicateReason', 'lineItems', 'documentType'].includes(key))
+    .filter(([key, value]) => {
+      // Skip null values and excluded fields
+      if (value === null) return false;
+      const excludedFields = [
+        'id', 
+        'invoiceDataUri', 
+        'status', 
+        'isDuplicate', 
+        'duplicateReason', 
+        'lineItems', 
+        'documentType',
+        'isHighValue',
+        'highValueReason',
+        'requiresEscalation',
+        'escalationLevel',
+        'escalationReason',
+        'caseNumber', // Case number is shown separately in the detail page
+        'state', // State is auto-detected and shown separately
+        'approvalStatus', // Approval status is internal, not shown to users
+        'approvedBy',
+        'approvedAt',
+        'createdBy',
+        'assignedTo',
+        'isRecurring',
+        'recurringPattern',
+        'hasAmountAnomaly',
+        'amountAnomalyReason',
+        'expectedAmount',
+        'amountDeviationPercent',
+        'hasMultipleVendors',
+        'accuracyScore',
+        'requiresSpecialHandling',
+        'specialHandlingReason',
+        'vendorRequires1099',
+        'comment', // Comment is shown separately
+        'paymentType',
+      ];
+      return !excludedFields.includes(key);
+    })
     .map(([key, value]) => ({ key, title: toTitleCase(key), value }));
 
   const lineItems = invoiceData.lineItems && Array.isArray(invoiceData.lineItems.value)

@@ -121,7 +121,7 @@ export function filterInvoices(
 /**
  * Sort field options
  */
-export type SortField = 'date' | 'vendor' | 'amount' | 'confidence' | 'status' | 'invoiceNumber';
+export type SortField = 'date' | 'vendor' | 'amount' | 'confidence' | 'status' | 'invoiceNumber' | 'caseNumber';
 
 /**
  * Sort direction
@@ -165,6 +165,11 @@ export function sortInvoices(
         const numA = (a.invoiceNumber?.value || a.id).toLowerCase();
         const numB = (b.invoiceNumber?.value || b.id).toLowerCase();
         comparison = numA.localeCompare(numB);
+        break;
+      case 'caseNumber':
+        const caseA = (a.caseNumber || '').toLowerCase();
+        const caseB = (b.caseNumber || '').toLowerCase();
+        comparison = caseA.localeCompare(caseB);
         break;
     }
 

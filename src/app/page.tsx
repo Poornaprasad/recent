@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { UploadView } from "@/components/invoice/upload-view";
 import { ReviewView } from "@/components/invoice/review-view";
 import { LoadingView } from "@/components/invoice/loading-view";
+import { BulkProcessingView } from "@/components/invoice/bulk-processing-view";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
 import { convertPdfToImageClient } from "@/lib/pdf-to-image-client";
@@ -32,6 +33,13 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 
+interface FileProgress {
+  file: File;
+  status: 'pending' | 'processing' | 'completed' | 'error';
+  error?: string;
+  invoiceId?: string;
+}
+
 export default function InvoiceProcessorPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,104 +57,226 @@ export default function InvoiceProcessorPage() {
   const [address, setAddress] = useState('');
   const [requires1099, setRequires1099] = useState(true);
   const [isProcessingVendor, setIsProcessingVendor] = useState(false);
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  const [bulkFiles, setBulkFiles] = useState<File[]>([]);
+  const [bulkProgress, setBulkProgress] = useState<FileProgress[]>([]);
+  const [currentProcessingIndex, setCurrentProcessingIndex] = useState(0);
   const router = useRouter();
   const { toast } = useToast();
 
-  const handleFileSelect = async (file: File) => {
-    if (!file) return;
-
-    setIsLoading(true);
-    setError(null);
-    setExtractedData(null);
-    setInvoicePreviewUrl(null);
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = async () => {
-      let invoiceDataUri = reader.result as string;
-      setInvoicePreviewUrl(invoiceDataUri);
-
-      const mimeType = invoiceDataUri.split(';')[0].split(':')[1];
-      const validMimeTypes = ['image/png', 'image/jpeg', 'image/heic', 'image/jpg', 'application/pdf'];
-
-      if (!validMimeTypes.includes(mimeType.toLowerCase()) && !mimeType.startsWith('image/')) {
-         setError("Invalid file type. Please upload an image or a PDF.");
-         toast({
-            variant: "destructive",
-            title: "Invalid File Type",
-            description: "Please upload a PNG, JPG, HEIC, or PDF file.",
-         });
-         setIsLoading(false);
-         setInvoicePreviewUrl(null);
-         return;
-      }
-
-      // Convert PDF to image on client side if it's a PDF
-      if (mimeType === 'application/pdf') {
+  const processSingleFile = async (file: File): Promise<{ success: boolean; error?: string; invoiceId?: string }> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
         try {
-          invoiceDataUri = await convertPdfToImageClient(invoiceDataUri);
-          setInvoicePreviewUrl(invoiceDataUri);
-        } catch (conversionError) {
-          const errorMessage = conversionError instanceof Error 
-            ? conversionError.message 
-            : 'Failed to convert PDF to image.';
+          let invoiceDataUri = reader.result as string;
+
+          const mimeType = invoiceDataUri.split(';')[0].split(':')[1];
+          const validMimeTypes = ['image/png', 'image/jpeg', 'image/heic', 'image/jpg', 'application/pdf'];
+
+          if (!validMimeTypes.includes(mimeType.toLowerCase()) && !mimeType.startsWith('image/')) {
+            resolve({ success: false, error: "Invalid file type. Please upload an image or a PDF." });
+            return;
+          }
+
+          // Convert PDF to image on client side if it's a PDF
+          if (mimeType === 'application/pdf') {
+            try {
+              invoiceDataUri = await convertPdfToImageClient(invoiceDataUri);
+            } catch (conversionError) {
+              const errorMessage = conversionError instanceof Error 
+                ? conversionError.message 
+                : 'Failed to convert PDF to image.';
+              resolve({ success: false, error: errorMessage });
+              return;
+            }
+          }
+
+          const result = await processInvoiceAction({ invoiceDataUri });
+          if (result.error) {
+            resolve({ success: false, error: result.error });
+            return;
+          }
+
+          resolve({ success: true, invoiceId: result.data?.id });
+        } catch (e: any) {
+          const errorMessage = e.message || "An unexpected error occurred. Please try again.";
+          resolve({ success: false, error: errorMessage });
+        }
+      };
+      reader.onerror = () => {
+        resolve({ success: false, error: "Failed to read the file." });
+      };
+    });
+  };
+
+  const handleFileSelect = async (files: File[]) => {
+    if (!files || files.length === 0) return;
+
+    // Single file handling (existing behavior)
+    if (files.length === 1) {
+      const file = files[0];
+      setIsLoading(true);
+      setError(null);
+      setExtractedData(null);
+      setInvoicePreviewUrl(null);
+
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = async () => {
+        let invoiceDataUri = reader.result as string;
+        setInvoicePreviewUrl(invoiceDataUri);
+
+        const mimeType = invoiceDataUri.split(';')[0].split(':')[1];
+        const validMimeTypes = ['image/png', 'image/jpeg', 'image/heic', 'image/jpg', 'application/pdf'];
+
+        if (!validMimeTypes.includes(mimeType.toLowerCase()) && !mimeType.startsWith('image/')) {
+           setError("Invalid file type. Please upload an image or a PDF.");
+           toast({
+              variant: "destructive",
+              title: "Invalid File Type",
+              description: "Please upload a PNG, JPG, HEIC, or PDF file.",
+           });
+           setIsLoading(false);
+           setInvoicePreviewUrl(null);
+           return;
+        }
+
+        // Convert PDF to image on client side if it's a PDF
+        if (mimeType === 'application/pdf') {
+          try {
+            invoiceDataUri = await convertPdfToImageClient(invoiceDataUri);
+            setInvoicePreviewUrl(invoiceDataUri);
+          } catch (conversionError) {
+            const errorMessage = conversionError instanceof Error 
+              ? conversionError.message 
+              : 'Failed to convert PDF to image.';
+            setError(errorMessage);
+            toast({
+              variant: "destructive",
+              title: "PDF Conversion Failed",
+              description: errorMessage,
+            });
+            setIsLoading(false);
+            setInvoicePreviewUrl(null);
+            return;
+          }
+        }
+
+        try {
+          const result = await processInvoiceAction({ invoiceDataUri });
+          if (result.error) {
+            throw new Error(result.error);
+          }
+          setExtractedData(result.data || null);
+          
+          // Check if there's a pending vendor for this invoice
+          if (result.data?.id) {
+            const pendingResult = await getPendingVendorByInvoiceIdAction(result.data.id);
+            if (pendingResult.data) {
+              setPendingVendor(pendingResult.data);
+              setIsVendorSetupDialogOpen(true);
+            }
+          }
+          
+          // Load vendor types
+          const typesResult = await getVendorTypesAction();
+          if (typesResult.data) {
+            setVendorTypes(typesResult.data.map(t => ({ name: t.name, description: t.description })));
+          }
+        } catch (e: any) {
+          const errorMessage =
+            e.message || "An unexpected error occurred. Please try again.";
           setError(errorMessage);
           toast({
             variant: "destructive",
-            title: "PDF Conversion Failed",
+            title: "Processing Failed",
             description: errorMessage,
           });
-          setIsLoading(false);
+          setExtractedData(null);
           setInvoicePreviewUrl(null);
-          return;
+        } finally {
+          setIsLoading(false);
         }
-      }
+      };
+      reader.onerror = (error) => {
+        setError("Failed to read the file.");
+        toast({
+          variant: "destructive",
+          title: "File Read Error",
+          description: "Could not read the selected file. Please try again.",
+        });
+        setIsLoading(false);
+      };
+      return;
+    }
 
-      try {
-        const result = await processInvoiceAction({ invoiceDataUri });
-        if (result.error) {
-          throw new Error(result.error);
-        }
-        setExtractedData(result.data || null);
-        
-        // Check if there's a pending vendor for this invoice
-        if (result.data?.id) {
-          const pendingResult = await getPendingVendorByInvoiceIdAction(result.data.id);
-          if (pendingResult.data) {
-            setPendingVendor(pendingResult.data);
-            setIsVendorSetupDialogOpen(true);
-          }
-        }
-        
-        // Load vendor types
-        const typesResult = await getVendorTypesAction();
-        if (typesResult.data) {
-          setVendorTypes(typesResult.data.map(t => ({ name: t.name, description: t.description })));
-        }
-      } catch (e: any) {
-        const errorMessage =
-          e.message || "An unexpected error occurred. Please try again.";
-        setError(errorMessage);
+    // Bulk file handling
+    setIsBulkProcessing(true);
+    setBulkFiles(files);
+    setError(null);
+    
+    // Initialize progress
+    const initialProgress: FileProgress[] = files.map(file => ({
+      file,
+      status: 'pending'
+    }));
+    setBulkProgress(initialProgress);
+    setCurrentProcessingIndex(0);
+
+    // Process files sequentially
+    let successCount = 0;
+    for (let i = 0; i < files.length; i++) {
+      setCurrentProcessingIndex(i);
+      
+      // Update status to processing
+      setBulkProgress(prev => {
+        const updated = [...prev];
+        updated[i] = { ...updated[i], status: 'processing' };
+        return updated;
+      });
+
+      const result = await processSingleFile(files[i]);
+
+      // Update status based on result
+      setBulkProgress(prev => {
+        const updated = [...prev];
+        updated[i] = {
+          ...updated[i],
+          status: result.success ? 'completed' : 'error',
+          error: result.error,
+          invoiceId: result.invoiceId
+        };
+        return updated;
+      });
+
+      if (result.success) {
+        successCount++;
+        toast({
+          title: "Invoice Processed",
+          description: `${files[i].name} has been processed successfully.`,
+        });
+      } else {
         toast({
           variant: "destructive",
           title: "Processing Failed",
-          description: errorMessage,
+          description: `${files[i].name}: ${result.error}`,
         });
-        setExtractedData(null);
-        setInvoicePreviewUrl(null);
-      } finally {
-        setIsLoading(false);
       }
-    };
-    reader.onerror = (error) => {
-      setError("Failed to read the file.");
-      toast({
-        variant: "destructive",
-        title: "File Read Error",
-        description: "Could not read the selected file. Please try again.",
-      });
-      setIsLoading(false);
-    };
+    }
+
+    // All files processed
+    toast({
+      title: "Bulk Upload Complete",
+      description: `Successfully processed ${successCount} of ${files.length} invoices.`,
+    });
+
+    // Redirect to invoices page after a short delay
+    setTimeout(() => {
+      setIsBulkProcessing(false);
+      router.push('/invoices');
+    }, 2000);
   };
 
   const handleReset = () => {
@@ -239,6 +369,16 @@ export default function InvoiceProcessorPage() {
       setIsProcessingVendor(false);
     }
   };
+
+  if (isBulkProcessing) {
+    return (
+      <BulkProcessingView
+        files={bulkFiles}
+        progress={bulkProgress}
+        currentIndex={currentProcessingIndex}
+      />
+    );
+  }
 
   if (isLoading) {
     return <LoadingView />;

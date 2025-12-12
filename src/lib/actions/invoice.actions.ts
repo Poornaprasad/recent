@@ -69,10 +69,13 @@ export async function updateInvoiceStatusAction(
 
 /**
  * Get all invoices
+ * @param userPermissions Optional user permissions for state-based filtering
  */
-export async function getInvoicesAction(): Promise<ActionResult<StoredInvoice[]>> {
+export async function getInvoicesAction(
+  userPermissions?: { role: string; assignedStates?: string[] }
+): Promise<ActionResult<StoredInvoice[]>> {
   return withActionHandler(
-    () => invoiceService.getAllInvoices(),
+    () => invoiceService.getAllInvoices(userPermissions),
     'Failed to fetch invoices'
   );
 }

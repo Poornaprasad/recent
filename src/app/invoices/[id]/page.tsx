@@ -309,48 +309,6 @@ export default function InvoiceDetailPage() {
                       </p>
                     </div>
                   )}
-                  {invoiceData.requiresEscalation && invoiceData.highValueReason && (
-                    <div className={`p-3 rounded-md border ${invoiceData.escalationLevel === 'critical'
-                      ? 'border-red-500/50 bg-red-500/10'
-                      : invoiceData.escalationLevel === 'high'
-                        ? 'border-orange-500/50 bg-orange-500/10'
-                        : 'border-yellow-500/50 bg-yellow-500/10'
-                      }`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className={`font-medium ${invoiceData.escalationLevel === 'critical'
-                          ? 'text-red-700 dark:text-red-400'
-                          : invoiceData.escalationLevel === 'high'
-                            ? 'text-orange-700 dark:text-orange-400'
-                            : 'text-yellow-700 dark:text-yellow-400'
-                          }`}>
-                          {invoiceData.escalationLevel === 'critical'
-                            ? 'Critical: Executive Approval Required'
-                            : invoiceData.escalationLevel === 'high'
-                              ? 'High Value: Manager Approval Required'
-                              : 'High Value: Review Required'}
-                        </Label>
-                        <Badge
-                          variant="outline"
-                          className={invoiceData.escalationLevel === 'critical'
-                            ? 'border-red-500 text-red-700 dark:text-red-400'
-                            : invoiceData.escalationLevel === 'high'
-                              ? 'border-orange-500 text-orange-700 dark:text-orange-400'
-                              : 'border-yellow-500 text-yellow-700 dark:text-yellow-400'
-                          }
-                        >
-                          {invoiceData.escalationLevel ? invoiceData.escalationLevel.toUpperCase() : 'HIGH VALUE'}
-                        </Badge>
-                      </div>
-                      <p className={`text-xs mt-2 ${invoiceData.escalationLevel === 'critical'
-                        ? 'text-red-700/80 dark:text-red-400/80'
-                        : invoiceData.escalationLevel === 'high'
-                          ? 'text-orange-700/80 dark:text-orange-400/80'
-                          : 'text-yellow-700/80 dark:text-yellow-400/80'
-                        }`}>
-                        {invoiceData.highValueReason}
-                      </p>
-                    </div>
-                  )}
                   {invoiceData.hasAmountAnomaly && invoiceData.amountAnomalyReason && (
                     <div className="p-3 rounded-md border border-orange-500/50 bg-orange-500/10">
                       <div className="flex items-center justify-between mb-2">
@@ -442,11 +400,6 @@ export default function InvoiceDetailPage() {
                     {(invoiceData.clientName || invoiceData.customerName) && (
                       <p className="text-xs text-muted-foreground mt-1">
                         Required when plaintiff name is present
-                      </p>
-                    )}
-                    {invoiceData.state && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        State: <span className="font-medium">{invoiceData.state === 'CA' ? 'California' : 'New York'}</span> (auto-detected from case number)
                       </p>
                     )}
                   </div>

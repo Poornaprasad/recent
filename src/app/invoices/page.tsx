@@ -72,13 +72,16 @@ import { exportInvoicesToCSVFile } from "@/lib/utils/export-utils";
 import { encodeId } from "@/lib/utils/id-utils";
 import { getDocumentTypeBadgeClass } from "@/lib/utils/document-type-utils";
 import { useState, useMemo, useEffect, useCallback, memo } from "react";
+import { useAuthStore } from "@/hooks/use-auth-store";
 
 export default function InvoicesPage() {
+  const { user } = useAuthStore();
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
   const [vendorFilter, setVendorFilter] = useState<string>('all');
+  const [stateFilter, setStateFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -90,7 +93,13 @@ export default function InvoicesPage() {
     const loadInvoices = async () => {
       setIsLoading(true);
       try {
-        const result = await getInvoicesAction();
+        // Get user permissions for state-based filtering
+        const userPermissions = user ? {
+          role: user.role,
+          assignedStates: user.assignedStates
+        } : undefined;
+        
+        const result = await getInvoicesAction(userPermissions);
         if (result.error) {
           setInvoices([]);
         } else if (result.data) {
@@ -103,7 +112,7 @@ export default function InvoicesPage() {
       }
     };
     loadInvoices();
-  }, []);
+  }, [user]);
 
   // Get unique vendors for filter
   const uniqueVendors = useMemo(() => {
@@ -112,13 +121,20 @@ export default function InvoicesPage() {
 
   // Filter invoices
   const filteredInvoices = useMemo(() => {
-    return filterInvoices(invoices, {
+    let filtered = filterInvoices(invoices, {
       searchTerm,
       statusFilter,
       documentTypeFilter,
       vendorFilter,
     });
-  }, [invoices, searchTerm, statusFilter, documentTypeFilter, vendorFilter]);
+    
+    // Apply state filter if not 'all'
+    if (stateFilter !== 'all') {
+      filtered = filtered.filter(inv => inv.state === stateFilter);
+    }
+    
+    return filtered;
+  }, [invoices, searchTerm, statusFilter, documentTypeFilter, vendorFilter, stateFilter]);
 
   // Sort invoices
   const sortedInvoices = useMemo(() => {
@@ -310,6 +326,19 @@ export default function InvoicesPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Select value={stateFilter} onValueChange={(value) => {
+              setStateFilter(value);
+              setCurrentPage(1);
+            }}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="State" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All States</SelectItem>
+                <SelectItem value="CA">California</SelectItem>
+                <SelectItem value="NY">New York</SelectItem>
+              </SelectContent>
+            </Select>
             <Select value={rowsPerPage.toString()} onValueChange={(value) => {
               setRowsPerPage(Number(value));
               setCurrentPage(1);
@@ -397,6 +426,17 @@ export default function InvoicesPage() {
                     variant="ghost"
                     size="sm"
                     className="h-8 -ml-3"
+                    onClick={() => handleSort('caseNumber')}
+                  >
+                    Case #
+                    <SortIcon field="caseNumber" />
+                  </Button>
+                </TableHead>
+                <TableHead>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 -ml-3"
                     onClick={() => handleSort('status')}
                   >
                     Status
@@ -411,7 +451,7 @@ export default function InvoicesPage() {
             <TableBody>
               {paginatedInvoices.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                     No invoices found matching your filters.
                   </TableCell>
                 </TableRow>
@@ -456,6 +496,13 @@ export default function InvoicesPage() {
                       <CircularProgressBadge score={confidence} />
                     </TableCell>
                     <TableCell>{fieldsExtracted}</TableCell>
+                    <TableCell>
+                      {invoice.caseNumber ? (
+                        <span className="font-medium">{invoice.caseNumber}</span>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <Badge
                         variant="outline"

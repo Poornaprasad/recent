@@ -3,24 +3,29 @@
 
 import { useState, useCallback } from "react";
 import { useDropzone } from "react-dropzone";
-import { UploadCloud, FileText, AlertTriangle } from "lucide-react";
+import { UploadCloud, FileText, AlertTriangle, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from '@/lib/utils/utils';
 
 interface UploadViewProps {
-  onFileSelect: (file: File) => void;
+  onFileSelect: (files: File[]) => void;
   error: string | null;
 }
 
 export function UploadView({ onFileSelect, error }: UploadViewProps) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       if (acceptedFiles.length > 0) {
-        setSelectedFile(acceptedFiles[0]);
+        setSelectedFiles(prev => {
+          // Add new files, avoiding duplicates by name
+          const existingNames = new Set(prev.map(f => f.name));
+          const newFiles = acceptedFiles.filter(f => !existingNames.has(f.name));
+          return [...prev, ...newFiles];
+        });
       }
     },
     []
@@ -34,12 +39,16 @@ export function UploadView({ onFileSelect, error }: UploadViewProps) {
         "image/jpeg": [".jpg", ".jpeg"],
         "image/heic": [".heic"],
     },
-    multiple: false,
+    multiple: true,
   });
 
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = () => {
-    if (selectedFile) {
-      onFileSelect(selectedFile);
+    if (selectedFiles.length > 0) {
+      onFileSelect(selectedFiles);
     }
   };
 
@@ -78,11 +87,14 @@ export function UploadView({ onFileSelect, error }: UploadViewProps) {
             </div>
             <p className="text-lg font-medium text-center text-foreground mb-2">
               {isDragActive
-                ? "Drop the invoice here..."
-                : "Drag & drop an invoice PDF or image here"}
+                ? "Drop the invoices here..."
+                : "Drag & drop invoice PDFs or images here"}
             </p>
             <p className="text-sm text-muted-foreground mb-4">
-              or <span className="text-primary font-semibold underline underline-offset-2">click to select a file</span>
+              or <span className="text-primary font-semibold underline underline-offset-2">click to select files</span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              You can upload multiple files at once
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
               {["PDF", "PNG", "JPG", "HEIC"].map((type) => (
@@ -93,18 +105,38 @@ export function UploadView({ onFileSelect, error }: UploadViewProps) {
             </div>
         </div>
 
-        {selectedFile && (
-            <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-xl shadow-lg">
-              <div className="flex items-center space-x-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20">
-                  <FileText className="w-5 h-5 text-primary" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-semibold text-foreground">{selectedFile.name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
-                  </span>
-                </div>
+        {selectedFiles.length > 0 && (
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-foreground">
+                Selected Files ({selectedFiles.length})
+              </div>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {selectedFiles.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    className="flex items-center justify-between p-4 bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-xl shadow-lg"
+                  >
+                    <div className="flex items-center space-x-3 flex-1 min-w-0">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/20 flex-shrink-0">
+                        <FileText className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="flex flex-col flex-1 min-w-0">
+                        <span className="font-semibold text-foreground truncate">{file.name}</span>
+                        <span className="text-xs text-muted-foreground">
+                          {(file.size / 1024 / 1024).toFixed(2)} MB
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleRemoveFile(index)}
+                      className="ml-2 flex-shrink-0 h-8 w-8"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
               </div>
             </div>
         )}
@@ -120,11 +152,13 @@ export function UploadView({ onFileSelect, error }: UploadViewProps) {
         <div className="text-center pt-6">
             <Button
             onClick={handleSubmit}
-            disabled={!selectedFile}
+            disabled={selectedFiles.length === 0}
             size="lg"
             className="h-12 px-8 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
-            Process Invoice
+            {selectedFiles.length === 1 
+              ? "Process Invoice" 
+              : `Process ${selectedFiles.length} Invoices`}
             </Button>
         </div>
       </div>
