@@ -24,7 +24,7 @@ function parseMeta(meta: string | null): Record<string, any> {
 /**
  * Serialize metadata to JSON string
  */
-function serializeMeta(field: any): string | null {
+export function serializeMeta(field: any): string | null {
   if (!field || typeof field !== 'object') return null;
   const { value, ...meta } = field;
   if (Object.keys(meta).length === 0) return null;

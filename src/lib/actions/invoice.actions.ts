@@ -82,11 +82,25 @@ export async function getInvoicesAction(
 
 /**
  * Flag invoice for review
+ * Cannot flag invoices that require escalation (they are handled via role-based access control)
  */
 export async function flagInvoiceForReviewAction(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
   return withActionHandler(async () => {
+    // First check if invoice requires escalation
+    const invoice = await invoiceService.getInvoiceById(id);
+    if (!invoice) {
+      return { success: false, error: 'Invoice not found' };
+    }
+    
+    if (invoice.requiresEscalation === true) {
+      return { 
+        success: false, 
+        error: 'Cannot flag escalated invoices for review. Escalated invoices require role-based approval and are handled separately.' 
+      };
+    }
+    
     await invoiceService.updateStatus(id, 'Review');
     revalidatePath('/approvals');
     revalidatePath('/invoices');
@@ -116,11 +130,17 @@ export async function updateInvoiceCaseNumberAction(
   id: string,
   caseNumber: string | undefined
 ): Promise<{ success: boolean; error?: string }> {
-  return withActionHandler(async () => {
+  const result = await withActionHandler(async () => {
     await invoiceService.updateCaseNumber(id, caseNumber);
     revalidatePath(`/invoices/${id}`);
     revalidatePath('/approvals');
     return { success: true };
   }, 'Failed to update case number');
+  
+  // Unwrap the result to match the expected return type
+  if (result.error) {
+    return { success: false, error: result.error };
+  }
+  return result.data || { success: false, error: 'Unknown error' };
 }
 

@@ -41,7 +41,6 @@ const StatusCheckResultSchema = z.object({
 const ExtractInvoiceDataOutputSchema = BaseExtractInvoiceDataOutputSchema.extend({
   duplicateCheck: DuplicateCheckResultSchema.optional(),
   status: z.enum(['Paid', 'Pending', 'Review', 'Draft']).optional(),
-  paymentTerms: ExtractedFieldSchema.optional(),
 });
 export type ExtractInvoiceDataOutput = z.infer<typeof ExtractInvoiceDataOutputSchema>;
 
@@ -195,9 +194,7 @@ const extractInvoiceDataPrompt = ai.definePrompt({
   name: 'extractInvoiceDataPrompt',
   input: { schema: ExtractInvoiceDataInputSchema },
   output: {
-    schema: BaseExtractInvoiceDataOutputSchema.extend({
-      paymentTerms: ExtractedFieldSchema.optional(),
-    }),
+    schema: BaseExtractInvoiceDataOutputSchema,
   },
   prompt: `
 You are an expert document data extractor. You will be given a single document (image/PDF). The document may be an **Invoice**, **Receipt**, **Reimbursement**, or **Office Credit Card Bill**.
@@ -208,7 +205,7 @@ You are an expert document data extractor. You will be given a single document (
 Classify the document as exactly one of:
 
 - **Invoice**  
-  A document requesting payment for goods or services. Includes payment terms ("Net 30"), due dates, invoice number, line items, "Amount Due", "Balance Due", etc. This is a bill that needs to be paid.
+  A document requesting payment for goods or services. Includes due dates, invoice number, "Amount Due", "Balance Due", etc. This is a bill that needs to be paid.
 
 - **Receipt**  
   A document confirming payment has been made. Includes "Paid", payment method, transaction date, "Thank you", "Payment Received", etc. This confirms a payment was already made.
@@ -273,19 +270,6 @@ Each MUST be returned using your ExtractedField format:
    - The billed party ("Bill To", "Customer", "Client", "Cardholder Name").  
    - If not present, set value = null with low confidence.
 
-9. **lineItems**  
-   - For invoices/receipts: array of items with description, quantity, unit price, total.  
-   - For credit card bills: array of transactions with merchant, date, amount.  
-   - For reimbursements: array of expense items with category, description, amount.  
-   - Format as array of objects.  
-   - If not found, set value = null with low confidence.
-
-10. **paymentTerms** (optional)  
-   - For invoices: "Net 30", "Due on receipt", etc.  
-   - For receipts: use payment method instead (e.g. "Visa **** 1234").  
-   - For reimbursements: extract expense categories (e.g., ["Meals", "Travel"]).  
-   - If none apply, set value = null with low confidence.
-
 ---
 
 ## 3. Bounding Box Requirements  
@@ -345,7 +329,6 @@ const extractInvoiceDataFlow = ai.defineFlow(
         invoiceDate: null,
         vendorName: null,
         vendorAddress: null,
-        lineItems: null,
         amount: null,
         clientName: null,
         description: null,

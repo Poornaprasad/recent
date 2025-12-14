@@ -57,7 +57,7 @@ import Link from "next/link";
 import { CircularProgressBadge } from "@/components/invoice/circular-progress-badge";
 import { getInvoicesAction } from '@/lib/actions/index';
 import type { StoredInvoice } from '@/lib/domain/types';
-import { getStatusBadgeClass } from '@/lib/utils/status-utils';
+import { getStatusBadgeClass, getDisplayStatus } from '@/lib/utils/status-utils';
 import { 
   getOverallConfidence, 
   getFieldsExtractedCount, 
@@ -103,7 +103,9 @@ export default function InvoicesPage() {
         if (result.error) {
           setInvoices([]);
         } else if (result.data) {
-          setInvoices(result.data);
+          // Filter out Draft invoices - only show processed invoices
+          const processedInvoices = result.data.filter(inv => inv.status !== 'Draft');
+          setInvoices(processedInvoices);
         }
       } catch (error) {
         setInvoices([]);
@@ -163,7 +165,7 @@ export default function InvoicesPage() {
       title: "Total Processed",
         value: totalProcessed.toString(),
       icon: CheckCircle2,
-        footerText: `${invoices.filter(inv => inv.status !== 'Draft').length} active invoices`,
+        footerText: `${invoices.length} processed invoices`,
     },
     {
       title: "Needs Review",
@@ -246,7 +248,12 @@ export default function InvoicesPage() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <h2 className="text-3xl font-bold tracking-tight">Invoice Management</h2>
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">All Processed Invoices</h2>
+          <p className="text-muted-foreground mt-1">
+            View and manage all invoices that have been processed (excluding drafts)
+          </p>
+        </div>
         <Button onClick={handleExport} size="sm" className="gap-1">
           <FileDown className="h-4 w-4" />
           Export {selectedInvoices.size > 0 ? `(${selectedInvoices.size})` : 'All'}
@@ -296,7 +303,6 @@ export default function InvoicesPage() {
                 <SelectItem value="Paid">Paid</SelectItem>
                 <SelectItem value="Pending">Pending</SelectItem>
                 <SelectItem value="Review">Review</SelectItem>
-                <SelectItem value="Draft">Draft</SelectItem>
               </SelectContent>
             </Select>
             <Select value={documentTypeFilter} onValueChange={(value) => {
@@ -483,7 +489,7 @@ export default function InvoicesPage() {
                       </TableCell>
                     <TableCell className="font-medium">
                       <Link
-                        href={`/invoices/${encodeId(invoice.id)}`}
+                        href={`/invoices/${encodeId(invoice.id)}?source=invoices`}
                         className="text-primary hover:underline"
                       >
                         {invoice.invoiceNumber?.value || invoice.id}
@@ -506,9 +512,9 @@ export default function InvoicesPage() {
                     <TableCell>
                       <Badge
                         variant="outline"
-                        className={cn(getStatusBadgeClass(invoice.status || ''))}
+                        className={cn(getStatusBadgeClass(getDisplayStatus(invoice)))}
                       >
-                        {invoice.status}
+                        {getDisplayStatus(invoice)}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -520,7 +526,7 @@ export default function InvoicesPage() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem asChild>
-                        <Link href={`/invoices/${encodeId(invoice.id)}`}>
+                        <Link href={`/invoices/${encodeId(invoice.id)}?source=invoices`}>
                                 <Eye className="mr-2 h-4 w-4" />
                                 View Details
                         </Link>

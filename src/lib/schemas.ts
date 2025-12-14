@@ -41,7 +41,6 @@ export const ExtractInvoiceDataOutputSchema = z.object({
   invoiceDate: ExtractedFieldSchema,
   vendorName: ExtractedFieldSchema,
   vendorAddress: ExtractedFieldSchema,
-  lineItems: ExtractedFieldSchema,
   // Primary fields (new naming)
   amount: ExtractedFieldSchema,
   clientName: ExtractedFieldSchema,

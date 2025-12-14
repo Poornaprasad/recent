@@ -31,6 +31,8 @@ import {
   FileText,
   AlertTriangle,
   Workflow,
+  TrendingUp,
+  FileCheck,
 } from "lucide-react";
 import { APP_NAME } from "@/lib/constants";
 import Link from "next/link";
@@ -46,11 +48,16 @@ const mainLinks = [
 ];
 
 const managementLinks = [
-    { href: "/invoices", label: "All Invoices", icon: FileText },
-    { href: "/approvals", label: "Approvals", icon: CheckSquare },
+    { href: "/invoices", label: "All Processed Invoices", icon: FileText },
+    { href: "/approved-invoices", label: "Approved Invoices", icon: FileCheck },
+    { href: "/approvals", label: "Waiting for Approval", icon: CheckSquare },
+    { href: "/escalations", label: "Escalations", icon: TrendingUp },
     { href: "/duplicates", label: "Duplicates", icon: Copy },
-    { href: "/vendors", label: "Vendors", icon: Building },
     { href: "/1099-requests", label: "1099 Requests", icon: AlertTriangle },
+];
+
+const vendorLinks = [
+    { href: "/vendors", label: "Vendors", icon: Building },
 ];
 
 const usersLinks = [
@@ -67,6 +74,7 @@ export function AppSidebar() {
   useEffect(() => {
       const isManagementSubMenuActive = managementLinks.some(link => pathname.startsWith(link.href));
       const isUsersSubMenuActive = usersLinks.some(link => pathname.startsWith(link.href));
+      const isVendorSubMenuActive = vendorLinks.some(link => pathname.startsWith(link.href));
       
       const newOpenState: string[] = [];
       if (isManagementSubMenuActive) {
@@ -75,11 +83,15 @@ export function AppSidebar() {
       if (isUsersSubMenuActive) {
         newOpenState.push('users-menu');
       }
+      if (isVendorSubMenuActive) {
+        newOpenState.push('vendor-menu');
+      }
       setOpenAccordion(newOpenState);
   }, [pathname]);
 
   const isManagementActive = managementLinks.some(link => pathname.startsWith(link.href));
   const isUsersActive = usersLinks.some(link => pathname.startsWith(link.href));
+  const isVendorActive = vendorLinks.some(link => pathname.startsWith(link.href));
 
 
   return (
@@ -123,6 +135,27 @@ export function AppSidebar() {
                      <Accordion.Content>
                         <SidebarMenuSub>
                             {managementLinks.map(({ href, label, icon: Icon }) => (
+                                <SidebarMenuSubItem key={href}>
+                                     <Link href={href} className={cn(sidebarMenuButtonVariants({size: 'sm'}), 'h-auto p-2 justify-start w-full')} data-active={pathname.startsWith(href)}>
+                                        <Icon className="mr-2 h-4 w-4" />
+                                        {label}
+                                    </Link>
+                                </SidebarMenuSubItem>
+                            ))}
+                        </SidebarMenuSub>
+                     </Accordion.Content>
+                </Accordion.Item>
+                <Accordion.Item value="vendor-menu" className="border-none">
+                     <Accordion.Trigger className={cn(sidebarMenuButtonVariants({size: 'default'}), 'h-10 p-3 justify-between w-full group')} data-active={isVendorActive}>
+                        <div className="flex items-center">
+                            <Building className="mr-2 h-4 w-4" />
+                            <span>Vendors</span>
+                        </div>
+                        <ChevronRight className="h-4 w-4 shrink-0 transition-transform duration-200 group-data-[state=open]:rotate-90" />
+                     </Accordion.Trigger>
+                     <Accordion.Content>
+                        <SidebarMenuSub>
+                             {vendorLinks.map(({ href, label, icon: Icon }) => (
                                 <SidebarMenuSubItem key={href}>
                                      <Link href={href} className={cn(sidebarMenuButtonVariants({size: 'sm'}), 'h-auto p-2 justify-start w-full')} data-active={pathname.startsWith(href)}>
                                         <Icon className="mr-2 h-4 w-4" />

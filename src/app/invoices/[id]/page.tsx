@@ -1,33 +1,41 @@
 'use client';
 
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Download, MessageSquare, Flag, Check, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Download, MessageSquare, Flag, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useState, useEffect } from 'react';
+import { Switch } from '@/components/ui/switch';
+import { useState, useEffect, useMemo } from 'react';
 import { type StoredInvoice } from '@/lib/domain/types';
 import { cn } from '@/lib/utils/utils';
-import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, updateInvoiceCaseNumberAction, completeVendorSetupAction } from '@/lib/actions/index';
+import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, updateInvoiceCaseNumberAction, completeVendorSetupAction, getInvoicesAction } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { VendorSetupDialog } from '@/components/dialogs/vendor-setup-dialog';
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
 import { FieldsList } from '@/components/invoice/fields-list';
-import { decodeId } from '@/lib/utils/id-utils';
+import { decodeId, encodeId } from '@/lib/utils/id-utils';
 import { getDocumentTypeBadgeClass, getDocumentTypeDescription } from '@/lib/utils/document-type-utils';
 import { formatTotalAmount } from '@/lib/utils/invoice-utils';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
+import { useAuthStore } from '@/hooks/use-auth-store';
 
 export default function InvoiceDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const id = decodeId(params.id as string);
   const router = useRouter();
   const { toast } = useToast();
+  const { user } = useAuthStore();
+  
+  // Get source context from URL params
+  const source = searchParams.get('source') || 'invoices'; // 'approvals', 'escalations', 'invoices'
+  const autoAdvance = searchParams.get('autoAdvance') === 'true';
 
   const [invoiceData, setInvoiceData] = useState<StoredInvoice | null>(null);
   const [invoiceDataUri, setInvoiceDataUri] = useState<string>('');
@@ -40,6 +48,54 @@ export default function InvoiceDetailPage() {
   const [isVendorSetupDialogOpen, setIsVendorSetupDialogOpen] = useState(false);
   const [pendingVendor, setPendingVendor] = useState<any>(null);
   const [isProcessingVendor, setIsProcessingVendor] = useState(false);
+  const [isUpdatingCaseNumber, setIsUpdatingCaseNumber] = useState(false);
+  const [invoiceList, setInvoiceList] = useState<StoredInvoice[]>([]);
+  const [isLoadingList, setIsLoadingList] = useState(false);
+  const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(autoAdvance);
+
+  // Load invoice list for navigation
+  useEffect(() => {
+    const loadInvoiceList = async () => {
+      setIsLoadingList(true);
+      try {
+        const userPermissions = user ? {
+          role: user.role,
+          assignedStates: user.assignedStates
+        } : undefined;
+        
+        const result = await getInvoicesAction(userPermissions);
+        if (result.data) {
+          let filtered = result.data;
+          
+          // Filter based on source context
+          if (source === 'approvals') {
+            filtered = filtered.filter(inv => 
+              inv.status === 'Review' && 
+              inv.approvalStatus !== 'Approved' &&
+              inv.requiresEscalation !== true // Exclude escalated invoices
+            );
+          } else if (source === 'escalations') {
+            filtered = filtered.filter(inv => inv.requiresEscalation === true);
+          } else if (source === 'approved-invoices') {
+            // Filter for approved invoices: approvalStatus is 'Approved' OR status is 'Pending' (approved invoices)
+            filtered = filtered.filter(inv => 
+              inv.approvalStatus === 'Approved' || (inv.status === 'Pending' && inv.approvalStatus !== 'Rejected')
+            );
+          } else {
+            // For invoices page, filter out drafts
+            filtered = filtered.filter(inv => inv.status !== 'Draft');
+          }
+          
+          setInvoiceList(filtered);
+        }
+      } catch (error) {
+        console.error('Failed to load invoice list:', error);
+      } finally {
+        setIsLoadingList(false);
+      }
+    };
+    loadInvoiceList();
+  }, [source, user]);
 
   useEffect(() => {
     const fetchInvoice = async () => {
@@ -67,6 +123,27 @@ export default function InvoiceDetailPage() {
     fetchInvoice();
   }, [id, toast]);
 
+  // Get current index and navigation info
+  const navigationInfo = useMemo(() => {
+    const currentIndex = invoiceList.findIndex(inv => inv.id === id);
+    const hasPrevious = currentIndex > 0;
+    const hasNext = currentIndex < invoiceList.length - 1;
+    const previousId = hasPrevious ? invoiceList[currentIndex - 1].id : null;
+    const nextId = hasNext ? invoiceList[currentIndex + 1].id : null;
+    const position = currentIndex >= 0 ? `${currentIndex + 1} of ${invoiceList.length}` : null;
+    
+    return { currentIndex, hasPrevious, hasNext, previousId, nextId, position };
+  }, [invoiceList, id]);
+
+
+  const navigateToInvoice = (invoiceId: string) => {
+    const params = new URLSearchParams();
+    params.set('source', source);
+    if (autoAdvanceEnabled) {
+      params.set('autoAdvance', 'true');
+    }
+    router.push(`/invoices/${encodeId(invoiceId)}?${params.toString()}`);
+  };
 
   const handleStatusUpdate = async (status: 'Pending' | 'Draft') => {
     if (!invoiceData) return;
@@ -79,10 +156,50 @@ export default function InvoiceDetailPage() {
           ? 'The invoice has been approved and moved to the invoices list.'
           : 'The invoice has been rejected and marked as draft.',
       });
-      if (status === 'Pending') {
-        router.push('/invoices');
+      
+      // Auto-advance to next invoice if enabled and available
+      if (autoAdvanceEnabled && navigationInfo.hasNext && navigationInfo.nextId) {
+        // Small delay to show the toast
+        setTimeout(() => {
+          navigateToInvoice(navigationInfo.nextId!);
+        }, 500);
       } else {
-        router.push('/approvals');
+        // Reload the list to get updated data
+        const userPermissions = user ? {
+          role: user.role,
+          assignedStates: user.assignedStates
+        } : undefined;
+        
+        const result = await getInvoicesAction(userPermissions);
+        if (result.data) {
+          let filtered = result.data;
+          if (source === 'approvals') {
+            filtered = filtered.filter(inv => 
+              inv.status === 'Review' && inv.approvalStatus !== 'Approved'
+            );
+          } else if (source === 'escalations') {
+            filtered = filtered.filter(inv => inv.requiresEscalation === true);
+          }
+          
+          // If there are still invoices in the list, navigate to next
+          if (filtered.length > 0) {
+            const currentIndex = filtered.findIndex(inv => inv.id === id);
+            if (currentIndex >= 0 && currentIndex < filtered.length - 1) {
+              navigateToInvoice(filtered[currentIndex + 1].id);
+            } else if (filtered.length > 0) {
+              // Go to first invoice if we were at the end
+              navigateToInvoice(filtered[0].id);
+            } else {
+              // No more invoices, go back to list
+              router.push(`/${source}`);
+            }
+          } else {
+            // No more invoices, go back to list
+            router.push(`/${source}`);
+          }
+        } else {
+          router.push(`/${source}`);
+        }
       }
     } catch (error) {
       toast({
@@ -97,6 +214,17 @@ export default function InvoiceDetailPage() {
 
   const handleFlagForReview = async () => {
     if (!invoiceData) return;
+    
+    // Prevent flagging escalated invoices
+    if (invoiceData.requiresEscalation === true) {
+      toast({
+        variant: 'destructive',
+        title: 'Cannot Flag Escalated Invoice',
+        description: 'Escalated invoices cannot be flagged for review. They require role-based approval and are handled separately in the Escalations page.',
+      });
+      return;
+    }
+    
     setIsUpdating(true);
     try {
       const result = await flagInvoiceForReviewAction(invoiceData.id);
@@ -235,24 +363,73 @@ export default function InvoiceDetailPage() {
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
       <div className="p-4 md:p-8 md:pb-4 pb-4 border-b">
-        <div className="flex items-center gap-4">
-          <Button asChild variant="outline" size="icon">
-            <Link href={invoiceData.status === 'Review' ? '/approvals' : '/invoices'}>
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-          <div className="flex items-center gap-3">
-            <h2 className="text-3xl font-bold tracking-tight">
-              {invoiceData.documentType || 'Invoice'} {invoiceData.invoiceNumber?.value || id}
-            </h2>
-            {invoiceData.documentType && (
-              <Badge
-                variant="outline"
-                className={cn(getDocumentTypeBadgeClass(invoiceData.documentType))}
-              >
-                {invoiceData.documentType}
-              </Badge>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4 flex-1">
+            <Button asChild variant="outline" size="icon">
+              <Link href={`/${source}`}>
+                <ArrowLeft className="h-4 w-4" />
+              </Link>
+            </Button>
+            <div className="flex items-center gap-3 flex-1">
+              <h2 className="text-3xl font-bold tracking-tight">
+                {invoiceData.documentType || 'Invoice'} {invoiceData.invoiceNumber?.value || id}
+              </h2>
+              {invoiceData.documentType && (
+                <Badge
+                  variant="outline"
+                  className={cn(getDocumentTypeBadgeClass(invoiceData.documentType))}
+                >
+                  {invoiceData.documentType}
+                </Badge>
+              )}
+              {navigationInfo.position && (
+                <span className="text-sm text-muted-foreground">
+                  ({navigationInfo.position})
+                </span>
+              )}
+            </div>
+          </div>
+          
+          {/* Navigation Controls */}
+          <div className="flex items-center gap-2">
+            {source === 'approvals' && (
+              <div className="flex items-center gap-2 mr-4">
+                <Label htmlFor="auto-advance" className="text-sm text-muted-foreground cursor-pointer">
+                  Auto-advance
+                </Label>
+                <Switch
+                  id="auto-advance"
+                  checked={autoAdvanceEnabled}
+                  onCheckedChange={(checked) => {
+                    setAutoAdvanceEnabled(checked);
+                    const params = new URLSearchParams();
+                    params.set('source', source);
+                    if (checked) {
+                      params.set('autoAdvance', 'true');
+                    }
+                    router.replace(`/invoices/${encodeId(id)}?${params.toString()}`);
+                  }}
+                />
+              </div>
             )}
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigationInfo.previousId && navigateToInvoice(navigationInfo.previousId)}
+              disabled={!navigationInfo.hasPrevious || isLoadingList}
+              title="Previous invoice"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => navigationInfo.nextId && navigateToInvoice(navigationInfo.nextId)}
+              disabled={!navigationInfo.hasNext || isLoadingList}
+              title="Next invoice"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
         </div>
       </div>
@@ -367,36 +544,65 @@ export default function InvoiceDetailPage() {
                     <Input
                       id="case-number"
                       value={invoiceData.caseNumber || ''}
+                      disabled={isUpdatingCaseNumber}
                       onChange={async (e) => {
                         const caseNumber = e.target.value;
                         if (invoiceData) {
-                          const result = await updateInvoiceCaseNumberAction(invoiceData.id, caseNumber);
-                          if (result.success) {
-                            const updatedResult = await getInvoiceByIdAction(invoiceData.id);
-                            if (updatedResult.data) {
-                              setInvoiceData(updatedResult.data);
-                              const stateName = updatedResult.data.state === 'CA' ? 'California' : updatedResult.data.state === 'NY' ? 'New York' : null;
-                              toast({
-                                title: 'Case Number Updated',
-                                description: stateName ? `Case number saved. State auto-detected: ${stateName}.` : 'The case number has been saved.',
-                              });
+                          setIsUpdatingCaseNumber(true);
+                          try {
+                            const result = await updateInvoiceCaseNumberAction(invoiceData.id, caseNumber);
+                            if (result.success) {
+                              const updatedResult = await getInvoiceByIdAction(invoiceData.id);
+                              if (updatedResult.data) {
+                                setInvoiceData(updatedResult.data);
+                                const stateName = updatedResult.data.state === 'CA' ? 'California' : updatedResult.data.state === 'NY' ? 'New York' : null;
+                                
+                                // Check if plaintiff name was updated
+                                const hadPlaintiffName = invoiceData.clientName || invoiceData.customerName;
+                                const hasPlaintiffName = updatedResult.data.clientName || updatedResult.data.customerName;
+                                const plaintiffNameUpdated = !hadPlaintiffName && hasPlaintiffName;
+                                
+                                let description = stateName ? `Case number saved. State auto-detected: ${stateName}.` : 'The case number has been saved.';
+                                if (plaintiffNameUpdated) {
+                                  const plaintiffName = updatedResult.data.clientName?.value || updatedResult.data.customerName?.value;
+                                  description += ` Plaintiff name "${plaintiffName}" fetched from case info.`;
+                                }
+                                
+                                toast({
+                                  title: 'Case Number Updated',
+                                  description: description,
+                                });
+                              } else {
+                                toast({
+                                  title: 'Case Number Updated',
+                                  description: 'The case number has been saved.',
+                                });
+                              }
                             } else {
                               toast({
-                                title: 'Case Number Updated',
-                                description: 'The case number has been saved.',
+                                variant: 'destructive',
+                                title: 'Update Failed',
+                                description: result.error || 'Failed to update case number.',
                               });
                             }
-                          } else {
+                          } catch (error) {
                             toast({
                               variant: 'destructive',
                               title: 'Update Failed',
-                              description: result.error || 'Failed to update case number.',
+                              description: error instanceof Error ? error.message : 'Failed to update case number.',
                             });
+                          } finally {
+                            setIsUpdatingCaseNumber(false);
                           }
                         }
                       }}
                       placeholder="Enter case number..."
                     />
+                    {isUpdatingCaseNumber && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Fetching case info...
+                      </p>
+                    )}
                     {(invoiceData.clientName || invoiceData.customerName) && (
                       <p className="text-xs text-muted-foreground mt-1">
                         Required when plaintiff name is present
@@ -434,7 +640,18 @@ export default function InvoiceDetailPage() {
                     </>
                   ) : (
                     <>
-                      <Button variant="outline" onClick={handleFlagForReview} disabled={isUpdating || invoiceData.vendorRequires1099} title={invoiceData.vendorRequires1099 ? 'Vendor must be set up first' : ''}>
+                      <Button 
+                        variant="outline" 
+                        onClick={handleFlagForReview} 
+                        disabled={isUpdating || invoiceData.vendorRequires1099 || invoiceData.requiresEscalation === true} 
+                        title={
+                          invoiceData.vendorRequires1099 
+                            ? 'Vendor must be set up first' 
+                            : invoiceData.requiresEscalation === true
+                            ? 'Escalated invoices cannot be flagged for review. They require role-based approval.'
+                            : ''
+                        }
+                      >
                         <Flag className="mr-2 h-4 w-4" />
                         Flag for Review
                       </Button>

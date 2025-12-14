@@ -19,6 +19,9 @@ import { vendorService } from './vendor.service';
 import { createPendingVendor, findPendingVendorByInvoiceId } from '../repositories/pending-vendor.repository';
 import type { StoredInvoice } from '../domain/types';
 import { stateDetectionService } from '../core/state/state-detection.service';
+import { fetchCaseInfo, extractPlaintiffName } from './case-info.service';
+import type { ExtractedField } from '../domain/types';
+import { serializeMeta } from '../repositories/mappers/invoice.mapper';
 
 export class InvoiceService {
   /**
@@ -55,7 +58,10 @@ export class InvoiceService {
 
       // Calculate overall confidence and determine status
       const overallConfidence = getOverallConfidence(data as unknown as StoredInvoice);
-      let status: StoredInvoice['status'] = data.status || 'Pending';
+      // Get status from extraction (which may include external systems check)
+      // The extraction flow should return a status, but if not, we need to determine it
+      // Default to 'Review' initially (matching extraction flow default), then adjust based on conditions
+      let status: StoredInvoice['status'] = data.status || 'Review';
 
       // Extract amount for high-value check
       const invoiceAmount = parseInvoiceAmount(data.totalAmount?.value);
@@ -66,31 +72,40 @@ export class InvoiceService {
       let escalationLevel: 'standard' | 'high' | 'critical' | undefined;
       let highValueReason: string | undefined;
 
+      // Preserve 'Paid' status from external systems - don't override it
+      const isPaid = status === 'Paid';
+
       if (invoiceAmount >= HIGH_VALUE_THRESHOLDS.CRITICAL) {
         isHighValue = true;
         requiresEscalation = true;
         escalationLevel = 'critical';
         highValueReason = `Invoice amount ($${invoiceAmount.toLocaleString()}) exceeds critical threshold ($${HIGH_VALUE_THRESHOLDS.CRITICAL.toLocaleString()}). Requires executive approval.`;
-        status = 'Review'; // Force to Review for critical amounts
+        // Only override to Review if not already Paid
+        if (!isPaid) {
+          status = 'Review'; // Force to Review for critical amounts
+        }
       } else if (invoiceAmount >= HIGH_VALUE_THRESHOLDS.HIGH) {
         isHighValue = true;
         requiresEscalation = true;
         escalationLevel = 'high';
         highValueReason = `Invoice amount ($${invoiceAmount.toLocaleString()}) exceeds high threshold ($${HIGH_VALUE_THRESHOLDS.HIGH.toLocaleString()}). Requires manager approval.`;
-        status = 'Review'; // Force to Review for high amounts
+        // Only override to Review if not already Paid
+        if (!isPaid) {
+          status = 'Review'; // Force to Review for high amounts
+        }
       } else if (invoiceAmount >= HIGH_VALUE_THRESHOLDS.STANDARD) {
         isHighValue = true;
         requiresEscalation = true;
         escalationLevel = 'standard';
         highValueReason = `Invoice amount ($${invoiceAmount.toLocaleString()}) exceeds standard threshold ($${HIGH_VALUE_THRESHOLDS.STANDARD.toLocaleString()}). Requires review.`;
-        // Don't force status, but ensure it's at least Pending
-        if (status === 'Draft') {
+        // Don't force status, but ensure it's at least Pending (unless already Paid)
+        if (status === 'Draft' && !isPaid) {
           status = 'Pending';
         }
       }
 
-      // If confidence is low, force it to 'Review' (unless already escalated for high value)
-      if (overallConfidence < CONFIDENCE_THRESHOLDS.LOW && !requiresEscalation) {
+      // If confidence is low, force it to 'Review' (unless already Paid or escalated for high value)
+      if (overallConfidence < CONFIDENCE_THRESHOLDS.LOW && !requiresEscalation && !isPaid) {
         status = 'Review';
       }
 
@@ -289,11 +304,18 @@ export class InvoiceService {
 
   /**
    * Update case number
+   * Fetches case info from SmartAdvocate API and updates plaintiff name
    * Validates that case number is provided when plaintiff name (clientName/customerName) is present
    * Auto-sets state based on case number (CA if contains CA, otherwise NY)
    */
   async updateCaseNumber(id: string, caseNumber: string | undefined): Promise<void> {
-    await initDb();
+    try {
+      await initDb();
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+      throw new Error('Database connection failed');
+    }
+    
     const db = getDb();
     
     // Get the invoice to check for plaintiff name
@@ -302,7 +324,9 @@ export class InvoiceService {
       throw new Error('Invoice not found');
     }
     
-    // Check if plaintiff name (clientName or customerName) is present
+    // Normalize case number (trim whitespace, convert empty string to undefined)
+    const normalizedCaseNumber = caseNumber?.trim() || undefined;
+    
     // Helper to extract value from ExtractedField or string
     const extractValue = (field: any): string | null => {
       if (!field) return null;
@@ -314,29 +338,120 @@ export class InvoiceService {
       return null;
     };
     
-    const plaintiffNameValue = extractValue(invoice.clientName) || extractValue(invoice.customerName);
+    // Helper to create ExtractedField from string value
+    const createExtractedField = (value: string | null): ExtractedField<string> | null => {
+      if (!value || value.trim() === '') return null;
+      return {
+        value: value.trim(),
+        confidence: 1.0, // High confidence since it's from API
+        reasoning: 'Fetched from SmartAdvocate Case Info API',
+      };
+    };
+    
+    // Fetch case info from API if case number is provided
+    let plaintiffNameFromApi: string | null = null;
+    let updatedClientName: ExtractedField<string> | null = invoice.clientName;
+    let updatedCustomerName: ExtractedField<string> | null = invoice.customerName;
+    
+    if (normalizedCaseNumber && normalizedCaseNumber !== '') {
+      try {
+        const caseInfo = await fetchCaseInfo(normalizedCaseNumber);
+        if (caseInfo) {
+          plaintiffNameFromApi = extractPlaintiffName(caseInfo);
+          
+          // Update plaintiff name if fetched from API
+          // Prefer updating customerName, but also set clientName if customerName doesn't exist
+          if (plaintiffNameFromApi) {
+            const existingCustomerName = extractValue(invoice.customerName);
+            const existingClientName = extractValue(invoice.clientName);
+            
+            // If neither exists, set customerName (preferred field)
+            if (!existingCustomerName && !existingClientName) {
+              updatedCustomerName = createExtractedField(plaintiffNameFromApi);
+            }
+            // If customerName exists but clientName doesn't, also set clientName
+            else if (existingCustomerName && !existingClientName) {
+              updatedClientName = createExtractedField(plaintiffNameFromApi);
+            }
+            // If customerName doesn't exist but clientName does, update customerName
+            else if (!existingCustomerName && existingClientName) {
+              updatedCustomerName = createExtractedField(plaintiffNameFromApi);
+            }
+            // If both exist, update customerName (preferred field)
+            else {
+              updatedCustomerName = createExtractedField(plaintiffNameFromApi);
+            }
+          }
+        }
+      } catch (error) {
+        // Log error but don't fail the update - case number can still be saved
+        console.error('Error fetching case info from API:', error);
+        // Continue with the update even if API call fails
+      }
+    }
+    
+    // Check if plaintiff name (clientName or customerName) is present after potential API update
+    const plaintiffNameValue = extractValue(updatedClientName) || extractValue(updatedCustomerName);
     const hasPlaintiffName = plaintiffNameValue !== null && plaintiffNameValue !== '';
     
     // Validate: case number is mandatory when plaintiff name is present
-    if (hasPlaintiffName && (!caseNumber || caseNumber.trim() === '')) {
+    if (hasPlaintiffName && !normalizedCaseNumber) {
       throw new Error('Case number is required when plaintiff name is present');
     }
     
     // Auto-detect state based on case number
     let detectedState: 'CA' | 'NY' | null = null;
-    if (caseNumber && caseNumber.trim() !== '') {
-      const stateResult = stateDetectionService.detectState(caseNumber);
+    if (normalizedCaseNumber) {
+      const stateResult = stateDetectionService.detectState(normalizedCaseNumber);
       detectedState = stateResult.state;
     }
     
-    await db
-      .update(invoices)
-      .set({
-        caseNumber: caseNumber || null,
-        state: detectedState,
-        updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
-      })
-      .where(eq(invoices.id, id));
+    // Prepare update data
+    const updateData: any = {
+      caseNumber: normalizedCaseNumber || null,
+      state: detectedState,
+      updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
+    };
+    
+    // Update plaintiff name fields if they were fetched from API
+    if (plaintiffNameFromApi) {
+      // Check if customerName needs updating (compare values, not object references)
+      const currentCustomerName = extractValue(invoice.customerName);
+      const newCustomerName = extractValue(updatedCustomerName);
+      if (newCustomerName && newCustomerName !== currentCustomerName) {
+        updateData.customerName = newCustomerName;
+        try {
+          updateData.customerNameMeta = serializeMeta(updatedCustomerName);
+        } catch (error) {
+          console.error('Error serializing customerName metadata:', error);
+          updateData.customerNameMeta = null;
+        }
+      }
+      
+      // Check if clientName needs updating (compare values, not object references)
+      const currentClientName = extractValue(invoice.clientName);
+      const newClientName = extractValue(updatedClientName);
+      if (newClientName && newClientName !== currentClientName) {
+        updateData.clientName = newClientName;
+        try {
+          updateData.clientNameMeta = serializeMeta(updatedClientName);
+        } catch (error) {
+          console.error('Error serializing clientName metadata:', error);
+          updateData.clientNameMeta = null;
+        }
+      }
+    }
+    
+    try {
+      await db
+        .update(invoices)
+        .set(updateData)
+        .where(eq(invoices.id, id));
+    } catch (error) {
+      console.error('Database update error:', error);
+      console.error('Update data:', JSON.stringify(updateData, null, 2));
+      throw new Error(`Failed to update invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 }
 

@@ -169,7 +169,12 @@ export default function VendorsPage() {
     <>
       <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
         <div className="flex items-center justify-between space-y-2">
-          <h2 className="text-3xl font-bold tracking-tight">Vendor Management</h2>
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Vendors</h2>
+            <p className="text-muted-foreground mt-1">
+              Manage your vendor list, including vendor types, contact information, and 1099 requirements
+            </p>
+          </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleSyncVendorTypes} disabled={isSyncing}>
               <RefreshCw className={`mr-2 h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
