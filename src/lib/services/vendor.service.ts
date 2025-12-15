@@ -118,6 +118,9 @@ export class VendorService {
     form1099Status?: 'Not Required' | 'Required' | 'Received' | 'Tracked' | 'Pending';
     w9Status?: 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
     canProcessInvoices: boolean; // true if 1099/W9 is received or tracked
+    vendorAddress?: string; // Extracted from invoices
+    vendorEmail?: string; // Extracted from invoices (if available)
+    vendorPhone?: string; // Extracted from invoices (if available)
   }>> {
     // Get all invoices
     const allInvoices = await findAllInvoices();
@@ -219,6 +222,26 @@ export class VendorService {
         amount: parseInvoiceAmount(inv.totalAmount?.value || inv.amount?.value),
       }));
       
+      // Extract vendor information from invoices (address, email, phone if available)
+      // Get from first invoice that has the information
+      let vendorAddress: string | undefined;
+      let vendorEmail: string | undefined;
+      let vendorPhone: string | undefined;
+      
+      for (const inv of invoices) {
+        // Extract address
+        if (!vendorAddress && inv.vendorAddress?.value) {
+          const addrValue = inv.vendorAddress.value;
+          if (typeof addrValue === 'string' && addrValue.trim().length > 0) {
+            vendorAddress = addrValue.trim();
+          }
+        }
+        
+        // Note: Email and phone are not typically extracted from invoices
+        // but we check if they exist in the invoice data
+        // These would need to be added to the extraction schema if needed
+      }
+      
       result.push({
         vendorName: actualVendorName,
         vendor,
@@ -228,6 +251,10 @@ export class VendorService {
         form1099Status,
         w9Status,
         canProcessInvoices,
+        // Add extracted vendor info from invoices
+        vendorAddress,
+        vendorEmail,
+        vendorPhone,
       });
     }
     

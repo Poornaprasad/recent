@@ -53,11 +53,11 @@ const managementLinks = [
     { href: "/approvals", label: "Waiting for Approval", icon: CheckSquare },
     { href: "/escalations", label: "Escalations", icon: TrendingUp },
     { href: "/duplicates", label: "Duplicates", icon: Copy },
-    { href: "/1099-requests", label: "1099 Requests", icon: AlertTriangle },
 ];
 
 const vendorLinks = [
     { href: "/vendors", label: "Vendors", icon: Building },
+    { href: "/1099-requests", label: "1099 Requests", icon: AlertTriangle },
 ];
 
 const usersLinks = [
@@ -74,7 +74,7 @@ export function AppSidebar() {
   useEffect(() => {
       const isManagementSubMenuActive = managementLinks.some(link => pathname.startsWith(link.href));
       const isUsersSubMenuActive = usersLinks.some(link => pathname.startsWith(link.href));
-      const isVendorSubMenuActive = vendorLinks.some(link => pathname.startsWith(link.href));
+      const isVendorSubMenuActive = pathname.startsWith('/vendors') || pathname.startsWith('/1099-requests');
       
       const newOpenState: string[] = [];
       if (isManagementSubMenuActive) {
@@ -91,7 +91,7 @@ export function AppSidebar() {
 
   const isManagementActive = managementLinks.some(link => pathname.startsWith(link.href));
   const isUsersActive = usersLinks.some(link => pathname.startsWith(link.href));
-  const isVendorActive = vendorLinks.some(link => pathname.startsWith(link.href));
+  const isVendorActive = pathname.startsWith('/vendors') || pathname.startsWith('/1099-requests');
 
 
   return (
@@ -155,14 +155,20 @@ export function AppSidebar() {
                      </Accordion.Trigger>
                      <Accordion.Content>
                         <SidebarMenuSub>
-                             {vendorLinks.map(({ href, label, icon: Icon }) => (
-                                <SidebarMenuSubItem key={href}>
-                                     <Link href={href} className={cn(sidebarMenuButtonVariants({size: 'sm'}), 'h-auto p-2 justify-start w-full')} data-active={pathname.startsWith(href)}>
-                                        <Icon className="mr-2 h-4 w-4" />
-                                        {label}
-                                    </Link>
-                                </SidebarMenuSubItem>
-                            ))}
+                             {vendorLinks.map(({ href, label, icon: Icon }) => {
+                                // For 1099-requests, check if we're on vendors page (it will be handled by tab)
+                                const isActive = href.includes('1099-requests') 
+                                  ? pathname.startsWith('/vendors') || pathname.startsWith('/1099-requests')
+                                  : pathname.startsWith(href.split('?')[0]);
+                                return (
+                                  <SidebarMenuSubItem key={href}>
+                                       <Link href={href} className={cn(sidebarMenuButtonVariants({size: 'sm'}), 'h-auto p-2 justify-start w-full')} data-active={isActive}>
+                                          <Icon className="mr-2 h-4 w-4" />
+                                          {label}
+                                      </Link>
+                                  </SidebarMenuSubItem>
+                                );
+                             })}
                         </SidebarMenuSub>
                      </Accordion.Content>
                 </Accordion.Item>
