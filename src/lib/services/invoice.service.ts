@@ -20,7 +20,7 @@ import { vendorService } from './vendor.service';
 import { createPendingVendor, findPendingVendorByInvoiceId } from '../repositories/pending-vendor.repository';
 import type { StoredInvoice } from '../domain/types';
 import { stateDetectionService } from '../core/state/state-detection.service';
-import { fetchCaseInfo, extractPlaintiffName } from './case-info.service';
+import { getCaseInfo, extractPlaintiffName } from '../crm/smartadvocate';
 import type { ExtractedField } from '../domain/types';
 import { serializeMeta } from '../repositories/mappers/invoice.mapper';
 
@@ -390,7 +390,10 @@ export class InvoiceService {
     
     if (normalizedCaseNumber && normalizedCaseNumber !== '') {
       try {
-        const caseInfo = await fetchCaseInfo(normalizedCaseNumber);
+        const caseInfo = await getCaseInfo({ 
+          caseNumber: normalizedCaseNumber,
+          addContactInfo: true 
+        });
         if (caseInfo) {
           plaintiffNameFromApi = extractPlaintiffName(caseInfo);
           
