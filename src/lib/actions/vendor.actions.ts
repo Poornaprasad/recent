@@ -128,6 +128,61 @@ export async function syncVendorTypesFromCrmAction(): Promise<{
   }, 'Failed to sync vendor types from CRM');
 }
 
+/**
+ * Get vendor invoices grouped for 1099 requests
+ */
+export async function getVendorInvoicesFor1099Action(): Promise<ActionResult<Array<{
+  vendorName: string;
+  vendor?: Vendor;
+  totalAmount: number;
+  isBelowThreshold: boolean;
+  invoices: Array<{
+    invoice: import('../domain/types').StoredInvoice;
+    caseNumber?: string;
+    amount: number;
+  }>;
+  form1099Status?: 'Not Required' | 'Required' | 'Received' | 'Tracked' | 'Pending';
+  w9Status?: 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
+  canProcessInvoices: boolean;
+}>>> {
+  return withActionHandler(
+    () => vendorService.getVendorInvoicesFor1099(),
+    'Failed to fetch vendor invoices for 1099'
+  );
+}
+
+/**
+ * Update vendor 1099/W9 status
+ */
+export async function updateVendor1099StatusAction(
+  vendorId: string,
+  status: {
+    form1099Status?: 'Not Required' | 'Required' | 'Received' | 'Tracked' | 'Pending';
+    w9Status?: 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
+  }
+): Promise<{ success: boolean; error?: string }> {
+  return withActionHandler(async () => {
+    const vendor = await vendorService.getVendorById(vendorId);
+    if (!vendor) {
+      throw new Error('Vendor not found');
+    }
+    
+    const updatedVendor: Vendor = {
+      ...vendor,
+      form1099Status: status.form1099Status ?? vendor.form1099Status,
+      w9Status: status.w9Status ?? vendor.w9Status,
+      form1099ReceivedDate: status.form1099Status === 'Received' ? new Date() : vendor.form1099ReceivedDate,
+      w9ReceivedDate: status.w9Status === 'Received' ? new Date() : vendor.w9ReceivedDate,
+      updatedAt: new Date(),
+    };
+    
+    await vendorService.saveVendor(updatedVendor);
+    revalidatePath('/1099-requests');
+    revalidatePath('/vendors');
+    return { success: true };
+  }, 'Failed to update vendor 1099 status');
+}
+
 
 
 

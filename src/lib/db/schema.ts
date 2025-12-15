@@ -116,6 +116,8 @@ export const vendors = pgTable('vendors', {
   w9Status: text('w9_status', { enum: ['Not Required', 'Required', 'Received', 'Pending', 'Expired'] }).default('Not Required'),
   w9ReceivedDate: timestamp('w9_received_date'),
   w9ExpiryDate: timestamp('w9_expiry_date'),
+  form1099Status: text('form_1099_status', { enum: ['Not Required', 'Required', 'Received', 'Tracked', 'Pending'] }).default('Not Required'),
+  form1099ReceivedDate: timestamp('form_1099_received_date'),
   isPaused: boolean('is_paused').default(false),
   pausedReason: text('paused_reason'),
   pausedUntil: timestamp('paused_until'),

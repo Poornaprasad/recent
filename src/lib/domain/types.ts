@@ -62,6 +62,8 @@ export type Vendor = BaseEntity & {
   w9Status?: 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
   w9ReceivedDate?: Date;
   w9ExpiryDate?: Date;
+  form1099Status?: 'Not Required' | 'Required' | 'Received' | 'Tracked' | 'Pending';
+  form1099ReceivedDate?: Date;
   isPaused?: boolean;
   pausedReason?: string;
   pausedUntil?: Date;

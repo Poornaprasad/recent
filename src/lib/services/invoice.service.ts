@@ -7,6 +7,7 @@ import 'server-only';
 
 import { extractInvoiceData, type ExtractInvoiceDataInput } from '@/ai/flows/extract-invoice-data';
 import { findAllInvoices, findInvoiceById, upsertInvoice, updateInvoiceStatus, checkForDuplicateInvoice } from '../repositories/invoice.repository';
+import { findVendorByName } from '../repositories/vendor.repository';
 import { saveInvoiceFile } from '../storage/file-storage';
 import { getOverallConfidence, parseInvoiceAmount } from '../utils/invoice-utils';
 import { CONFIDENCE_THRESHOLDS, HIGH_VALUE_THRESHOLDS } from '../domain/constants';
@@ -274,9 +275,43 @@ export class InvoiceService {
 
   /**
    * Update invoice status
+   * Prevents approving invoices if vendor requires 1099/W9 and forms are not received/tracked
    */
-  async updateStatus(id: string, status: StoredInvoice['status']): Promise<void> {
+  async updateStatus(id: string, status: StoredInvoice['status']): Promise<{ success: boolean; error?: string }> {
+    // If approving (status = 'Pending'), check 1099/W9 requirements
+    if (status === 'Pending') {
+      const invoice = await findInvoiceById(id);
+      if (!invoice) {
+        return { success: false, error: 'Invoice not found' };
+      }
+
+      const vendorName = invoice.vendorName?.value;
+      if (vendorName) {
+        // Check if vendor requires 1099/W9
+        const vendor = await findVendorByName(vendorName);
+        
+        if (vendor && vendor.requires1099) {
+          // Check if 1099/W9 is received or tracked
+          const form1099Status = vendor.form1099Status;
+          const w9Status = vendor.w9Status;
+          
+          const canProcess = 
+            form1099Status === 'Received' || 
+            form1099Status === 'Tracked' ||
+            w9Status === 'Received';
+          
+          if (!canProcess) {
+            return {
+              success: false,
+              error: `Cannot approve invoice. Vendor "${vendorName}" requires 1099/W9 forms. Please mark the forms as Received or Tracked in the 1099 Requests page before approving invoices.`
+            };
+          }
+        }
+      }
+    }
+
     await updateInvoiceStatus(id, status);
+    return { success: true };
   }
 
   /**

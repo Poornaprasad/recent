@@ -59,10 +59,14 @@ export async function updateInvoiceStatusAction(
   status: 'Pending' | 'Draft'
 ): Promise<{ success: boolean, error?: string}> {
   return withActionHandler(async () => {
-    await invoiceService.updateStatus(id, status);
+    const result = await invoiceService.updateStatus(id, status);
+    if (!result.success) {
+      return result;
+    }
     revalidatePath('/approvals');
     revalidatePath('/invoices');
     revalidatePath(`/invoices/${id}`);
+    revalidatePath('/1099-requests');
     return { success: true };
   }, 'Failed to update invoice status');
 }

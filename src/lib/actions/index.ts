@@ -25,6 +25,8 @@ export {
   createVendorTypeAction,
   checkVendorExistsAction,
   syncVendorTypesFromCrmAction,
+  getVendorInvoicesFor1099Action,
+  updateVendor1099StatusAction,
 } from './vendor.actions';
 
 export {

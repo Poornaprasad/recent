@@ -5,7 +5,7 @@
 
 import 'server-only';
 
-import { eq, desc, and } from 'drizzle-orm';
+import { eq, desc, and, sql } from 'drizzle-orm';
 import { getDatabase } from '../db/context';
 import { invoices, type Invoice } from '../db/schema';
 import { sanitizeId } from '../utils/id-utils';
@@ -163,4 +163,19 @@ export async function checkForDuplicateInvoice(
   }
 
   return mapDbRowToInvoice(row);
+}
+
+/**
+ * Get invoices by vendor name (case-insensitive)
+ */
+export async function findInvoicesByVendorName(vendorName: string): Promise<StoredInvoice[]> {
+  const db = await getDatabase();
+
+  const rows = await db
+    .select()
+    .from(invoices)
+    .where(sql`LOWER(${invoices.vendorName}) = LOWER(${vendorName})`)
+    .orderBy(desc(invoices.invoiceDate));
+
+  return rows.map(mapDbRowToInvoice);
 }
