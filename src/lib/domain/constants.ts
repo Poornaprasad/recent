@@ -35,8 +35,8 @@ export const AUDIT_SEVERITIES = {
 
 // Confidence thresholds
 export const CONFIDENCE_THRESHOLDS = {
-  LOW: 0.75,
-  MEDIUM: 0.85,
+  LOW: 0.70,
+  MEDIUM: 0.80,
   HIGH: 0.95,
 } as const;
 
@@ -45,9 +45,9 @@ export const DUPLICATE_CHECK_MONTHS = 2;
 
 // High-value invoice escalation thresholds
 export const HIGH_VALUE_THRESHOLDS = {
-  STANDARD: 10,      // $10,000 - Standard threshold requiring review
+  STANDARD: 600,      // $10,000 - Standard threshold requiring review
   HIGH: 1000,         // $50,000 - High threshold requiring manager approval
-  CRITICAL: 10000,    // $100,000 - Critical threshold requiring executive approval
+  CRITICAL: 5000,    // $100,000 - Critical threshold requiring executive approval
 } as const;
 
 // File upload constraints
