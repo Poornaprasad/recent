@@ -50,7 +50,7 @@ const mainLinks = [
 const managementLinks = [
     { href: "/invoices", label: "All Processed Invoices", icon: FileText },
     { href: "/approved-invoices", label: "Approved Invoices", icon: FileCheck },
-    { href: "/approvals", label: "Waiting for Approval", icon: CheckSquare },
+    { href: "/approvals", label: "Review Pending Invoices", icon: CheckSquare },
     { href: "/escalations", label: "Escalations", icon: TrendingUp },
     { href: "/duplicates", label: "Duplicates", icon: Copy },
 ];

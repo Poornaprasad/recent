@@ -103,12 +103,11 @@ export default function ApprovalsPage() {
         if (result.error) {
           setInvoices([]);
         } else if (result.data) {
-          // Filter for invoices that need review: status is 'Review' AND approvalStatus is not 'Approved'
-          // EXCLUDE invoices that require escalation (they are handled separately via role-based access control)
+          // Filter for invoices that need review: all uploaded/ingested invoices that are not approved
+          // Include all statuses (Review, Pending, Draft) except Paid, and include escalated invoices
           const invoicesForReview = result.data.filter(inv => 
-            inv.status === 'Review' && 
-            inv.approvalStatus !== 'Approved' &&
-            inv.requiresEscalation !== true // Exclude escalated invoices
+            inv.status !== 'Paid' && 
+            inv.approvalStatus !== 'Approved'
           );
           setInvoices(invoicesForReview);
         }
@@ -170,7 +169,7 @@ export default function ApprovalsPage() {
   const filteredInvoices = useMemo(() => {
     let filtered = filterInvoices(invoices, {
       searchTerm,
-      statusFilter: 'Review', // Always filter by Review status
+      statusFilter: 'all', // Show all statuses (Review, Pending, Draft) - already filtered in loadInvoices
       documentTypeFilter,
       vendorFilter,
     });
@@ -404,7 +403,7 @@ export default function ApprovalsPage() {
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Waiting for Approval</h2>
+          <h2 className="text-3xl font-bold tracking-tight">Review Pending Invoices</h2>
           <p className="text-muted-foreground mt-1">
             Invoices that require manual review and approval before processing
           </p>

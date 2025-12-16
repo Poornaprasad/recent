@@ -69,10 +69,10 @@ export default function InvoiceDetailPage() {
           
           // Filter based on source context
           if (source === 'approvals') {
+            // Show all uploaded/ingested invoices that are not approved
             filtered = filtered.filter(inv => 
-              inv.status === 'Review' && 
-              inv.approvalStatus !== 'Approved' &&
-              inv.requiresEscalation !== true // Exclude escalated invoices
+              inv.status !== 'Paid' && 
+              inv.approvalStatus !== 'Approved'
             );
           } else if (source === 'escalations') {
             filtered = filtered.filter(inv => inv.requiresEscalation === true);
