@@ -317,75 +317,69 @@ export function ExtractedDataPanel({
 
   return (
     <div className="space-y-3 p-4">
-      {/* Document Type - Editable */}
+      {/* Document Type - Compact Editable */}
       <div className="p-3 rounded-md border bg-muted/30">
-        <div className="flex items-center justify-between mb-2">
-          <Label className="font-medium">Document Type</Label>
+        <div className="flex items-center gap-3">
+          <Label className="font-medium text-sm flex-shrink-0">Document Type</Label>
+          <Select value={documentType} onValueChange={(v) => handleDocumentTypeChange(v as DocumentType)}>
+            <SelectTrigger className="flex-1 h-9">
+              <SelectValue placeholder="Select type..." />
+            </SelectTrigger>
+            <SelectContent>
+              {DOCUMENT_TYPES.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {type}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {documentType && (
             <Badge
               variant="outline"
-              className={cn(getDocumentTypeBadgeClass(documentType))}
+              className={cn('flex-shrink-0', getDocumentTypeBadgeClass(documentType))}
             >
               {documentType}
             </Badge>
           )}
         </div>
-        <Select value={documentType} onValueChange={(v) => handleDocumentTypeChange(v as DocumentType)}>
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select document type..." />
-          </SelectTrigger>
-          <SelectContent>
-            {DOCUMENT_TYPES.map((type) => (
-              <SelectItem key={type} value={type}>
-                {type}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {documentType && (
-          <p className="text-xs text-muted-foreground mt-2 italic">
-            {getDocumentTypeDescription(documentType)}
-          </p>
-        )}
       </div>
 
-      {/* Case Number - with explicit submit button */}
+      {/* Case Number - Compact with submit button */}
       <div className="p-3 rounded-md border bg-muted/30">
-        <Label htmlFor="case-number" className="mb-2 block font-medium">
-          Case Number
-          <span className="text-destructive ml-1">*</span>
-        </Label>
-        <div className="flex gap-2">
-          <Input
-            id="case-number"
-            value={caseNumber}
-            onChange={(e) => setCaseNumber(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleCaseNumberSubmit();
-              }
-            }}
-            placeholder="Enter case number..."
-            disabled={isSubmittingCaseNumber}
-            className="flex-1"
-          />
-          <Button
-            type="button"
-            onClick={handleCaseNumberSubmit}
-            disabled={isSubmittingCaseNumber || !caseNumber.trim()}
-            size="icon"
-          >
-            {isSubmittingCaseNumber ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Search className="h-4 w-4" />
-            )}
-          </Button>
+        <div className="flex items-center gap-3">
+          <Label htmlFor="case-number" className="font-medium text-sm flex-shrink-0">
+            Case Number<span className="text-destructive">*</span>
+          </Label>
+          <div className="flex-1 flex gap-2">
+            <Input
+              id="case-number"
+              value={caseNumber}
+              onChange={(e) => setCaseNumber(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleCaseNumberSubmit();
+                }
+              }}
+              placeholder="Enter case number..."
+              disabled={isSubmittingCaseNumber}
+              className="flex-1 h-9"
+            />
+            <Button
+              type="button"
+              onClick={handleCaseNumberSubmit}
+              disabled={isSubmittingCaseNumber || !caseNumber.trim()}
+              size="icon"
+              className="h-9 w-9"
+            >
+              {isSubmittingCaseNumber ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Search className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground mt-1">
-          Enter case number and click search to look up case details
-        </p>
       </div>
 
       {/* Plaintiff Name - Side by Side Comparison */}
@@ -503,101 +497,119 @@ export function ExtractedDataPanel({
         )}
       </div>
 
-      {/* Disbursement Type - Searchable dropdown */}
-      <div className="p-3 rounded-md border bg-muted/30">
-        <Label className="mb-2 block font-medium">Disbursement Type</Label>
-        <Combobox
-          options={typeOptions}
-          value={selectedDisbursementType}
-          onValueChange={handleDisbursementTypeChange}
-          placeholder="Select disbursement type..."
-          searchPlaceholder="Search types..."
-          emptyText="No disbursement type found."
-          isLoading={isLoadingTypes}
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          {selectedDisbursementType
-            ? 'Disbursement type selected. Will be remembered for this vendor.'
-            : 'Select the type of disbursement for this document.'}
-        </p>
+      {/* Disbursement Type & Status - Side by Side */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Disbursement Type */}
+        <div className="p-3 rounded-md border bg-muted/30">
+          <Label className="mb-2 block font-medium text-sm">Disbursement Type</Label>
+          <Combobox
+            options={typeOptions}
+            value={selectedDisbursementType}
+            onValueChange={handleDisbursementTypeChange}
+            placeholder="Select type..."
+            searchPlaceholder="Search types..."
+            emptyText="No type found."
+            isLoading={isLoadingTypes}
+          />
+          {selectedDisbursementType && (
+            <p className="text-xs text-muted-foreground mt-1">Remembered per vendor</p>
+          )}
+        </div>
+
+        {/* Disbursement Status */}
+        <div className="p-3 rounded-md border bg-muted/30">
+          <Label className="mb-2 block font-medium text-sm">Disbursement Status</Label>
+          <Combobox
+            options={statusOptions}
+            value={selectedDisbursementStatus}
+            onValueChange={setSelectedDisbursementStatus}
+            placeholder="Select status..."
+            searchPlaceholder="Search statuses..."
+            emptyText="No status found."
+            isLoading={isLoadingStatuses}
+          />
+          {(documentType === 'Invoice' || documentType === 'Receipt') && (
+            <p className="text-xs text-muted-foreground mt-1">
+              Default: {documentType === 'Invoice' ? '"Issue Check"' : '"Paid"'}
+            </p>
+          )}
+        </div>
       </div>
 
-      {/* Disbursement Status - Searchable dropdown */}
-      <div className="p-3 rounded-md border bg-muted/30">
-        <Label className="mb-2 block font-medium">Disbursement Status</Label>
-        <Combobox
-          options={statusOptions}
-          value={selectedDisbursementStatus}
-          onValueChange={setSelectedDisbursementStatus}
-          placeholder="Select status..."
-          searchPlaceholder="Search statuses..."
-          emptyText="No status found."
-          isLoading={isLoadingStatuses}
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          {documentType === 'Invoice'
-            ? 'Default: "Issue Check" for invoices'
-            : documentType === 'Receipt'
-            ? 'Default: "Paid" for receipts'
-            : 'Select the status for this disbursement.'}
-        </p>
-      </div>
+      {/* Extracted Fields - Single Row Compact Layout */}
+      <div className="rounded-md border overflow-hidden">
+        <div className="bg-muted/50 px-3 py-2 border-b">
+          <Label className="font-medium text-sm">Extracted Fields</Label>
+        </div>
+        <div className="divide-y">
+          {fieldsToRender.map(({ key, title, value }) => {
+            const confidence = value?.confidence;
+            const reasoning = value?.reasoning;
+            const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
+            const displayValue = value?.value ?? '';
 
-      {/* Extracted Fields - Compact Grid Layout */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {fieldsToRender.map(({ key, title, value }) => {
-          const confidence = value?.confidence;
-          const reasoning = value?.reasoning;
-          const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
-          const displayValue = value?.value ?? '';
+            return (
+              <div
+                key={key}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2 transition-colors cursor-pointer',
+                  hoveredField === key
+                    ? 'bg-green-100 dark:bg-green-900/20'
+                    : 'hover:bg-muted/30'
+                )}
+                onMouseEnter={() => {
+                  if (hasBbox) {
+                    validateAndSetBbox(value.bbox, key, confidence);
+                  }
+                }}
+                onMouseLeave={() => {
+                  onFieldHover(null, null, null);
+                }}
+                title={reasoning || undefined}
+              >
+                {/* Field Label */}
+                <div className="w-28 flex-shrink-0">
+                  <span className={cn(
+                    'text-xs font-medium',
+                    hoveredField === key ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'
+                  )}>
+                    {title}
+                  </span>
+                </div>
 
-          return (
-            <div
-              key={key}
-              className={cn(
-                'p-3 rounded-md transition-colors border',
-                hoveredField === key
-                  ? 'bg-green-100 dark:bg-green-900/20 border-green-300 dark:border-green-700'
-                  : 'border-border'
-              )}
-              onMouseEnter={() => {
-                if (hasBbox) {
-                  validateAndSetBbox(value.bbox, key, confidence);
-                }
-              }}
-              onMouseLeave={() => {
-                onFieldHover(null, null, null);
-              }}
-            >
-              <div className="flex items-center justify-between mb-1">
-                <Label className={cn('font-medium text-sm', hoveredField === key && 'text-green-600 dark:text-green-400')}>
-                  {title}
-                </Label>
-                <div className="flex items-center gap-1">
+                {/* Field Value */}
+                <div className="flex-1 min-w-0">
+                  <span
+                    className="text-sm font-mono truncate block"
+                    title={String(displayValue)}
+                  >
+                    {String(displayValue) || '-'}
+                  </span>
+                </div>
+
+                {/* Badges */}
+                <div className="flex items-center gap-1 flex-shrink-0">
                   {confidence !== undefined && (
                     <ConfidenceBadge score={confidence} />
                   )}
                   {hasBbox && (
                     <Badge
                       variant="outline"
-                      className="text-xs cursor-pointer hover:bg-green-100 dark:hover:bg-green-900/20"
+                      className={cn(
+                        'text-xs h-5 px-1.5',
+                        hoveredField === key
+                          ? 'border-green-500 text-green-700 dark:text-green-400'
+                          : ''
+                      )}
                     >
-                      Located
+                      📍
                     </Badge>
                   )}
                 </div>
               </div>
-              <div className="text-sm font-mono bg-background/50 px-2 py-1 rounded border truncate" title={String(displayValue)}>
-                {String(displayValue) || '-'}
-              </div>
-              {reasoning && (
-                <p className="text-xs text-muted-foreground mt-1 italic line-clamp-1" title={reasoning}>
-                  {reasoning}
-                </p>
-              )}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </div>
   );
