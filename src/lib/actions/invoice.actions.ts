@@ -8,8 +8,12 @@
 import { revalidatePath } from 'next/cache';
 import { invoiceService } from '../services/invoice.service';
 import { getInvoiceDataUri } from '../storage/file-utils';
-import type { StoredInvoice } from '../domain/types';
+import type { StoredInvoice, ExtractedField } from '../domain/types';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
+import { getDb, initDb } from '../db';
+import { invoices } from '../db/schema';
+import { eq } from 'drizzle-orm';
+import { serializeMeta } from '../repositories/mappers/invoice.mapper';
 
 /**
  * Process a new invoice upload
@@ -140,11 +144,78 @@ export async function updateInvoiceCaseNumberAction(
     revalidatePath('/approvals');
     return { success: true };
   }, 'Failed to update case number');
-  
+
   // Unwrap the result to match the expected return type
   if (result.error) {
     return { success: false, error: result.error };
   }
   return result.data || { success: false, error: 'Unknown error' };
+}
+
+// Field name to database column mapping
+const fieldToColumnMap: Record<string, { valueCol: string; metaCol: string | null; isNumeric?: boolean }> = {
+  invoiceNumber: { valueCol: 'invoiceNumber', metaCol: 'invoiceNumberMeta' },
+  invoiceDate: { valueCol: 'invoiceDate', metaCol: 'invoiceDateMeta' },
+  vendorName: { valueCol: 'vendorName', metaCol: 'vendorNameMeta' },
+  vendorAddress: { valueCol: 'vendorAddress', metaCol: 'vendorAddressMeta' },
+  customerName: { valueCol: 'customerName', metaCol: 'customerNameMeta' },
+  totalAmount: { valueCol: 'totalAmount', metaCol: 'totalAmountMeta', isNumeric: true },
+  paymentTerms: { valueCol: 'paymentTerms', metaCol: 'paymentTermsMeta' },
+  amount: { valueCol: 'amount', metaCol: 'amountMeta', isNumeric: true },
+  clientName: { valueCol: 'clientName', metaCol: 'clientNameMeta' },
+  description: { valueCol: 'description', metaCol: 'descriptionMeta' },
+  dueDate: { valueCol: 'dueDate', metaCol: 'dueDateMeta' },
+};
+
+/**
+ * Update a single invoice field
+ * Persists the edited value and metadata to the database
+ */
+export async function updateInvoiceFieldAction(
+  invoiceId: string,
+  fieldName: string,
+  fieldValue: string,
+  isEdited: boolean = true
+): Promise<{ success: boolean; error?: string }> {
+  return withActionHandler(async () => {
+    await initDb();
+    const db = getDb();
+
+    const mapping = fieldToColumnMap[fieldName];
+    if (!mapping) {
+      throw new Error(`Unknown field: ${fieldName}`);
+    }
+
+    // Prepare the update data
+    const updateData: Record<string, any> = {
+      updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
+    };
+
+    // Set the value column
+    if (mapping.isNumeric) {
+      const numValue = parseFloat(fieldValue.replace(/[^0-9.-]/g, ''));
+      updateData[mapping.valueCol] = isNaN(numValue) ? null : numValue;
+    } else {
+      updateData[mapping.valueCol] = fieldValue || null;
+    }
+
+    // Set the metadata column (mark as user-edited, remove confidence)
+    if (mapping.metaCol) {
+      const meta: ExtractedField<string> = {
+        value: fieldValue,
+        reasoning: isEdited ? 'User edited' : undefined,
+        // No confidence for user-edited fields
+      };
+      updateData[mapping.metaCol] = serializeMeta(meta);
+    }
+
+    await db
+      .update(invoices)
+      .set(updateData)
+      .where(eq(invoices.id, invoiceId));
+
+    revalidatePath(`/invoices/${invoiceId}`);
+    return { success: true };
+  }, 'Failed to update invoice field');
 }
 
