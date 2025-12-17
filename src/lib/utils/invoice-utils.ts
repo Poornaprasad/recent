@@ -77,6 +77,20 @@ export function formatTotalAmount(value: unknown): string {
 }
 
 /**
+ * Formats an amount as currency (USD)
+ * Returns formatted string like "$1,234.56"
+ */
+export function formatCurrency(value: string | number | undefined | null): string {
+  if (value === undefined || value === null || value === '') return '$0.00';
+  const num = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]/g, '')) : value;
+  if (isNaN(num)) return '$0.00';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(num);
+}
+
+/**
  * Invoice filter options
  */
 export interface InvoiceFilters {
