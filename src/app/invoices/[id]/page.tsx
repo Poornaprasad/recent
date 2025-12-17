@@ -2,25 +2,23 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, ArrowRight, Download, MessageSquare, Flag, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Download, MessageSquare, Flag, Check, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
 import { useState, useEffect, useMemo } from 'react';
-import { type StoredInvoice } from '@/lib/domain/types';
+import { type StoredInvoice, type DocumentType } from '@/lib/domain/types';
 import { cn } from '@/lib/utils/utils';
-import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, updateInvoiceCaseNumberAction, completeVendorSetupAction, getInvoicesAction } from '@/lib/actions/index';
+import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, completeVendorSetupAction, getInvoicesAction } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { VendorSetupDialog } from '@/components/dialogs/vendor-setup-dialog';
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
-import { FieldsList } from '@/components/invoice/fields-list';
+import { ExtractedDataPanel } from '@/components/invoice/extracted-data-panel';
 import { decodeId, encodeId } from '@/lib/utils/id-utils';
-import { getDocumentTypeBadgeClass, getDocumentTypeDescription } from '@/lib/utils/document-type-utils';
+import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
 import { formatTotalAmount } from '@/lib/utils/invoice-utils';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import { useAuthStore } from '@/hooks/use-auth-store';
@@ -48,7 +46,6 @@ export default function InvoiceDetailPage() {
   const [isVendorSetupDialogOpen, setIsVendorSetupDialogOpen] = useState(false);
   const [pendingVendor, setPendingVendor] = useState<any>(null);
   const [isProcessingVendor, setIsProcessingVendor] = useState(false);
-  const [isUpdatingCaseNumber, setIsUpdatingCaseNumber] = useState(false);
   const [invoiceList, setInvoiceList] = useState<StoredInvoice[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(autoAdvance);
@@ -434,6 +431,7 @@ export default function InvoiceDetailPage() {
         </div>
       </div>
       <div className="flex-1 flex flex-row overflow-hidden">
+        {/* Document Viewer - Left Panel */}
         <InvoiceViewer
           invoiceDataUri={invoiceDataUri}
           invoiceId={id}
@@ -441,234 +439,132 @@ export default function InvoiceDetailPage() {
           hoveredField={hoveredField}
           hoveredConfidence={hoveredConfidence}
         />
-        <div className="w-1/2">
-          <ScrollArea className="h-full">
-            <div className="p-4 sm:p-6 lg:p-8">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Extracted Data</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {invoiceData.isDuplicate && invoiceData.duplicateReason && (
-                    <div className="p-3 rounded-md border border-destructive/50 bg-destructive/10">
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className="font-medium text-destructive">Duplicate Alert</Label>
-                        <Badge variant="destructive">
-                          Duplicate
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-destructive/80 mt-2">
-                        {invoiceData.duplicateReason}
-                      </p>
-                    </div>
-                  )}
-                  {invoiceData.vendorRequires1099 && (
-                    <div className="p-3 rounded-md border border-destructive/50 bg-destructive/10">
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className="font-medium text-destructive">1099 Request Required</Label>
-                        <div className="flex gap-2">
-                          <Badge variant="destructive">
-                            1099 Required
-                          </Badge>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setIsVendorSetupDialogOpen(true)}
-                          >
-                            Complete Setup
-                          </Button>
-                        </div>
-                      </div>
-                      <p className="text-xs text-destructive/80 mt-2">
-                        {invoiceData.vendorName?.value
-                          ? `Vendor "${invoiceData.vendorName.value}" is not in your vendor list. Please complete vendor setup to proceed with this invoice.`
-                          : 'This vendor is not in your vendor list. Please complete vendor setup to proceed.'}
-                      </p>
-                    </div>
-                  )}
-                  {invoiceData.hasAmountAnomaly && invoiceData.amountAnomalyReason && (
-                    <div className="p-3 rounded-md border border-orange-500/50 bg-orange-500/10">
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className="font-medium text-orange-700 dark:text-orange-400">Amount Anomaly Detected</Label>
-                        <Badge variant="outline" className="border-orange-500 text-orange-700 dark:text-orange-400">
-                          Anomaly
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-orange-700/80 dark:text-orange-400/80 mt-2">
-                        {invoiceData.amountAnomalyReason}
-                      </p>
-                      {invoiceData.expectedAmount !== undefined && (
-                        <p className="text-xs text-orange-700/60 dark:text-orange-400/60 mt-1">
-                          Expected: ${invoiceData.expectedAmount.toFixed(2)} |
-                          Current: ${formatTotalAmount(invoiceData.totalAmount?.value)}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  {invoiceData.isRecurring && invoiceData.recurringPattern && (
-                    <div className="p-3 rounded-md border border-blue-500/50 bg-blue-500/10">
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className="font-medium text-blue-700 dark:text-blue-400">Recurring Bill</Label>
-                        <Badge variant="outline" className="border-blue-500 text-blue-700 dark:text-blue-400">
-                          {invoiceData.recurringPattern.charAt(0).toUpperCase() + invoiceData.recurringPattern.slice(1)}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-blue-700/80 dark:text-blue-400/80 mt-2">
-                        This appears to be a {invoiceData.recurringPattern} recurring bill from {invoiceData.vendorName?.value || 'this vendor'}.
-                      </p>
-                    </div>
-                  )}
-                  {invoiceData.documentType && (
-                    <div className="p-3 rounded-md border bg-muted/50">
-                      <div className="flex items-center justify-between mb-2">
-                        <Label className="font-medium">Document Type</Label>
-                        <Badge
-                          variant="outline"
-                          className={cn(getDocumentTypeBadgeClass(invoiceData.documentType))}
-                        >
-                          {invoiceData.documentType}
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-2 italic">
-                        {getDocumentTypeDescription(invoiceData.documentType)}
-                      </p>
-                    </div>
-                  )}
-                  <div className="p-3 rounded-md border bg-muted/30">
-                    <Label htmlFor="case-number" className="mb-2 block">
-                      Case Number
-                      {(invoiceData.clientName || invoiceData.customerName) && (
-                        <span className="text-destructive ml-1">*</span>
-                      )}
-                    </Label>
-                    <Input
-                      id="case-number"
-                      value={invoiceData.caseNumber || ''}
-                      disabled={isUpdatingCaseNumber}
-                      onChange={async (e) => {
-                        const caseNumber = e.target.value;
-                        if (invoiceData) {
-                          setIsUpdatingCaseNumber(true);
-                          try {
-                            const result = await updateInvoiceCaseNumberAction(invoiceData.id, caseNumber);
-                            if (result.success) {
-                              const updatedResult = await getInvoiceByIdAction(invoiceData.id);
-                              if (updatedResult.data) {
-                                setInvoiceData(updatedResult.data);
-                                const stateName = updatedResult.data.state === 'CA' ? 'California' : updatedResult.data.state === 'NY' ? 'New York' : null;
-                                
-                                // Check if plaintiff name was updated
-                                const hadPlaintiffName = invoiceData.clientName || invoiceData.customerName;
-                                const hasPlaintiffName = updatedResult.data.clientName || updatedResult.data.customerName;
-                                const plaintiffNameUpdated = !hadPlaintiffName && hasPlaintiffName;
-                                
-                                let description = stateName ? `Case number saved. State auto-detected: ${stateName}.` : 'The case number has been saved.';
-                                if (plaintiffNameUpdated) {
-                                  const plaintiffName = updatedResult.data.clientName?.value || updatedResult.data.customerName?.value;
-                                  description += ` Plaintiff name "${plaintiffName}" fetched from case info.`;
-                                }
-                                
-                                toast({
-                                  title: 'Case Number Updated',
-                                  description: description,
-                                });
-                              } else {
-                                toast({
-                                  title: 'Case Number Updated',
-                                  description: 'The case number has been saved.',
-                                });
-                              }
-                            } else {
-                              toast({
-                                variant: 'destructive',
-                                title: 'Update Failed',
-                                description: result.error || 'Failed to update case number.',
-                              });
-                            }
-                          } catch (error) {
-                            toast({
-                              variant: 'destructive',
-                              title: 'Update Failed',
-                              description: error instanceof Error ? error.message : 'Failed to update case number.',
-                            });
-                          } finally {
-                            setIsUpdatingCaseNumber(false);
-                          }
-                        }
-                      }}
-                      placeholder="Enter case number..."
-                    />
-                    {isUpdatingCaseNumber && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Fetching case info...
-                      </p>
-                    )}
-                    {(invoiceData.clientName || invoiceData.customerName) && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Required when plaintiff name is present
-                      </p>
-                    )}
+
+        {/* Extracted Data Panel - Right Panel (No Scroll) */}
+        <div className="w-1/2 flex flex-col overflow-y-auto bg-background">
+          <div className="flex-1 p-4">
+            {/* Alerts Section - Compact */}
+            <div className="space-y-2 mb-4">
+              {invoiceData.isDuplicate && invoiceData.duplicateReason && (
+                <div className="p-2 rounded-md border border-destructive/50 bg-destructive/10 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="destructive" className="text-xs">Duplicate</Badge>
+                    <span className="text-xs text-destructive/80">{invoiceData.duplicateReason}</span>
                   </div>
-                  <FieldsList
-                    invoiceData={invoiceData}
-                    hoveredField={hoveredField}
-                    onFieldHover={handleFieldHover}
-                  />
-                  {invoiceData.comment && (
-                    <div className="p-3 rounded-md border bg-muted/50">
-                      <Label className="font-medium mb-2 block">Comment</Label>
-                      <p className="text-sm text-muted-foreground whitespace-pre-wrap">{invoiceData.comment}</p>
-                    </div>
+                </div>
+              )}
+              {invoiceData.vendorRequires1099 && (
+                <div className="p-2 rounded-md border border-destructive/50 bg-destructive/10 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="destructive" className="text-xs">1099 Required</Badge>
+                    <span className="text-xs text-destructive/80">
+                      {invoiceData.vendorName?.value
+                        ? `"${invoiceData.vendorName.value}" not in vendor list`
+                        : 'Vendor not in list'}
+                    </span>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={() => setIsVendorSetupDialogOpen(true)}>
+                    Setup
+                  </Button>
+                </div>
+              )}
+              {invoiceData.hasAmountAnomaly && invoiceData.amountAnomalyReason && (
+                <div className="p-2 rounded-md border border-orange-500/50 bg-orange-500/10 flex items-center gap-2">
+                  <Badge variant="outline" className="border-orange-500 text-orange-700 dark:text-orange-400 text-xs">Anomaly</Badge>
+                  <span className="text-xs text-orange-700/80 dark:text-orange-400/80">{invoiceData.amountAnomalyReason}</span>
+                  {invoiceData.expectedAmount !== undefined && (
+                    <span className="text-xs text-orange-700/60 dark:text-orange-400/60 ml-auto">
+                      Expected: ${invoiceData.expectedAmount.toFixed(2)} | Current: ${formatTotalAmount(invoiceData.totalAmount?.value)}
+                    </span>
                   )}
-                </CardContent>
-                <CardFooter className="justify-end gap-2">
-                  {invoiceData.status === 'Review' ? (
-                    <>
-                      <Button variant="outline" size="lg" onClick={() => handleStatusUpdate('Draft')} disabled={isUpdating || invoiceData.vendorRequires1099}>
-                        <X className="mr-2 h-4 w-4" />
-                        Reject
-                      </Button>
-                      <Button size="lg" onClick={() => handleStatusUpdate('Pending')} disabled={isUpdating || invoiceData.vendorRequires1099} title={invoiceData.vendorRequires1099 ? 'Vendor must be set up before approving' : ''}>
-                        <Check className="mr-2 h-4 w-4" />
-                        Approve
-                      </Button>
-                      {invoiceData.vendorRequires1099 && (
-                        <p className="text-xs text-muted-foreground self-center">
-                          Complete vendor setup to approve
-                        </p>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <Button 
-                        variant="outline" 
-                        onClick={handleFlagForReview} 
-                        disabled={isUpdating || invoiceData.vendorRequires1099 || invoiceData.requiresEscalation === true} 
-                        title={
-                          invoiceData.vendorRequires1099 
-                            ? 'Vendor must be set up first' 
-                            : invoiceData.requiresEscalation === true
-                            ? 'Escalated invoices cannot be flagged for review. They require role-based approval.'
-                            : ''
-                        }
-                      >
-                        <Flag className="mr-2 h-4 w-4" />
-                        Flag for Review
-                      </Button>
-                      <Button variant="outline" onClick={() => setIsCommentDialogOpen(true)}>
-                        <MessageSquare className="mr-2 h-4 w-4" />
-                        Add Comment
-                      </Button>
-                      <Button>
-                        <Download className="mr-2 h-4 w-4" />
-                        Download PDF
-                      </Button>
-                    </>
-                  )}
-                </CardFooter>
-              </Card>
+                </div>
+              )}
+              {invoiceData.isRecurring && invoiceData.recurringPattern && (
+                <div className="p-2 rounded-md border border-blue-500/50 bg-blue-500/10 flex items-center gap-2">
+                  <Badge variant="outline" className="border-blue-500 text-blue-700 dark:text-blue-400 text-xs">
+                    {invoiceData.recurringPattern.charAt(0).toUpperCase() + invoiceData.recurringPattern.slice(1)}
+                  </Badge>
+                  <span className="text-xs text-blue-700/80 dark:text-blue-400/80">
+                    Recurring bill from {invoiceData.vendorName?.value || 'this vendor'}
+                  </span>
+                </div>
+              )}
             </div>
-          </ScrollArea>
+
+            {/* Main Extracted Data Panel */}
+            <Card className="flex-1">
+              <CardHeader className="py-3 px-4">
+                <CardTitle className="text-lg">Extracted Data</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <ExtractedDataPanel
+                  invoiceData={invoiceData}
+                  hoveredField={hoveredField}
+                  onFieldHover={handleFieldHover}
+                  onInvoiceUpdate={setInvoiceData}
+                  onDocumentTypeChange={(newType) => {
+                    setInvoiceData(prev => prev ? { ...prev, documentType: newType } : null);
+                  }}
+                />
+
+                {/* Comment Section */}
+                {invoiceData.comment && (
+                  <div className="p-3 mx-4 mb-4 rounded-md border bg-muted/50">
+                    <Label className="font-medium mb-1 block text-sm">Comment</Label>
+                    <p className="text-sm text-muted-foreground whitespace-pre-wrap">{invoiceData.comment}</p>
+                  </div>
+                )}
+              </CardContent>
+
+              {/* Action Buttons */}
+              <CardFooter className="justify-end gap-2 py-3 px-4 border-t">
+                {invoiceData.status === 'Review' ? (
+                  <>
+                    <Button variant="outline" onClick={() => handleStatusUpdate('Draft')} disabled={isUpdating || invoiceData.vendorRequires1099}>
+                      <X className="mr-2 h-4 w-4" />
+                      Reject
+                    </Button>
+                    <Button onClick={() => handleStatusUpdate('Pending')} disabled={isUpdating || invoiceData.vendorRequires1099} title={invoiceData.vendorRequires1099 ? 'Vendor must be set up before approving' : ''}>
+                      <Check className="mr-2 h-4 w-4" />
+                      Approve
+                    </Button>
+                    {invoiceData.vendorRequires1099 && (
+                      <p className="text-xs text-muted-foreground self-center">
+                        Complete vendor setup to approve
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleFlagForReview}
+                      disabled={isUpdating || invoiceData.vendorRequires1099 || invoiceData.requiresEscalation === true}
+                      title={
+                        invoiceData.vendorRequires1099
+                          ? 'Vendor must be set up first'
+                          : invoiceData.requiresEscalation === true
+                          ? 'Escalated invoices cannot be flagged for review'
+                          : ''
+                      }
+                    >
+                      <Flag className="mr-2 h-4 w-4" />
+                      Flag
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setIsCommentDialogOpen(true)}>
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      Comment
+                    </Button>
+                    <Button size="sm">
+                      <Download className="mr-2 h-4 w-4" />
+                      Download
+                    </Button>
+                  </>
+                )}
+              </CardFooter>
+            </Card>
+          </div>
         </div>
       </div>
 

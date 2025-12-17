@@ -1,6 +1,6 @@
 /**
  * Disbursement Type Service
- * Handles fetching disbursement types from SmartAdvocate API and managing case-vendor mappings
+ * Handles fetching disbursement types and statuses from SmartAdvocate API and managing case-vendor mappings
  */
 
 import 'server-only';
@@ -10,21 +10,28 @@ import { getDatabase } from '../db/context';
 import { caseVendorDisbursementTypes } from '../db/schema';
 
 /**
+ * Type definition for disbursement type/status from SmartAdvocate API
+ */
+export interface DisbursementOption {
+  id: number;
+  description: string;
+}
+
+/**
  * Fetch disbursement types from SmartAdvocate API
  * Types are common across all cases
+ * Returns array of objects with id and description
  */
-export async function fetchDisbursementTypesFromApi(): Promise<string[]> {
+export async function fetchDisbursementTypesFromApi(): Promise<DisbursementOption[]> {
   try {
-    // Fetch common disbursement types (not case-specific)
     const apiUrl = `https://app.smartadvocate.com/CaseSyncAPI/case/Disbursement/types`;
-    
+
     const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
-        // Add authentication headers if needed
-        // 'Authorization': `Bearer ${token}`,
       },
+      next: { revalidate: 3600 }, // Cache for 1 hour
     });
 
     if (!response.ok) {
@@ -33,21 +40,77 @@ export async function fetchDisbursementTypesFromApi(): Promise<string[]> {
     }
 
     const data = await response.json();
-    
-    // Handle different possible response formats
+
+    // Handle response format: array of { id, description }
     if (Array.isArray(data)) {
-      return data.map((item: any) => typeof item === 'string' ? item : item.name || item.type || String(item));
-    } else if (data.types && Array.isArray(data.types)) {
-      return data.types.map((item: any) => typeof item === 'string' ? item : item.name || item.type || String(item));
-    } else if (data.data && Array.isArray(data.data)) {
-      return data.data.map((item: any) => typeof item === 'string' ? item : item.name || item.type || String(item));
+      return data.map((item: any) => ({
+        id: item.id ?? 0,
+        description: item.description || item.name || item.type || String(item),
+      }));
     }
-    
+
     return [];
   } catch (error) {
     console.error('Error fetching disbursement types from API:', error);
     return [];
   }
+}
+
+/**
+ * Fetch disbursement statuses from SmartAdvocate API
+ * Statuses are common across all cases
+ * Returns array of objects with id and description
+ */
+export async function fetchDisbursementStatusesFromApi(): Promise<DisbursementOption[]> {
+  try {
+    const apiUrl = `https://app.smartadvocate.com/CaseSyncAPI/case/Disbursement/statuses`;
+
+    const response = await fetch(apiUrl, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      next: { revalidate: 3600 }, // Cache for 1 hour
+    });
+
+    if (!response.ok) {
+      console.error(`Failed to fetch disbursement statuses: ${response.status} ${response.statusText}`);
+      return [];
+    }
+
+    const data = await response.json();
+
+    // Handle response format: array of { id, description }
+    if (Array.isArray(data)) {
+      return data.map((item: any) => ({
+        id: item.id ?? 0,
+        description: item.description || item.name || item.status || String(item),
+      }));
+    }
+
+    return [];
+  } catch (error) {
+    console.error('Error fetching disbursement statuses from API:', error);
+    return [];
+  }
+}
+
+/**
+ * Get default status based on document type
+ * Invoice -> "Issue Check" (id: 1)
+ * Receipt -> "Paid" (id: 3)
+ */
+export function getDefaultStatusForDocumentType(documentType: string | undefined): DisbursementOption | null {
+  if (!documentType) return null;
+
+  const type = documentType.toLowerCase();
+  if (type === 'invoice') {
+    return { id: 1, description: 'Issue Check' };
+  }
+  if (type === 'receipt') {
+    return { id: 3, description: 'Paid' };
+  }
+  return null;
 }
 
 /**
