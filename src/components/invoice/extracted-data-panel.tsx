@@ -26,7 +26,16 @@ import {
   updateInvoiceCaseNumberAction,
   lookupCaseInfoAction,
   updateInvoiceFieldAction,
+  lookupContactsAction,
 } from '@/lib/actions/index';
+import type { ContactLookupResult } from '@/lib/crm/smartadvocate/types';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
 
@@ -120,6 +129,13 @@ export function ExtractedDataPanel({
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
   const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+
+  // Vendor contact lookup state
+  const [isContactLookupOpen, setIsContactLookupOpen] = useState(false);
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
+  const [contactSearchResults, setContactSearchResults] = useState<ContactLookupResult[]>([]);
+  const [isSearchingContacts, setIsSearchingContacts] = useState(false);
+  const [contactSearchError, setContactSearchError] = useState<string>('');
 
   // Initialize original field data and detect already-edited fields on mount
   useEffect(() => {
@@ -469,6 +485,126 @@ export function ExtractedDataPanel({
     ? normalizeNameForComparison(aiExtractedPlaintiffName) === normalizeNameForComparison(casePlaintiffName)
     : false;
 
+  // Handle vendor contact lookup
+  const handleVendorContactLookup = async () => {
+    const vendorName = invoiceData.vendorName?.value;
+    if (!vendorName) {
+      toast({
+        variant: 'destructive',
+        title: 'Vendor Name Required',
+        description: 'Please ensure vendor name is extracted from the invoice.',
+      });
+      return;
+    }
+
+    setIsContactLookupOpen(true);
+    setContactSearchQuery(vendorName);
+    await searchContacts(vendorName);
+  };
+
+  const searchContacts = async (query: string) => {
+    if (!query.trim()) {
+      setContactSearchResults([]);
+      return;
+    }
+
+    setIsSearchingContacts(true);
+    setContactSearchError('');
+
+    try {
+      // Try to parse name into first/last name if it contains spaces
+      const nameParts = query.trim().split(/\s+/);
+      const params: { name?: string; firstName?: string; lastName?: string } = {};
+
+      if (nameParts.length === 1) {
+        // Single word - search by name
+        params.name = nameParts[0];
+      } else if (nameParts.length >= 2) {
+        // Multiple words - use first as firstName, rest as lastName
+        params.firstName = nameParts[0];
+        params.lastName = nameParts.slice(1).join(' ');
+      }
+
+      const result = await lookupContactsAction({
+        ...params,
+        rowLimit: 20,
+      });
+
+      if (result.error) {
+        setContactSearchError(result.error);
+        setContactSearchResults([]);
+      } else if (result.data) {
+        setContactSearchResults(result.data);
+        if (result.data.length === 0) {
+          setContactSearchError('No contacts found matching the search criteria.');
+        }
+      }
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : 'Failed to search contacts';
+      setContactSearchError(errorMsg);
+      setContactSearchResults([]);
+    } finally {
+      setIsSearchingContacts(false);
+    }
+  };
+
+  const handleSelectContact = async (contact: ContactLookupResult) => {
+    const contactName = contact.name || (contact.firstName && contact.lastName 
+      ? `${contact.firstName} ${contact.lastName}`.trim() 
+      : contact.firstName || contact.lastName || '');
+
+    if (!contactName) {
+      toast({
+        variant: 'destructive',
+        title: 'Invalid Contact',
+        description: 'Contact does not have a valid name.',
+      });
+      return;
+    }
+
+    // Update the vendor name field with the selected contact name
+    setIsSaving(true);
+    try {
+      const result = await updateInvoiceFieldAction(invoiceData.id, 'vendorName', contactName, true);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to update vendor name');
+      }
+
+      // Update local state
+      const updatedInvoice = { ...invoiceData };
+      if (updatedInvoice.vendorName) {
+        updatedInvoice.vendorName = {
+          ...updatedInvoice.vendorName,
+          value: contactName,
+          confidence: undefined,
+          reasoning: 'User selected from CRM',
+        };
+      }
+
+      // Track that this field was edited
+      setEditedFields(prev => new Set(prev).add('vendorName'));
+
+      onInvoiceUpdate(updatedInvoice);
+      setIsContactLookupOpen(false);
+      setContactSearchResults([]);
+      setContactSearchQuery('');
+
+      toast({
+        title: 'Vendor Name Updated',
+        description: `Vendor name updated to "${contactName}" from CRM.`,
+      });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Update Failed',
+        description: error instanceof Error ? error.message : 'Failed to update vendor name.',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Prepare fields to render (exclude system fields and special fields handled separately)
   const excludedFields = [
     'id', 'invoiceDataUri', 'status', 'isDuplicate', 'duplicateReason',
@@ -481,6 +617,7 @@ export function ExtractedDataPanel({
     'requiresSpecialHandling', 'specialHandlingReason', 'vendorRequires1099',
     'comment', 'paymentType', 'clientName', 'customerName', // plaintiff name handled separately
     'totalAmount', // only show amount field
+    'vendorName', // vendor name handled separately with CRM lookup
   ];
 
   const fieldsToRender = Object.entries(invoiceData)
@@ -559,6 +696,30 @@ export function ExtractedDataPanel({
               {documentType}
             </Badge>
           )}
+        </div>
+      </div>
+
+      {/* Vendor Name - Single Line with CRM lookup */}
+      <div className="p-3 rounded-md border bg-muted/30">
+        <div className="flex items-center gap-3">
+          <Label className="font-medium text-sm flex-shrink-0 w-32">Vendor Name</Label>
+          <div className="flex-1 flex items-center gap-2">
+            <span className="text-sm font-medium flex-1 truncate">
+              {invoiceData.vendorName?.value || 'Not found'}
+            </span>
+            {invoiceData.vendorName?.value && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleVendorContactLookup}
+                className="h-8 gap-1.5"
+              >
+                <Search className="h-3.5 w-3.5" />
+                Lookup in CRM
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -810,7 +971,7 @@ export function ExtractedDataPanel({
 
       {/* Extracted Fields - Editable Single Row Layout */}
       <div className="rounded-md border overflow-hidden divide-y">
-        {fieldsToRender.map(({ key, title, value }) => {
+        {fieldsToRender.map(({ key, title, value }, index) => {
           const confidence = value?.confidence;
           const reasoning = value?.reasoning;
           const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
@@ -822,9 +983,12 @@ export function ExtractedDataPanel({
           const isAmountField = key === 'amount';
           const displayValue = isAmountField ? formatCurrency(rawValue) : String(rawValue);
 
+          // Ensure unique key by combining field key with index as fallback
+          const uniqueKey = `field-${key}-${index}`;
+
           return (
             <div
-              key={key}
+              key={uniqueKey}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 transition-colors group',
                 hoveredField === key
@@ -962,6 +1126,120 @@ export function ExtractedDataPanel({
           );
         })}
       </div>
+
+      {/* Contact Lookup Dialog */}
+      <Dialog open={isContactLookupOpen} onOpenChange={setIsContactLookupOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Lookup Vendor in CRM</DialogTitle>
+            <DialogDescription>
+              Search for vendor contacts in SmartAdvocate CRM to ensure accurate vendor name.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Search Input */}
+            <div className="flex gap-2">
+              <Input
+                value={contactSearchQuery}
+                onChange={(e) => setContactSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    searchContacts(contactSearchQuery);
+                  }
+                }}
+                placeholder="Search by name, first name, or last name..."
+                className="flex-1"
+              />
+              <Button
+                onClick={() => searchContacts(contactSearchQuery)}
+                disabled={isSearchingContacts || !contactSearchQuery.trim()}
+              >
+                {isSearchingContacts ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+
+            {/* Error Message */}
+            {contactSearchError && (
+              <div className="flex items-start gap-2 p-2 rounded bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <p className="text-sm">{contactSearchError}</p>
+              </div>
+            )}
+
+            {/* Search Results */}
+            {contactSearchResults.length > 0 && (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                <Label className="text-sm font-medium">Select a contact:</Label>
+                <div className="space-y-1">
+                  {contactSearchResults.map((contact, index) => {
+                    const contactName = contact.name || (contact.firstName && contact.lastName 
+                      ? `${contact.firstName} ${contact.lastName}`.trim() 
+                      : contact.firstName || contact.lastName || 'Unknown');
+                    
+                    // Use a composite key to ensure uniqueness even if contactId is 0 or duplicate
+                    const uniqueKey = `contact-${contact.contactId || 'unknown'}-${index}-${contactName}`;
+                    
+                    return (
+                      <div
+                        key={uniqueKey}
+                        className="p-3 rounded-md border hover:bg-muted/50 cursor-pointer transition-colors"
+                        onClick={() => handleSelectContact(contact)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{contactName}</div>
+                            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                              {contact.contactType && (
+                                <div>Type: {contact.contactType}</div>
+                              )}
+                              {contact.email && (
+                                <div>Email: {contact.email}</div>
+                              )}
+                              {contact.phone && (
+                                <div>Phone: {contact.phone}</div>
+                              )}
+                              {contact.address && (
+                                <div>Address: {contact.address}</div>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectContact(contact);
+                            }}
+                            disabled={isSaving}
+                          >
+                            {isSaving ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              'Select'
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!isSearchingContacts && contactSearchResults.length === 0 && !contactSearchError && (
+              <div className="text-center py-8 text-muted-foreground text-sm">
+                Enter a search query and click search to find contacts in CRM.
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

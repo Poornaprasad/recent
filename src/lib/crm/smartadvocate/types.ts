@@ -185,3 +185,29 @@ export interface DisbursementOption {
   id: number;
   description: string;
 }
+
+/**
+ * Contact lookup result from SmartAdvocate API
+ */
+export interface ContactLookupResult {
+  contactId: number;
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  contactType?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Parameters for contact lookup
+ */
+export interface ContactLookupParams {
+  name?: string;
+  firstName?: string;
+  lastName?: string;
+  firstPage?: number;
+  rowLimit?: number;
+}

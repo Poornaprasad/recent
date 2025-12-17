@@ -76,3 +76,7 @@ export {
   lookupCaseInfoAction,
 } from './case.actions';
 
+export {
+  lookupContactsAction,
+} from './contact.actions';
+
