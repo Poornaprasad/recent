@@ -104,12 +104,17 @@ export class VendorService {
    * 1. Vendors with addresses that are NOT in the vendor list
    * 2. Vendors in the vendor list that require 1099
    * 3. Invoices flagged with vendorRequires1099
+   * 
+   * W9 Tracking Rules:
+   * - Only tracks invoices (documentType === 'Invoice'), excludes receipts
+   * - Calculates totals per financial year (calendar year)
+   * - Only flags vendors that cross $600 threshold in a financial year
    */
   async getVendorInvoicesFor1099(): Promise<Array<{
     vendorName: string;
     vendor?: Vendor;
     totalAmount: number;
-    isBelowThreshold: boolean; // true if total < $600
+    isBelowThreshold: boolean; // true if total < $600 in any financial year
     invoices: Array<{
       invoice: StoredInvoice;
       caseNumber?: string;
@@ -135,11 +140,34 @@ export class VendorService {
       vendorMap.set(v.name.toLowerCase(), v);
     });
     
-    // Group invoices by vendor name (case-insensitive)
+    // Helper function to get financial year (calendar year) from invoice date
+    const getFinancialYear = (invoiceDate: string | null | undefined): number | null => {
+      if (!invoiceDate) return null;
+      try {
+        const date = new Date(invoiceDate);
+        if (isNaN(date.getTime())) return null;
+        return date.getFullYear();
+      } catch {
+        return null;
+      }
+    };
+    
+    // Group invoices by vendor name (case-insensitive) and filter only Invoice document types
     const vendorInvoiceMap = new Map<string, StoredInvoice[]>();
     
-    // Process all invoices
+    // Process all invoices - ONLY include Invoice document types (exclude Receipts)
     for (const invoice of allInvoices) {
+      // Skip receipts - only track invoices for W9
+      if (invoice.documentType === 'Receipt') {
+        continue;
+      }
+      
+      // Only process invoices with documentType === 'Invoice' or undefined/null (legacy invoices)
+      // If documentType is explicitly set to something other than 'Invoice', skip it
+      if (invoice.documentType && invoice.documentType !== 'Invoice') {
+        continue;
+      }
+      
       const vendorName = invoice.vendorName?.value;
       if (!vendorName) continue;
       
@@ -193,26 +221,56 @@ export class VendorService {
       // Get the actual vendor name (preserve case from first invoice or vendor)
       const actualVendorName = vendor?.name || invoices[0]?.vendorName?.value || vendorNameLower;
       
-      // Calculate total amount
+      // Group invoices by financial year and calculate totals per year
+      const yearTotals = new Map<number, number>();
+      
+      for (const inv of invoices) {
+        const invoiceDate = typeof inv.invoiceDate === 'object' && inv.invoiceDate?.value 
+          ? inv.invoiceDate.value 
+          : inv.invoiceDate;
+        const financialYear = getFinancialYear(invoiceDate);
+        
+        if (financialYear !== null) {
+          const amount = parseInvoiceAmount(inv.totalAmount?.value || inv.amount?.value);
+          const currentTotal = yearTotals.get(financialYear) || 0;
+          yearTotals.set(financialYear, currentTotal + (amount || 0));
+        }
+      }
+      
+      // Calculate overall total amount (sum of all invoices across all years)
       const totalAmount = invoices.reduce((sum, inv) => {
         const amount = parseInvoiceAmount(inv.totalAmount?.value || inv.amount?.value);
         return sum + (amount || 0);
       }, 0);
-      
-      // Check if below $600 threshold
-      const isBelowThreshold = totalAmount < 600;
       
       // Get 1099/W9 status
       // If vendor is not in vendor list, default to 'Required'
       const form1099Status = vendor?.form1099Status || (vendor ? undefined : 'Required');
       const w9Status = vendor?.w9Status;
       
-      // Check if can process invoices (1099/W9 received or tracked)
-      // If vendor is not in vendor list, cannot process until added
+      // Check if W9 is received or tax ID exists - if so, no need to track threshold
+      const hasW9Received = w9Status === 'Received';
+      const hasTaxId = vendor?.taxId && vendor.taxId.trim() !== '';
+      const noNeedToTrack = hasW9Received || hasTaxId;
+      
+      // Check if vendor crosses $600 threshold in ANY financial year
+      // If any financial year has total >= $600, vendor requires W9 tracking
+      // BUT: If W9 is received or tax ID exists, no need to track threshold (set to false)
+      const hasYearAboveThreshold = Array.from(yearTotals.values()).some(yearTotal => yearTotal >= 600);
+      const isBelowThreshold = noNeedToTrack ? false : !hasYearAboveThreshold;
+      
+      // Check if can process invoices
+      // Rules:
+      // 1. If vendor is not in vendor list, cannot process until added
+      // 2. If W9 is received or tax ID exists, can always process (no threshold tracking)
+      // 3. If cumulative total crosses $600 in any financial year AND W9 is not received, cannot process
+      // 4. Otherwise (below threshold or W9 received), can process
       const canProcessInvoices = vendor ? (
-        form1099Status === 'Received' || 
-        form1099Status === 'Tracked' ||
-        w9Status === 'Received'
+        noNeedToTrack || // W9 received or tax ID exists - can always process
+        !hasYearAboveThreshold || // Below $600 threshold - can process
+        (form1099Status === 'Received' || 
+         form1099Status === 'Tracked' ||
+         w9Status === 'Received') // Legacy: W9/1099 received - can process
       ) : false; // Cannot process if vendor not in list
       
       // Build invoice details with case numbers

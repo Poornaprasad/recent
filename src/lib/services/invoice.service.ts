@@ -273,6 +273,7 @@ export class InvoiceService {
   /**
    * Update invoice status
    * Prevents approving invoices if vendor requires 1099/W9 and forms are not received/tracked
+   * Also blocks approval if cumulative invoices in financial year cross $600 threshold
    */
   async updateStatus(id: string, status: StoredInvoice['status']): Promise<{ success: boolean; error?: string }> {
     // If approving (status = 'Pending'), check 1099/W9 requirements
@@ -282,26 +283,113 @@ export class InvoiceService {
         return { success: false, error: 'Invoice not found' };
       }
 
+      // Skip W9 check for receipts - only applies to invoices
+      if (invoice.documentType === 'Receipt') {
+        await updateInvoiceStatus(id, status);
+        return { success: true };
+      }
+
+      // Only check W9 requirements for Invoice document types
+      if (invoice.documentType && invoice.documentType !== 'Invoice') {
+        await updateInvoiceStatus(id, status);
+        return { success: true };
+      }
+
       const vendorName = invoice.vendorName?.value;
       if (vendorName) {
         // Check if vendor requires 1099/W9
         const vendor = await findVendorByName(vendorName);
         
-        if (vendor && vendor.requires1099) {
-          // Check if 1099/W9 is received or tracked
-          const form1099Status = vendor.form1099Status;
-          const w9Status = vendor.w9Status;
+        // Check if W9 is received or tax ID exists
+        const hasW9Received = vendor?.w9Status === 'Received';
+        const hasTaxId = vendor?.taxId && vendor.taxId.trim() !== '';
+        const noNeedToTrack = hasW9Received || hasTaxId;
+        
+        // If vendor requires 1099/W9 and W9 is not received/tax ID doesn't exist, check threshold
+        if (vendor && vendor.requires1099 && !noNeedToTrack) {
+          // Get financial year from invoice date
+          const invoiceDate = typeof invoice.invoiceDate === 'object' && invoice.invoiceDate?.value 
+            ? invoice.invoiceDate.value 
+            : invoice.invoiceDate;
           
-          const canProcess = 
-            form1099Status === 'Received' || 
-            form1099Status === 'Tracked' ||
-            w9Status === 'Received';
+          let financialYear: number | null = null;
+          if (invoiceDate) {
+            try {
+              const date = new Date(invoiceDate);
+              if (!isNaN(date.getTime())) {
+                financialYear = date.getFullYear();
+              }
+            } catch {
+              // Invalid date, continue without financial year check
+            }
+          }
           
-          if (!canProcess) {
-            return {
-              success: false,
-              error: `Cannot approve invoice. Vendor "${vendorName}" requires 1099/W9 forms. Please mark the forms as Received or Tracked in the 1099 Requests page before approving invoices.`
-            };
+          // If we have a financial year, check cumulative total
+          let cumulativeTotal: number | null = null;
+          if (financialYear !== null) {
+            // Get all invoices for this vendor in the same financial year (only Invoice document types)
+            const vendorInvoices = await findInvoicesByVendorName(vendorName);
+            const invoicesInSameYear = vendorInvoices.filter(inv => {
+              // Only count Invoice document types (exclude receipts)
+              if (inv.documentType === 'Receipt') return false;
+              if (inv.documentType && inv.documentType !== 'Invoice') return false;
+              
+              // Get financial year from invoice date
+              const invDate = typeof inv.invoiceDate === 'object' && inv.invoiceDate?.value 
+                ? inv.invoiceDate.value 
+                : inv.invoiceDate;
+              
+              if (!invDate) return false;
+              
+              try {
+                const date = new Date(invDate);
+                if (isNaN(date.getTime())) return false;
+                return date.getFullYear() === financialYear;
+              } catch {
+                return false;
+              }
+            });
+            
+            // Calculate cumulative total including current invoice
+            const currentInvoiceAmount = parseInvoiceAmount(
+              invoice.totalAmount?.value || invoice.amount?.value
+            );
+            
+            cumulativeTotal = invoicesInSameYear.reduce((sum, inv) => {
+              // Don't double-count the current invoice if it's already in the list
+              if (inv.id === invoice.id) {
+                return sum;
+              }
+              const amount = parseInvoiceAmount(inv.totalAmount?.value || inv.amount?.value);
+              return sum + (amount || 0);
+            }, 0) + currentInvoiceAmount;
+            
+            // If cumulative total crosses $600, block approval
+            if (cumulativeTotal >= 600) {
+              return {
+                success: false,
+                error: `Cannot approve invoice. Vendor "${vendorName}" has cumulative invoices totaling $${cumulativeTotal.toFixed(2)} in ${financialYear}, which exceeds the $600 threshold. Please ensure W9 form is received or tax ID is added before approving invoices.`
+              };
+            }
+          }
+          
+          // Also check if 1099/W9 is received or tracked (legacy check for cases without financial year)
+          // Only apply this check if we didn't already check the threshold
+          if (cumulativeTotal === null) {
+            const form1099Status = vendor.form1099Status;
+            const w9Status = vendor.w9Status;
+            
+            const canProcess = 
+              form1099Status === 'Received' || 
+              form1099Status === 'Tracked' ||
+              w9Status === 'Received';
+            
+            if (!canProcess) {
+              return {
+                success: false,
+                error: `Cannot approve invoice. Vendor "${vendorName}" requires 1099/W9 forms. Please mark the forms as Received or Tracked in the W9 Requests page before approving invoices.`
+              };
+            }
           }
         }
       }
