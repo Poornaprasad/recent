@@ -6,14 +6,16 @@
 'use server';
 
 import {
-  fetchDisbursementTypesFromApi,
-  fetchDisbursementStatusesFromApi,
+  getDisbursementTypes,
+  getDisbursementStatuses,
+} from '../crm/smartadvocate/disbursement';
+import {
   getPreviousDisbursementType,
   getPreviousDisbursementTypeForVendor,
   saveDisbursementTypeMapping,
   getDisbursementTypesForVendor,
-  type DisbursementOption,
 } from '../services/disbursement-type.service';
+import type { DisbursementOption } from '../crm/smartadvocate/types';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
 
 /**
@@ -23,7 +25,7 @@ import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
  */
 export async function fetchDisbursementTypesAction(): Promise<ActionResult<DisbursementOption[]>> {
   return withActionHandler(
-    () => fetchDisbursementTypesFromApi(),
+    () => getDisbursementTypes(),
     'Failed to fetch disbursement types'
   );
 }
@@ -35,7 +37,7 @@ export async function fetchDisbursementTypesAction(): Promise<ActionResult<Disbu
  */
 export async function fetchDisbursementStatusesAction(): Promise<ActionResult<DisbursementOption[]>> {
   return withActionHandler(
-    () => fetchDisbursementStatusesFromApi(),
+    () => getDisbursementStatuses(),
     'Failed to fetch disbursement statuses'
   );
 }

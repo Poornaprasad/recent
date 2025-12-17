@@ -177,3 +177,11 @@ export interface PlaintiffInfo {
   phone?: string;
   isPrimary: boolean;
 }
+
+/**
+ * Disbursement type/status option from SmartAdvocate API
+ */
+export interface DisbursementOption {
+  id: number;
+  description: string;
+}
