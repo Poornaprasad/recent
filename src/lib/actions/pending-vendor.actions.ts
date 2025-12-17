@@ -58,7 +58,7 @@ export async function completeVendorSetupAction(
 ): Promise<{ success: boolean; vendorId?: string; error?: string }> {
   return withActionHandler(async () => {
     const result = await pendingVendorService.completeVendorSetup(pendingVendorId, vendorData);
-    revalidatePath('/1099-requests');
+    revalidatePath('/w9-requests');
     revalidatePath('/vendors');
     revalidatePath('/invoices');
     return result;
@@ -71,7 +71,7 @@ export async function completeVendorSetupAction(
 export async function rejectPendingVendorAction(id: string): Promise<{ success: boolean; error?: string }> {
   return withActionHandler(async () => {
     await pendingVendorService.rejectPendingVendor(id);
-    revalidatePath('/1099-requests');
+    revalidatePath('/w9-requests');
     return { success: true };
   }, 'Failed to reject pending vendor');
 }

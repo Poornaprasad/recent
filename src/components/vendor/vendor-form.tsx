@@ -294,251 +294,252 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{vendor ? 'Edit Vendor' : 'Add New Vendor'}</DialogTitle>
+          <DialogTitle className="text-2xl">{vendor ? 'Edit Vendor' : 'Add New Vendor'}</DialogTitle>
           <DialogDescription>
-            {vendor ? "Update the vendor's details below." : "Enter the details for the new vendor."}
+            {vendor ? "Update the vendor's details below." : "Enter the details for the new vendor. All fields marked with * are required."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4 py-4">
+          <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6 py-4">
             {show1099Alert && (
-              <Alert variant="destructive">
+              <Alert variant="destructive" className="border-destructive/50">
                 <AlertTriangle className="h-4 w-4" />
-                <AlertTitle>1099 Request Required</AlertTitle>
+                <AlertTitle>W9 Request Required</AlertTitle>
                 <AlertDescription>
-                  This vendor is not in your vendor list. Please request a 1099 form for this vendor.
+                  This vendor is not in your vendor list. Please request a W9 form for this vendor.
                 </AlertDescription>
               </Alert>
             )}
             
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Vendor Name</FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="Global Tech Inc." 
-                      {...field}
-                      onChange={(e) => {
-                        field.onChange(e);
-                        if (!vendor && e.target.value.length >= 2) {
-                          checkVendorAndLoadTypes(e.target.value);
-                        }
-                      }}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="vendorType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>
-                    Vendor Disbursement Type
-                  </FormLabel>
-                  {!vendor && (
-                    <p className="text-xs text-muted-foreground">
-                      Optional - Selection varies by case. Previous selection for this vendor will be pre-filled if available.
-                    </p>
-                  )}
-                  <div className="flex gap-2">
-                    <FormControl className="flex-1">
-                      <Select 
-                        onValueChange={field.onChange} 
-                        value={field.value || ''}
-                        disabled={isCheckingVendor || isLoadingDisbursementTypes}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder={
-                            isLoadingDisbursementTypes
-                              ? "Loading types..."
-                              : disbursementTypes.length === 0
-                              ? "No types available"
-                              : !vendor
-                              ? "Select disbursement type (optional)"
-                              : "Select disbursement type"
-                          } />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {isLoadingDisbursementTypes ? (
-                            <div className="flex items-center justify-center p-4">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            </div>
-                          ) : disbursementTypes.length === 0 ? (
-                            <div className="p-2 text-sm text-muted-foreground">
-                              No disbursement types available
-                            </div>
-                          ) : (
-                            <>
-                              {!vendor && (
-                                <SelectItem value="">None (Optional)</SelectItem>
-                              )}
-                              {disbursementTypes.map((type) => (
-                                <SelectItem key={type} value={type}>
-                                  {type}
-                                </SelectItem>
-                              ))}
-                            </>
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </FormControl>
-                    {field.value === '__add_new__' && (
-                      <Popover open={showNewTypeInput} onOpenChange={setShowNewTypeInput}>
-                        <PopoverTrigger asChild>
-                          <Button type="button" variant="outline" size="icon">
-                            <Plus className="h-4 w-4" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80">
-                          <div className="space-y-2">
-                            <Input
-                              placeholder="New vendor type name"
-                              value={newTypeName}
-                              onChange={(e) => setNewTypeName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleAddNewType();
-                                }
-                              }}
-                            />
-                            <Button 
-                              type="button" 
-                              size="sm" 
-                              onClick={handleAddNewType}
-                              disabled={!newTypeName.trim()}
-                            >
-                              Add Type
-                            </Button>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                    )}
-                  </div>
-                  {field.value && field.value !== '__add_new__' && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 text-xs"
-                      onClick={() => {
-                        setShowNewTypeInput(true);
-                        form.setValue('vendorType', '');
-                      }}
-                    >
-                      Change Type
-                    </Button>
-                  )}
-                  {caseNumber && field.value && (
-                    <p className="text-xs text-muted-foreground">
-                      This selection will be remembered for future disbursements in case {caseNumber}
-                    </p>
-                  )}
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="requires1099"
-              render={({ field }) => (
-                <FormItem className="flex flex-row items-start space-x-3 space-y-0">
-                  <FormControl>
-                    <Checkbox
-                      checked={field.value}
-                      onCheckedChange={field.onChange}
-                    />
-                  </FormControl>
-                  <div className="space-y-1 leading-none">
-                    <FormLabel>Requires 1099</FormLabel>
-                    <p className="text-xs text-muted-foreground">
-                      Check if this vendor requires a 1099 form
-                    </p>
-                  </div>
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input type="email" placeholder="vendor@example.com" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Phone</FormLabel>
-                  <FormControl>
-                    <Input placeholder="(555) 123-4567" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="address"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Address</FormLabel>
-                  <FormControl>
-                    <Input placeholder="123 Main St, City, State ZIP" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-             <FormField
-                control={form.control}
-                name="status"
-                render={({ field }) => (
+            <div className="grid gap-6">
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground border-b pb-2">Basic Information</h3>
+                
+                <FormField
+                  control={form.control}
+                  name="name"
+                  render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select a status" />
+                      <FormLabel className="flex items-center gap-1">
+                        Vendor Name <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Global Tech Inc." 
+                          className="h-10"
+                          {...field}
+                          onChange={(e) => {
+                            field.onChange(e);
+                            if (!vendor && e.target.value.length >= 2) {
+                              checkVendorAndLoadTypes(e.target.value);
+                            }
+                          }}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="vendorType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Vendor Disbursement Type</FormLabel>
+                      {!vendor && (
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Optional - Selection varies by case. Previous selection for this vendor will be pre-filled if available.
+                        </p>
+                      )}
+                      <div className="flex gap-2">
+                        <FormControl className="flex-1">
+                          <Select 
+                            onValueChange={field.onChange} 
+                            value={field.value || ''}
+                            disabled={isCheckingVendor || isLoadingDisbursementTypes}
+                          >
+                            <SelectTrigger className="h-10">
+                              <SelectValue placeholder={
+                                isLoadingDisbursementTypes
+                                  ? "Loading types..."
+                                  : disbursementTypes.length === 0
+                                  ? "No types available"
+                                  : !vendor
+                                  ? "Select disbursement type (optional)"
+                                  : "Select disbursement type"
+                              } />
                             </SelectTrigger>
+                            <SelectContent>
+                              {isLoadingDisbursementTypes ? (
+                                <div className="flex items-center justify-center p-4">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                </div>
+                              ) : disbursementTypes.length === 0 ? (
+                                <div className="p-2 text-sm text-muted-foreground">
+                                  No disbursement types available
+                                </div>
+                              ) : (
+                                <>
+                                  {!vendor && (
+                                    <SelectItem value="">None (Optional)</SelectItem>
+                                  )}
+                                  {disbursementTypes.map((type) => (
+                                    <SelectItem key={type} value={type}>
+                                      {type}
+                                    </SelectItem>
+                                  ))}
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                      </div>
+                      {caseNumber && field.value && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          This selection will be remembered for future disbursements in case {caseNumber}
+                        </p>
+                      )}
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1">
+                        Status <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="h-10">
+                            <SelectValue placeholder="Select a status" />
+                          </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                            <SelectItem value="Active">Active</SelectItem>
-                            <SelectItem value="Inactive">Inactive</SelectItem>
+                          <SelectItem value="Active">Active</SelectItem>
+                          <SelectItem value="Inactive">Inactive</SelectItem>
                         </SelectContent>
-                    </Select>
-                    <FormMessage />
+                      </Select>
+                      <FormMessage />
                     </FormItem>
-                )}
-            />
-            <DialogFooter>
+                  )}
+                />
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground border-b pb-2">Contact Information</h3>
+                
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Email Address</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="email" 
+                            placeholder="vendor@example.com" 
+                            className="h-10"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="phone"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Phone Number</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="(555) 123-4567" 
+                            className="h-10"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="address"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Address</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="123 Main St, City, State ZIP" 
+                          className="h-10"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground border-b pb-2">Tax & Compliance</h3>
+                
+                <FormField
+                  control={form.control}
+                  name="requires1099"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                      <FormControl>
+                        <Checkbox
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                        />
+                      </FormControl>
+                      <div className="space-y-1 leading-none">
+                        <FormLabel className="font-semibold">
+                          Requires W9 Form
+                        </FormLabel>
+                        <p className="text-xs text-muted-foreground">
+                          Check this box if this vendor requires a W9 form for tax reporting purposes. This will flag the vendor for W9 processing.
+                        </p>
+                      </div>
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+            <DialogFooter className="gap-2 sm:gap-0">
               <DialogClose asChild>
                 <Button type="button" variant="outline">
-                    Cancel
+                  Cancel
                 </Button>
               </DialogClose>
-              <Button type="submit">{vendor ? 'Save Changes' : 'Create Vendor'}</Button>
+              <Button 
+                type="submit"
+                className="min-w-[120px]"
+                disabled={form.formState.isSubmitting}
+              >
+                {form.formState.isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    {vendor ? 'Saving...' : 'Creating...'}
+                  </>
+                ) : (
+                  vendor ? 'Save Changes' : 'Create Vendor'
+                )}
+              </Button>
             </DialogFooter>
           </form>
         </Form>

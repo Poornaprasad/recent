@@ -177,7 +177,7 @@ export async function updateVendor1099StatusAction(
     };
     
     await vendorService.saveVendor(updatedVendor);
-    revalidatePath('/1099-requests');
+    revalidatePath('/w9-requests');
     revalidatePath('/vendors');
     return { success: true };
   }, 'Failed to update vendor 1099 status');

@@ -66,7 +66,7 @@ export async function updateInvoiceStatusAction(
     revalidatePath('/approvals');
     revalidatePath('/invoices');
     revalidatePath(`/invoices/${id}`);
-    revalidatePath('/1099-requests');
+    revalidatePath('/w9-requests');
     return { success: true };
   }, 'Failed to update invoice status');
 }

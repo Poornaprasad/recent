@@ -56,7 +56,7 @@ const args = ['next', 'dev', '--turbopack', ...process.argv.slice(2)];
 
 const nextProcess = spawn('npx', args, {
   stdio: 'inherit',
-  shell: true,
+  shell: false, // Set to false to avoid security warning - args are properly handled as array
   cwd: path.join(__dirname, '..'),
 });
 

@@ -57,7 +57,7 @@ const managementLinks = [
 
 const vendorLinks = [
     { href: "/vendors", label: "Vendors", icon: Building },
-    { href: "/1099-requests", label: "1099 Requests", icon: AlertTriangle },
+    { href: "/w9-requests", label: "W9 Requests", icon: AlertTriangle },
 ];
 
 const usersLinks = [
@@ -74,7 +74,7 @@ export function AppSidebar() {
   useEffect(() => {
       const isManagementSubMenuActive = managementLinks.some(link => pathname.startsWith(link.href));
       const isUsersSubMenuActive = usersLinks.some(link => pathname.startsWith(link.href));
-      const isVendorSubMenuActive = pathname.startsWith('/vendors') || pathname.startsWith('/1099-requests');
+      const isVendorSubMenuActive = pathname.startsWith('/vendors') || pathname.startsWith('/w9-requests');
       
       const newOpenState: string[] = [];
       if (isManagementSubMenuActive) {
@@ -91,7 +91,7 @@ export function AppSidebar() {
 
   const isManagementActive = managementLinks.some(link => pathname.startsWith(link.href));
   const isUsersActive = usersLinks.some(link => pathname.startsWith(link.href));
-  const isVendorActive = pathname.startsWith('/vendors') || pathname.startsWith('/1099-requests');
+  const isVendorActive = pathname.startsWith('/vendors') || pathname.startsWith('/w9-requests');
 
 
   return (
@@ -156,9 +156,9 @@ export function AppSidebar() {
                      <Accordion.Content>
                         <SidebarMenuSub>
                              {vendorLinks.map(({ href, label, icon: Icon }) => {
-                                // For 1099-requests, check if we're on vendors page (it will be handled by tab)
-                                const isActive = href.includes('1099-requests') 
-                                  ? pathname.startsWith('/vendors') || pathname.startsWith('/1099-requests')
+                                // For w9-requests, check if we're on vendors page (it will be handled by tab)
+                                const isActive = href.includes('w9-requests') 
+                                  ? pathname.startsWith('/vendors') || pathname.startsWith('/w9-requests')
                                   : pathname.startsWith(href.split('?')[0]);
                                 return (
                                   <SidebarMenuSubItem key={href}>
