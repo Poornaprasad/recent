@@ -306,6 +306,7 @@ export function ExtractedDataPanel({
     'amountDeviationPercent', 'hasMultipleVendors', 'accuracyScore',
     'requiresSpecialHandling', 'specialHandlingReason', 'vendorRequires1099',
     'comment', 'paymentType', 'clientName', 'customerName', // plaintiff name handled separately
+    'totalAmount', // only show amount field
   ];
 
   const fieldsToRender = Object.entries(invoiceData)
