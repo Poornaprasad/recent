@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils/utils';
-import { Search, Loader2 } from 'lucide-react';
+import { Search, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import type { StoredInvoice, DocumentType } from '@/lib/domain/types';
 import {
@@ -77,6 +77,14 @@ export function ExtractedDataPanel({
   // Case number state (not auto-search, requires explicit submit)
   const [caseNumber, setCaseNumber] = useState(invoiceData.caseNumber || '');
   const [isSubmittingCaseNumber, setIsSubmittingCaseNumber] = useState(false);
+
+  // Plaintiff name state - track both sources
+  // AI Extracted (from document) - this is the original extraction
+  const [aiExtractedPlaintiffName] = useState<string>(
+    invoiceData.clientName?.value || invoiceData.customerName?.value || ''
+  );
+  // Case Sourced (from case number lookup) - updated after case search
+  const [casePlaintiffName, setCasePlaintiffName] = useState<string>('');
 
   // Document type state
   const [documentType, setDocumentType] = useState<DocumentType | undefined>(invoiceData.documentType);
@@ -179,10 +187,13 @@ export function ExtractedDataPanel({
         if (updatedResult.data) {
           onInvoiceUpdate(updatedResult.data);
 
-          const plaintiffName = updatedResult.data.clientName?.value || updatedResult.data.customerName?.value;
+          // Get plaintiff name from case lookup result
+          const plaintiffNameFromCase = updatedResult.data.clientName?.value || updatedResult.data.customerName?.value || '';
+          setCasePlaintiffName(plaintiffNameFromCase);
+
           let description = 'Case number has been saved.';
-          if (plaintiffName) {
-            description += ` Plaintiff name "${plaintiffName}" retrieved.`;
+          if (plaintiffNameFromCase) {
+            description += ` Plaintiff name "${plaintiffNameFromCase}" retrieved.`;
           }
 
           toast({
@@ -272,8 +283,17 @@ export function ExtractedDataPanel({
     id: s.id,
   }));
 
-  // Get plaintiff name from invoice data
-  const plaintiffName = invoiceData.clientName?.value || invoiceData.customerName?.value || '';
+  // Compare plaintiff names - normalize for comparison
+  const normalizeNameForComparison = (name: string): string => {
+    return name.toLowerCase().trim().replace(/\s+/g, ' ');
+  };
+
+  const hasAiExtractedName = aiExtractedPlaintiffName.trim().length > 0;
+  const hasCaseName = casePlaintiffName.trim().length > 0;
+  const bothNamesPresent = hasAiExtractedName && hasCaseName;
+  const namesMatch = bothNamesPresent
+    ? normalizeNameForComparison(aiExtractedPlaintiffName) === normalizeNameForComparison(casePlaintiffName)
+    : false;
 
   // Prepare fields to render (exclude system fields and special fields handled separately)
   const excludedFields = [
@@ -368,18 +388,119 @@ export function ExtractedDataPanel({
         </p>
       </div>
 
-      {/* Plaintiff Name - populated from case lookup */}
-      <div className="p-3 rounded-md border bg-muted/30">
-        <Label className="mb-2 block font-medium">Plaintiff Name</Label>
-        <Input
-          value={plaintiffName}
-          readOnly
-          placeholder="Will be populated after case number search..."
-          className="bg-muted/50"
-        />
-        <p className="text-xs text-muted-foreground mt-1">
-          Automatically populated from case information
-        </p>
+      {/* Plaintiff Name - Side by Side Comparison */}
+      <div
+        className={cn(
+          'p-3 rounded-md border',
+          bothNamesPresent && !namesMatch
+            ? 'border-orange-500/50 bg-orange-50 dark:bg-orange-950/20'
+            : bothNamesPresent && namesMatch
+            ? 'border-green-500/50 bg-green-50 dark:bg-green-950/20'
+            : 'bg-muted/30'
+        )}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <Label className="font-medium">Plaintiff Name</Label>
+          {bothNamesPresent && (
+            namesMatch ? (
+              <Badge variant="outline" className="gap-1 border-green-500 text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30">
+                <CheckCircle2 className="h-3 w-3" />
+                Match
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="gap-1 border-orange-500 text-orange-700 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30">
+                <AlertTriangle className="h-3 w-3" />
+                Mismatch
+              </Badge>
+            )
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {/* From Document (AI Extracted) */}
+          <div
+            className={cn(
+              'rounded-md p-2 border',
+              bothNamesPresent && !namesMatch
+                ? 'border-orange-300 dark:border-orange-700'
+                : 'border-border'
+            )}
+          >
+            <Label className="text-xs text-muted-foreground mb-1 block">From Document (AI)</Label>
+            <div
+              className={cn(
+                'text-sm font-mono px-2 py-1.5 rounded bg-background/70 truncate',
+                hasAiExtractedName ? '' : 'text-muted-foreground italic'
+              )}
+              title={aiExtractedPlaintiffName || 'Not extracted'}
+            >
+              {aiExtractedPlaintiffName || 'Not extracted'}
+            </div>
+            {invoiceData.clientName?.confidence !== undefined && (
+              <div className="flex items-center gap-1 mt-1">
+                <ConfidenceBadge score={invoiceData.clientName.confidence} />
+                {invoiceData.clientName?.bbox && (
+                  <Badge variant="outline" className="text-xs">Located</Badge>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* From Case (Case Lookup) */}
+          <div
+            className={cn(
+              'rounded-md p-2 border',
+              bothNamesPresent && !namesMatch
+                ? 'border-orange-300 dark:border-orange-700'
+                : 'border-border'
+            )}
+          >
+            <Label className="text-xs text-muted-foreground mb-1 block">From Case</Label>
+            <div
+              className={cn(
+                'text-sm font-mono px-2 py-1.5 rounded bg-background/70 truncate',
+                hasCaseName ? '' : 'text-muted-foreground italic'
+              )}
+              title={casePlaintiffName || 'Search case number first'}
+            >
+              {casePlaintiffName || 'Search case number first'}
+            </div>
+            {hasCaseName && (
+              <div className="flex items-center gap-1 mt-1">
+                <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-900/30 border-blue-300 text-blue-700 dark:text-blue-400">
+                  Case Data
+                </Badge>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Mismatch Warning Message */}
+        {bothNamesPresent && !namesMatch && (
+          <div className="mt-3 flex items-start gap-2 p-2 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200">
+            <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <p className="text-xs">
+              <span className="font-medium">Name mismatch detected.</span> The name extracted from the document does not match the case plaintiff name. Please verify and confirm the correct party.
+            </p>
+          </div>
+        )}
+
+        {/* Match Success Message */}
+        {bothNamesPresent && namesMatch && (
+          <div className="mt-3 flex items-start gap-2 p-2 rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+            <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <p className="text-xs">
+              <span className="font-medium">Names match.</span> The document plaintiff name matches the case record.
+            </p>
+          </div>
+        )}
+
+        {/* Help text when no case lookup yet */}
+        {!hasCaseName && (
+          <p className="text-xs text-muted-foreground mt-2">
+            Enter a case number above and search to compare with the AI-extracted name.
+          </p>
+        )}
       </div>
 
       {/* Disbursement Type - Searchable dropdown */}
