@@ -55,6 +55,7 @@ const vendorFormSchema = z.object({
   phone: z.string().optional(),
   address: z.string().optional(),
   vendorType: z.string().optional(),
+  taxId: z.string().optional(),
   requires1099: z.boolean().optional(),
   status: z.enum(['Active', 'Inactive']),
 });
@@ -222,6 +223,7 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
         phone: vendor.phone || '',
         address: vendor.address || '',
         vendorType: vendor.vendorType || '',
+        taxId: vendor.taxId || '',
         requires1099: vendor.requires1099 || false,
         status: vendor.status,
       });
@@ -236,6 +238,7 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
         phone: '',
         address: '',
         vendorType: '',
+        taxId: '',
         requires1099: false,
         status: 'Active',
       });
@@ -267,6 +270,7 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
       phone: data.phone || undefined,
       address: data.address || undefined,
       vendorType: data.vendorType || undefined,
+      taxId: data.taxId || undefined,
       requires1099: data.requires1099 || false,
       status: data.status,
       createdAt: vendor?.createdAt || new Date(),
@@ -487,6 +491,27 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
                           {...field} 
                         />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="taxId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tax ID (SSN/EIN)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="12-3456789" 
+                          className="h-10"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        If Tax ID exists, W9 is automatically considered received
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}

@@ -111,6 +111,8 @@ export const vendors = pgTable('vendors', {
   phone: text('phone'),
   address: text('address'),
   vendorType: text('vendor_type'), // References vendor_types.name
+  uniqueContactId: text('unique_contact_id'), // CRM contact ID for linking
+  taxId: text('tax_id'), // Tax ID (SSN/EIN) - if exists, W9 is considered received
   requires1099: boolean('requires_1099').default(false),
   requiresW9: boolean('requires_w9').default(false),
   w9Status: text('w9_status', { enum: ['Not Required', 'Required', 'Received', 'Pending', 'Expired'] }).default('Not Required'),

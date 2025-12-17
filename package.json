@@ -17,7 +17,8 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:clear": "tsx src/lib/db/clear-db.ts",
-    "db:seed": "tsx src/lib/db/seed-test-user.ts"
+    "db:seed": "tsx src/lib/db/seed-test-user.ts",
+    "db:import-vendors": "tsx scripts/import-vendors-from-csv.ts"
   },
   "dependencies": {
     "@genkit-ai/compat-oai": "^1.23.0",

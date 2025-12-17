@@ -17,6 +17,8 @@ export function mapDbRowToVendor(row: DbVendor): Vendor {
     phone: row.phone || undefined,
     address: row.address || undefined,
     vendorType: row.vendorType || undefined,
+    uniqueContactId: row.uniqueContactId || undefined,
+    taxId: row.taxId || undefined,
     requires1099: row.requires1099 ? true : undefined,
     requiresW9: row.requiresW9 ? true : undefined,
     w9Status: row.w9Status as Vendor['w9Status'] | undefined,
@@ -35,6 +37,11 @@ export function mapDbRowToVendor(row: DbVendor): Vendor {
  * Map Vendor domain object to database row
  */
 export function mapVendorToDbRow(vendor: Partial<Vendor>): Partial<DbVendor> {
+  // If taxId exists, automatically set w9Status to 'Received'
+  const w9Status = vendor.taxId && vendor.taxId.trim() !== '' 
+    ? 'Received' as const
+    : vendor.w9Status;
+  
   return {
     id: vendor.id,
     name: vendor.name,
@@ -42,10 +49,14 @@ export function mapVendorToDbRow(vendor: Partial<Vendor>): Partial<DbVendor> {
     phone: vendor.phone,
     address: vendor.address,
     vendorType: vendor.vendorType,
+    uniqueContactId: vendor.uniqueContactId,
+    taxId: vendor.taxId,
     requires1099: vendor.requires1099 ? 1 : 0,
     requiresW9: vendor.requiresW9 ? 1 : 0,
-    w9Status: vendor.w9Status,
-    w9ReceivedDate: vendor.w9ReceivedDate ? vendor.w9ReceivedDate as any : undefined,
+    w9Status: w9Status,
+    w9ReceivedDate: vendor.taxId && vendor.taxId.trim() !== '' 
+      ? new Date() as any 
+      : (vendor.w9ReceivedDate ? vendor.w9ReceivedDate as any : undefined),
     w9ExpiryDate: vendor.w9ExpiryDate ? vendor.w9ExpiryDate as any : undefined,
     form1099Status: vendor.form1099Status,
     form1099ReceivedDate: vendor.form1099ReceivedDate ? vendor.form1099ReceivedDate as any : undefined,

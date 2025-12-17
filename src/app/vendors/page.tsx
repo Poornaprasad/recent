@@ -614,6 +614,7 @@ export default function VendorsPage() {
                           </Button>
                         </TableHead>
                         <TableHead>Contact</TableHead>
+                        <TableHead>Tax ID</TableHead>
                         <TableHead>
                           <Button
                             variant="ghost"
@@ -634,7 +635,7 @@ export default function VendorsPage() {
                     <TableBody>
                       {paginatedVendors.length === 0 ? (
                         <TableRow>
-                          <TableCell colSpan={7} className="h-24 text-center">
+                          <TableCell colSpan={8} className="h-24 text-center">
                             <div className="flex flex-col items-center justify-center">
                               <Search className="h-8 w-8 text-muted-foreground mb-2" />
                               <p className="text-sm text-muted-foreground">
@@ -698,6 +699,13 @@ export default function VendorsPage() {
                                   <span className="text-muted-foreground text-sm">-</span>
                                 )}
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              {vendor.taxId ? (
+                                <span className="text-sm font-mono">{vendor.taxId}</span>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">-</span>
+                              )}
                             </TableCell>
                             <TableCell>
                               <Badge 

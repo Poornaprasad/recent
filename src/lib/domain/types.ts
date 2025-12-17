@@ -57,6 +57,8 @@ export type Vendor = BaseEntity & {
   phone?: string;
   address?: string;
   vendorType?: string; // Vendor type name
+  uniqueContactId?: string; // CRM contact ID for linking
+  taxId?: string; // Tax ID (SSN/EIN) - if exists, W9 is considered received
   requires1099?: boolean; // Flag for 1099 requirement
   requiresW9?: boolean; // Flag for W9 requirement
   w9Status?: 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
