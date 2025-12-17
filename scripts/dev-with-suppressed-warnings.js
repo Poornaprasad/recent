@@ -47,14 +47,15 @@ process.on('warning', (warning) => {
   console.warn(warning);
 });
 
-// Now spawn Next.js dev server
+// Now spawn Next.js dev server using our wrapper script
 const { spawn } = require('child_process');
 const path = require('path');
 
-// Use npx to run next (works cross-platform)
-const args = ['next', 'dev', '--turbopack', ...process.argv.slice(2)];
+// Use our wrapper script that sets max listeners before requiring Next.js
+const wrapperScript = path.join(__dirname, 'next-dev-wrapper.js');
+const args = [wrapperScript, 'dev', '--turbopack', ...process.argv.slice(2)];
 
-const nextProcess = spawn('npx', args, {
+const nextProcess = spawn('node', args, {
   stdio: 'inherit',
   shell: false, // Set to false to avoid security warning - args are properly handled as array
   cwd: path.join(__dirname, '..'),

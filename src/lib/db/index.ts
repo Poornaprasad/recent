@@ -9,10 +9,12 @@ import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
 import { DATABASE_CONFIG } from '../config/database';
+import { registerCleanup } from '../utils/process-cleanup';
 
 // Create PostgreSQL connection pool
 let pool: Pool | null = null;
 let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null;
+let cleanupRegistered = false;
 
 /**
  * Get PostgreSQL connection pool
@@ -31,6 +33,14 @@ function getPool(): Pool {
     pool.on('error', (err) => {
       console.error('[Database] Unexpected error on idle client', err);
     });
+
+    // Register cleanup handler only once
+    if (!cleanupRegistered) {
+      cleanupRegistered = true;
+      registerCleanup(async () => {
+        await closeDb();
+      });
+    }
   }
 
   return pool;
@@ -81,6 +91,7 @@ export async function closeDb() {
     await pool.end();
     pool = null;
     dbInstance = null;
+    cleanupRegistered = false;
     console.log('[Database] Connection pool closed');
   }
 }
