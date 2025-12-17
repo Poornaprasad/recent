@@ -317,22 +317,24 @@ export function ExtractedDataPanel({
 
   return (
     <div className="space-y-3 p-4">
-      {/* Document Type - Compact Editable */}
+      {/* Document Type - Single Line */}
       <div className="p-3 rounded-md border bg-muted/30">
         <div className="flex items-center gap-3">
-          <Label className="font-medium text-sm flex-shrink-0">Document Type</Label>
-          <Select value={documentType} onValueChange={(v) => handleDocumentTypeChange(v as DocumentType)}>
-            <SelectTrigger className="flex-1 h-9">
-              <SelectValue placeholder="Select type..." />
-            </SelectTrigger>
-            <SelectContent>
-              {DOCUMENT_TYPES.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {type}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label className="font-medium text-sm flex-shrink-0 w-32">Document Type</Label>
+          <div className="flex-1">
+            <Select value={documentType} onValueChange={(v) => handleDocumentTypeChange(v as DocumentType)}>
+              <SelectTrigger className="h-9">
+                <SelectValue placeholder="Select type..." />
+              </SelectTrigger>
+              <SelectContent>
+                {DOCUMENT_TYPES.map((type) => (
+                  <SelectItem key={type} value={type}>
+                    {type}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           {documentType && (
             <Badge
               variant="outline"
@@ -344,10 +346,10 @@ export function ExtractedDataPanel({
         </div>
       </div>
 
-      {/* Case Number - Compact with submit button */}
+      {/* Case Number - Single Line with submit button */}
       <div className="p-3 rounded-md border bg-muted/30">
         <div className="flex items-center gap-3">
-          <Label htmlFor="case-number" className="font-medium text-sm flex-shrink-0">
+          <Label htmlFor="case-number" className="font-medium text-sm flex-shrink-0 w-32">
             Case Number<span className="text-destructive">*</span>
           </Label>
           <div className="flex-1 flex gap-2">
@@ -370,7 +372,7 @@ export function ExtractedDataPanel({
               onClick={handleCaseNumberSubmit}
               disabled={isSubmittingCaseNumber || !caseNumber.trim()}
               size="icon"
-              className="h-9 w-9"
+              className="h-9 w-9 flex-shrink-0"
             >
               {isSubmittingCaseNumber ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -497,119 +499,116 @@ export function ExtractedDataPanel({
         )}
       </div>
 
-      {/* Disbursement Type & Status - Side by Side */}
-      <div className="grid grid-cols-2 gap-3">
-        {/* Disbursement Type */}
-        <div className="p-3 rounded-md border bg-muted/30">
-          <Label className="mb-2 block font-medium text-sm">Disbursement Type</Label>
-          <Combobox
-            options={typeOptions}
-            value={selectedDisbursementType}
-            onValueChange={handleDisbursementTypeChange}
-            placeholder="Select type..."
-            searchPlaceholder="Search types..."
-            emptyText="No type found."
-            isLoading={isLoadingTypes}
-          />
-          {selectedDisbursementType && (
-            <p className="text-xs text-muted-foreground mt-1">Remembered per vendor</p>
-          )}
-        </div>
-
-        {/* Disbursement Status */}
-        <div className="p-3 rounded-md border bg-muted/30">
-          <Label className="mb-2 block font-medium text-sm">Disbursement Status</Label>
-          <Combobox
-            options={statusOptions}
-            value={selectedDisbursementStatus}
-            onValueChange={setSelectedDisbursementStatus}
-            placeholder="Select status..."
-            searchPlaceholder="Search statuses..."
-            emptyText="No status found."
-            isLoading={isLoadingStatuses}
-          />
-          {(documentType === 'Invoice' || documentType === 'Receipt') && (
-            <p className="text-xs text-muted-foreground mt-1">
-              Default: {documentType === 'Invoice' ? '"Issue Check"' : '"Paid"'}
-            </p>
-          )}
+      {/* Disbursement Type - Single Line */}
+      <div className="p-3 rounded-md border bg-muted/30">
+        <div className="flex items-center gap-3">
+          <Label className="font-medium text-sm flex-shrink-0 w-32">Disbursement Type</Label>
+          <div className="flex-1">
+            <Combobox
+              options={typeOptions}
+              value={selectedDisbursementType}
+              onValueChange={handleDisbursementTypeChange}
+              placeholder="Select type..."
+              searchPlaceholder="Search types..."
+              emptyText="No type found."
+              isLoading={isLoadingTypes}
+              triggerClassName="h-9"
+            />
+          </div>
         </div>
       </div>
 
-      {/* Extracted Fields - Single Row Compact Layout */}
-      <div className="rounded-md border overflow-hidden">
-        <div className="bg-muted/50 px-3 py-2 border-b">
-          <Label className="font-medium text-sm">Extracted Fields</Label>
+      {/* Disbursement Status - Single Line */}
+      <div className="p-3 rounded-md border bg-muted/30">
+        <div className="flex items-center gap-3">
+          <Label className="font-medium text-sm flex-shrink-0 w-32">Disbursement Status</Label>
+          <div className="flex-1">
+            <Combobox
+              options={statusOptions}
+              value={selectedDisbursementStatus}
+              onValueChange={setSelectedDisbursementStatus}
+              placeholder="Select status..."
+              searchPlaceholder="Search statuses..."
+              emptyText="No status found."
+              isLoading={isLoadingStatuses}
+              triggerClassName="h-9"
+            />
+          </div>
         </div>
-        <div className="divide-y">
-          {fieldsToRender.map(({ key, title, value }) => {
-            const confidence = value?.confidence;
-            const reasoning = value?.reasoning;
-            const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
-            const displayValue = value?.value ?? '';
+      </div>
 
-            return (
-              <div
-                key={key}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2 transition-colors cursor-pointer',
-                  hoveredField === key
-                    ? 'bg-green-100 dark:bg-green-900/20'
-                    : 'hover:bg-muted/30'
-                )}
-                onMouseEnter={() => {
-                  if (hasBbox) {
-                    validateAndSetBbox(value.bbox, key, confidence);
-                  }
-                }}
-                onMouseLeave={() => {
-                  onFieldHover(null, null, null);
-                }}
-                title={reasoning || undefined}
-              >
-                {/* Field Label */}
-                <div className="w-28 flex-shrink-0">
-                  <span className={cn(
-                    'text-xs font-medium',
-                    hoveredField === key ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'
-                  )}>
-                    {title}
-                  </span>
-                </div>
+      {/* Extracted Fields - Clean Single Row Layout */}
+      <div className="rounded-md border overflow-hidden divide-y">
+        {fieldsToRender.map(({ key, title, value }) => {
+          const confidence = value?.confidence;
+          const reasoning = value?.reasoning;
+          const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
+          const displayValue = value?.value ?? '';
 
-                {/* Field Value */}
-                <div className="flex-1 min-w-0">
-                  <span
-                    className="text-sm font-mono truncate block"
-                    title={String(displayValue)}
-                  >
-                    {String(displayValue) || '-'}
-                  </span>
-                </div>
-
-                {/* Badges */}
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {confidence !== undefined && (
-                    <ConfidenceBadge score={confidence} />
-                  )}
-                  {hasBbox && (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        'text-xs h-5 px-1.5',
-                        hoveredField === key
-                          ? 'border-green-500 text-green-700 dark:text-green-400'
-                          : ''
-                      )}
-                    >
-                      📍
-                    </Badge>
-                  )}
-                </div>
+          return (
+            <div
+              key={key}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2.5 transition-colors cursor-pointer',
+                hoveredField === key
+                  ? 'bg-green-50 dark:bg-green-900/20'
+                  : 'hover:bg-muted/50'
+              )}
+              onMouseEnter={() => {
+                if (hasBbox) {
+                  validateAndSetBbox(value.bbox, key, confidence);
+                }
+              }}
+              onMouseLeave={() => {
+                onFieldHover(null, null, null);
+              }}
+              title={reasoning || undefined}
+            >
+              {/* Field Label */}
+              <div className="w-32 flex-shrink-0">
+                <span className={cn(
+                  'text-sm font-medium',
+                  hoveredField === key ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'
+                )}>
+                  {title}
+                </span>
               </div>
-            );
-          })}
-        </div>
+
+              {/* Field Value */}
+              <div className="flex-1 min-w-0">
+                <span
+                  className={cn(
+                    'text-sm truncate block',
+                    displayValue ? 'font-medium' : 'text-muted-foreground italic'
+                  )}
+                  title={String(displayValue)}
+                >
+                  {String(displayValue) || 'Not found'}
+                </span>
+              </div>
+
+              {/* Badges */}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {confidence !== undefined && (
+                  <ConfidenceBadge score={confidence} />
+                )}
+                {hasBbox && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      'text-xs h-5 px-1.5',
+                      hoveredField === key
+                        ? 'border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
+                        : 'bg-muted/50'
+                    )}
+                  >
+                    📍
+                  </Badge>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
