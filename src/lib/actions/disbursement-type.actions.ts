@@ -7,21 +7,36 @@
 
 import {
   fetchDisbursementTypesFromApi,
+  fetchDisbursementStatusesFromApi,
   getPreviousDisbursementType,
   getPreviousDisbursementTypeForVendor,
   saveDisbursementTypeMapping,
   getDisbursementTypesForVendor,
+  type DisbursementOption,
 } from '../services/disbursement-type.service';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
 
 /**
  * Fetch disbursement types from SmartAdvocate API
  * Types are common across all cases
+ * Returns array of { id, description }
  */
-export async function fetchDisbursementTypesAction(): Promise<ActionResult<string[]>> {
+export async function fetchDisbursementTypesAction(): Promise<ActionResult<DisbursementOption[]>> {
   return withActionHandler(
     () => fetchDisbursementTypesFromApi(),
     'Failed to fetch disbursement types'
+  );
+}
+
+/**
+ * Fetch disbursement statuses from SmartAdvocate API
+ * Statuses are common across all cases
+ * Returns array of { id, description }
+ */
+export async function fetchDisbursementStatusesAction(): Promise<ActionResult<DisbursementOption[]>> {
+  return withActionHandler(
+    () => fetchDisbursementStatusesFromApi(),
+    'Failed to fetch disbursement statuses'
   );
 }
 
