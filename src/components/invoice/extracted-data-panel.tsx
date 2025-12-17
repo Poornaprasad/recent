@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils/utils';
-import { Search, Loader2, AlertTriangle, CheckCircle2, DollarSign } from 'lucide-react';
+import { Search, Loader2, AlertTriangle, CheckCircle2, DollarSign, Save, X, Pencil } from 'lucide-react';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import type { StoredInvoice, DocumentType } from '@/lib/domain/types';
 import {
@@ -27,7 +27,7 @@ import {
   getInvoiceByIdAction,
 } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
-import { getDocumentTypeBadgeClass, getDocumentTypeDescription } from '@/lib/utils/document-type-utils';
+import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
 
 const toTitleCase = (str: string) => {
   if (!str) return '';
@@ -76,6 +76,9 @@ const DOCUMENT_TYPES: DocumentType[] = [
   'Other',
 ];
 
+// Case lookup status
+type CaseLookupStatus = 'idle' | 'loading' | 'success' | 'error';
+
 export function ExtractedDataPanel({
   invoiceData,
   hoveredField,
@@ -88,6 +91,8 @@ export function ExtractedDataPanel({
   // Case number state (not auto-search, requires explicit submit)
   const [caseNumber, setCaseNumber] = useState(invoiceData.caseNumber || '');
   const [isSubmittingCaseNumber, setIsSubmittingCaseNumber] = useState(false);
+  const [caseLookupStatus, setCaseLookupStatus] = useState<CaseLookupStatus>('idle');
+  const [caseLookupError, setCaseLookupError] = useState<string>('');
 
   // Plaintiff name state - track both sources
   // AI Extracted (from document) - this is the original extraction
@@ -107,6 +112,11 @@ export function ExtractedDataPanel({
   const [selectedDisbursementStatus, setSelectedDisbursementStatus] = useState<string>('');
   const [isLoadingTypes, setIsLoadingTypes] = useState(false);
   const [isLoadingStatuses, setIsLoadingStatuses] = useState(false);
+
+  // Editable fields state
+  const [editingField, setEditingField] = useState<string | null>(null);
+  const [editedValues, setEditedValues] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   // Load disbursement types and statuses on mount
   useEffect(() => {
@@ -190,40 +200,69 @@ export function ExtractedDataPanel({
     }
 
     setIsSubmittingCaseNumber(true);
+    setCaseLookupStatus('loading');
+    setCaseLookupError('');
+    setCasePlaintiffName(''); // Clear previous result
+
     try {
       const result = await updateInvoiceCaseNumberAction(invoiceData.id, caseNumber);
+
       if (result.success) {
-        // Refresh invoice data to get plaintiff name and other updates
+        // Refresh invoice data to get case details
         const updatedResult = await getInvoiceByIdAction(invoiceData.id);
+
         if (updatedResult.data) {
           onInvoiceUpdate(updatedResult.data);
 
-          // Get plaintiff name from case lookup result
-          const plaintiffNameFromCase = updatedResult.data.clientName?.value || updatedResult.data.customerName?.value || '';
-          setCasePlaintiffName(plaintiffNameFromCase);
+          // Check if we got plaintiff name from the case (not from AI extraction)
+          // The case lookup should populate a specific field for case plaintiff
+          // For now, we assume the API returns the case plaintiff name
+          const plaintiffNameFromCase = updatedResult.data.clientName?.value || '';
 
-          let description = 'Case number has been saved.';
           if (plaintiffNameFromCase) {
-            description += ` Plaintiff name "${plaintiffNameFromCase}" retrieved.`;
+            setCasePlaintiffName(plaintiffNameFromCase);
+            setCaseLookupStatus('success');
+            toast({
+              title: 'Case Found',
+              description: `Plaintiff: ${plaintiffNameFromCase}`,
+            });
+          } else {
+            // Case found but no plaintiff name
+            setCaseLookupStatus('success');
+            setCasePlaintiffName('N/A');
+            toast({
+              title: 'Case Found',
+              description: 'Case number saved. No plaintiff name in case record.',
+            });
           }
-
+        } else {
+          setCaseLookupStatus('error');
+          setCaseLookupError('Failed to retrieve case details');
           toast({
-            title: 'Case Number Updated',
-            description,
+            variant: 'destructive',
+            title: 'Lookup Failed',
+            description: 'Failed to retrieve case details.',
           });
         }
       } else {
+        // API returned error
+        setCaseLookupStatus('error');
+        const errorMsg = result.error || 'Failed to fetch case details';
+        setCaseLookupError(errorMsg);
         toast({
           variant: 'destructive',
-          title: 'Update Failed',
-          description: result.error || 'Failed to update case number.',
+          title: 'Case Lookup Failed',
+          description: errorMsg,
         });
       }
     } catch (error) {
+      setCaseLookupStatus('error');
+      const errorMsg = error instanceof Error ? error.message : 'Failed to fetch case details';
+      setCaseLookupError(errorMsg);
       toast({
         variant: 'destructive',
-        title: 'Update Failed',
-        description: error instanceof Error ? error.message : 'Failed to update case number.',
+        title: 'Case Lookup Failed',
+        description: errorMsg,
       });
     } finally {
       setIsSubmittingCaseNumber(false);
@@ -265,7 +304,7 @@ export function ExtractedDataPanel({
   };
 
   // Validate and set bounding box for hover
-  const validateAndSetBbox = (bbox: any, key: string, confidence?: number) => {
+  const validateAndSetBbox = useCallback((bbox: any, key: string, confidence?: number) => {
     if (bbox && Array.isArray(bbox) && bbox.length >= 4) {
       const isValid = bbox.every((p: any) =>
         typeof p === 'object' &&
@@ -279,6 +318,51 @@ export function ExtractedDataPanel({
         onFieldHover(key, bbox, confidence || null);
       }
     }
+  }, [onFieldHover]);
+
+  // Handle field edit
+  const handleStartEdit = (key: string, currentValue: string) => {
+    setEditingField(key);
+    setEditedValues(prev => ({ ...prev, [key]: currentValue }));
+  };
+
+  // Handle save field
+  const handleSaveField = async (key: string) => {
+    setIsSaving(true);
+    try {
+      // Create updated invoice data with the edited field
+      const updatedInvoice = { ...invoiceData };
+      const fieldValue = editedValues[key];
+
+      // Update the field value while preserving other metadata
+      if (updatedInvoice[key as keyof StoredInvoice]) {
+        (updatedInvoice as any)[key] = {
+          ...(updatedInvoice as any)[key],
+          value: fieldValue,
+        };
+      }
+
+      onInvoiceUpdate(updatedInvoice);
+      setEditingField(null);
+
+      toast({
+        title: 'Field Updated',
+        description: `${toTitleCase(key)} has been updated.`,
+      });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Update Failed',
+        description: 'Failed to update field.',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle cancel edit
+  const handleCancelEdit = () => {
+    setEditingField(null);
   };
 
   // Convert disbursement options to combobox format
@@ -300,8 +384,9 @@ export function ExtractedDataPanel({
   };
 
   const hasAiExtractedName = aiExtractedPlaintiffName.trim().length > 0;
-  const hasCaseName = casePlaintiffName.trim().length > 0;
-  const bothNamesPresent = hasAiExtractedName && hasCaseName;
+  const hasCaseName = casePlaintiffName.trim().length > 0 && casePlaintiffName !== 'N/A';
+  const caseSearchSuccessful = caseLookupStatus === 'success';
+  const bothNamesPresent = hasAiExtractedName && hasCaseName && caseSearchSuccessful;
   const namesMatch = bothNamesPresent
     ? normalizeNameForComparison(aiExtractedPlaintiffName) === normalizeNameForComparison(casePlaintiffName)
     : false;
@@ -346,7 +431,7 @@ export function ExtractedDataPanel({
               : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
           )}
           onMouseEnter={() => {
-            if (amountHasBbox) {
+            if (amountHasBbox && amountData?.bbox) {
               validateAndSetBbox(amountData.bbox, 'amount', amountConfidence);
             }
           }}
@@ -356,20 +441,15 @@ export function ExtractedDataPanel({
           <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
             {formatCurrency(amountValue)}
           </span>
-          {amountConfidence !== undefined && (
+          {amountConfidence !== undefined && amountConfidence !== null && (
             <ConfidenceBadge score={amountConfidence} />
           )}
           {amountHasBbox && (
             <Badge
               variant="outline"
-              className={cn(
-                'text-xs h-5 px-1.5',
-                hoveredField === 'amount'
-                  ? 'border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
-                  : 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-300'
-              )}
+              className="text-xs h-5 px-1.5 bg-emerald-100 dark:bg-emerald-900/30 border-emerald-300"
             >
-              📍
+              Located
             </Badge>
           )}
         </div>
@@ -446,7 +526,9 @@ export function ExtractedDataPanel({
       <div
         className={cn(
           'p-3 rounded-md border',
-          bothNamesPresent && !namesMatch
+          caseLookupStatus === 'error'
+            ? 'border-red-500/50 bg-red-50 dark:bg-red-950/20'
+            : bothNamesPresent && !namesMatch
             ? 'border-orange-500/50 bg-orange-50 dark:bg-orange-950/20'
             : bothNamesPresent && namesMatch
             ? 'border-green-500/50 bg-green-50 dark:bg-green-950/20'
@@ -455,7 +537,12 @@ export function ExtractedDataPanel({
       >
         <div className="flex items-center justify-between mb-3">
           <Label className="font-medium">Plaintiff Name</Label>
-          {bothNamesPresent && (
+          {caseLookupStatus === 'error' ? (
+            <Badge variant="outline" className="gap-1 border-red-500 text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30">
+              <AlertTriangle className="h-3 w-3" />
+              Lookup Failed
+            </Badge>
+          ) : bothNamesPresent && (
             namesMatch ? (
               <Badge variant="outline" className="gap-1 border-green-500 text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30">
                 <CheckCircle2 className="h-3 w-3" />
@@ -504,7 +591,9 @@ export function ExtractedDataPanel({
           <div
             className={cn(
               'rounded-md p-2 border',
-              bothNamesPresent && !namesMatch
+              caseLookupStatus === 'error'
+                ? 'border-red-300 dark:border-red-700'
+                : bothNamesPresent && !namesMatch
                 ? 'border-orange-300 dark:border-orange-700'
                 : 'border-border'
             )}
@@ -513,13 +602,25 @@ export function ExtractedDataPanel({
             <div
               className={cn(
                 'text-sm font-mono px-2 py-1.5 rounded bg-background/70 truncate',
-                hasCaseName ? '' : 'text-muted-foreground italic'
+                caseLookupStatus === 'error'
+                  ? 'text-red-600 dark:text-red-400'
+                  : hasCaseName
+                  ? ''
+                  : 'text-muted-foreground italic'
               )}
-              title={casePlaintiffName || 'Search case number first'}
+              title={
+                caseLookupStatus === 'error'
+                  ? caseLookupError
+                  : casePlaintiffName || 'Search case number first'
+              }
             >
-              {casePlaintiffName || 'Search case number first'}
+              {caseLookupStatus === 'error'
+                ? 'Error - See details below'
+                : caseLookupStatus === 'loading'
+                ? 'Searching...'
+                : casePlaintiffName || 'Search case number first'}
             </div>
-            {hasCaseName && (
+            {caseSearchSuccessful && hasCaseName && (
               <div className="flex items-center gap-1 mt-1">
                 <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-900/30 border-blue-300 text-blue-700 dark:text-blue-400">
                   Case Data
@@ -529,8 +630,18 @@ export function ExtractedDataPanel({
           </div>
         </div>
 
+        {/* Error Message for Failed Lookup */}
+        {caseLookupStatus === 'error' && (
+          <div className="mt-3 flex items-start gap-2 p-2 rounded bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200">
+            <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+            <p className="text-xs">
+              <span className="font-medium">Case lookup failed.</span> {caseLookupError || 'Unable to retrieve case details. Please verify the case number and try again.'}
+            </p>
+          </div>
+        )}
+
         {/* Mismatch Warning Message */}
-        {bothNamesPresent && !namesMatch && (
+        {bothNamesPresent && !namesMatch && caseLookupStatus !== 'error' && (
           <div className="mt-3 flex items-start gap-2 p-2 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200">
             <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <p className="text-xs">
@@ -540,7 +651,7 @@ export function ExtractedDataPanel({
         )}
 
         {/* Match Success Message */}
-        {bothNamesPresent && namesMatch && (
+        {bothNamesPresent && namesMatch && caseLookupStatus !== 'error' && (
           <div className="mt-3 flex items-start gap-2 p-2 rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
             <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <p className="text-xs">
@@ -550,7 +661,7 @@ export function ExtractedDataPanel({
         )}
 
         {/* Help text when no case lookup yet */}
-        {!hasCaseName && (
+        {caseLookupStatus === 'idle' && (
           <p className="text-xs text-muted-foreground mt-2">
             Enter a case number above and search to compare with the AI-extracted name.
           </p>
@@ -595,13 +706,14 @@ export function ExtractedDataPanel({
         </div>
       </div>
 
-      {/* Extracted Fields - Clean Single Row Layout */}
+      {/* Extracted Fields - Editable Single Row Layout */}
       <div className="rounded-md border overflow-hidden divide-y">
         {fieldsToRender.map(({ key, title, value }) => {
           const confidence = value?.confidence;
           const reasoning = value?.reasoning;
           const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
           const rawValue = value?.value ?? '';
+          const isEditing = editingField === key;
 
           // Format currency for amount field
           const isAmountField = key === 'amount';
@@ -611,19 +723,22 @@ export function ExtractedDataPanel({
             <div
               key={key}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 transition-colors cursor-pointer',
+                'flex items-center gap-3 px-3 py-2.5 transition-colors',
                 hoveredField === key
                   ? 'bg-green-50 dark:bg-green-900/20'
                   : 'hover:bg-muted/50',
-                isAmountField && 'bg-emerald-50/50 dark:bg-emerald-900/10'
+                isAmountField && 'bg-emerald-50/50 dark:bg-emerald-900/10',
+                isEditing && 'bg-blue-50 dark:bg-blue-900/20'
               )}
               onMouseEnter={() => {
-                if (hasBbox) {
+                if (hasBbox && !isEditing) {
                   validateAndSetBbox(value.bbox, key, confidence);
                 }
               }}
               onMouseLeave={() => {
-                onFieldHover(null, null, null);
+                if (!isEditing) {
+                  onFieldHover(null, null, null);
+                }
               }}
               title={reasoning || undefined}
             >
@@ -638,37 +753,90 @@ export function ExtractedDataPanel({
                 </span>
               </div>
 
-              {/* Field Value */}
+              {/* Field Value - Editable */}
               <div className="flex-1 min-w-0">
-                <span
-                  className={cn(
-                    'text-sm truncate block',
-                    rawValue ? 'font-medium' : 'text-muted-foreground italic',
-                    isAmountField && 'text-emerald-700 dark:text-emerald-300 font-semibold'
-                  )}
-                  title={displayValue}
-                >
-                  {displayValue || 'Not found'}
-                </span>
+                {isEditing ? (
+                  <Input
+                    value={editedValues[key] || ''}
+                    onChange={(e) => setEditedValues(prev => ({ ...prev, [key]: e.target.value }))}
+                    className="h-8 text-sm"
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        handleSaveField(key);
+                      } else if (e.key === 'Escape') {
+                        handleCancelEdit();
+                      }
+                    }}
+                  />
+                ) : (
+                  <span
+                    className={cn(
+                      'text-sm truncate block cursor-pointer',
+                      rawValue ? 'font-medium' : 'text-muted-foreground italic',
+                      isAmountField && 'text-emerald-700 dark:text-emerald-300 font-semibold'
+                    )}
+                    title={displayValue}
+                    onClick={() => handleStartEdit(key, String(rawValue))}
+                  >
+                    {displayValue || 'Not found'}
+                  </span>
+                )}
               </div>
 
-              {/* Badges */}
+              {/* Badges & Actions */}
               <div className="flex items-center gap-1.5 flex-shrink-0">
-                {confidence !== undefined && (
-                  <ConfidenceBadge score={confidence} />
-                )}
-                {hasBbox && (
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      'text-xs h-5 px-1.5',
-                      hoveredField === key
-                        ? 'border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
-                        : 'bg-muted/50'
+                {isEditing ? (
+                  <>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={() => handleSaveField(key)}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Save className="h-3.5 w-3.5 text-green-600" />
+                      )}
+                    </Button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      onClick={handleCancelEdit}
+                    >
+                      <X className="h-3.5 w-3.5 text-red-600" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {confidence !== undefined && confidence !== null && (
+                      <ConfidenceBadge score={confidence} />
                     )}
-                  >
-                    📍
-                  </Badge>
+                    {hasBbox && (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-xs h-5 px-1.5',
+                          hoveredField === key
+                            ? 'border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
+                            : 'bg-muted/50'
+                        )}
+                      >
+                        Located
+                      </Badge>
+                    )}
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:opacity-100"
+                      onClick={() => handleStartEdit(key, String(rawValue))}
+                    >
+                      <Pencil className="h-3 w-3 text-muted-foreground" />
+                    </Button>
+                  </>
                 )}
               </div>
             </div>
