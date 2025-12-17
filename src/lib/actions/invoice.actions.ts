@@ -8,7 +8,7 @@
 import { revalidatePath } from 'next/cache';
 import { invoiceService } from '../services/invoice.service';
 import { getInvoiceDataUri } from '../storage/file-utils';
-import type { StoredInvoice, ExtractedField } from '../domain/types';
+import type { StoredInvoice } from '../domain/types';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
 import { getDb, initDb } from '../db';
 import { invoices } from '../db/schema';
@@ -177,7 +177,7 @@ export async function updateInvoiceFieldAction(
   fieldValue: string,
   isEdited: boolean = true
 ): Promise<{ success: boolean; error?: string }> {
-  return withActionHandler(async () => {
+  const result = await withActionHandler(async () => {
     await initDb();
     const db = getDb();
 
@@ -201,11 +201,11 @@ export async function updateInvoiceFieldAction(
 
     // Set the metadata column (mark as user-edited, remove confidence)
     if (mapping.metaCol) {
-      const meta: ExtractedField<string> = {
-        value: fieldValue,
-        reasoning: isEdited ? 'User edited' : undefined,
-        // No confidence for user-edited fields
-      };
+      // Build metadata - confidence is intentionally omitted for user-edited fields
+      const meta: { value: string; reasoning?: string } = { value: fieldValue };
+      if (isEdited) {
+        meta.reasoning = 'User edited';
+      }
       updateData[mapping.metaCol] = serializeMeta(meta);
     }
 
@@ -217,5 +217,11 @@ export async function updateInvoiceFieldAction(
     revalidatePath(`/invoices/${invoiceId}`);
     return { success: true };
   }, 'Failed to update invoice field');
+
+  // Unwrap the result to match the expected return type
+  if (result.error) {
+    return { success: false, error: result.error };
+  }
+  return result.data || { success: false, error: 'Unknown error' };
 }
 

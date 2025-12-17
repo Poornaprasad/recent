@@ -89,8 +89,8 @@ export function ExtractedDataPanel({
 }: ExtractedDataPanelProps) {
   const { toast } = useToast();
 
-  // Store original extracted values for reset functionality
-  const originalValuesRef = useRef<Record<string, string>>({});
+  // Store original extracted field data for reset functionality (includes confidence, bbox, etc.)
+  const originalFieldsRef = useRef<Record<string, any>>({});
 
   // Case number state (not auto-search, requires explicit submit)
   const [caseNumber, setCaseNumber] = useState(invoiceData.caseNumber || '');
@@ -121,15 +121,29 @@ export function ExtractedDataPanel({
   const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
 
-  // Initialize original values on mount
+  // Initialize original field data and detect already-edited fields on mount
   useEffect(() => {
-    const originals: Record<string, string> = {};
+    const originals: Record<string, any> = {};
+    const alreadyEdited = new Set<string>();
+
     Object.entries(invoiceData).forEach(([key, value]) => {
       if (value && typeof value === 'object' && 'value' in value) {
-        originals[key] = String(value.value || '');
+        // Store the full field object (value, confidence, bbox, reasoning)
+        originals[key] = { ...value };
+
+        // Detect if field was previously edited (has 'User edited' reasoning and no confidence)
+        if (value.reasoning === 'User edited' && value.confidence === undefined) {
+          alreadyEdited.add(key);
+        }
       }
     });
-    originalValuesRef.current = originals;
+
+    originalFieldsRef.current = originals;
+
+    // Only set edited fields if there are any already-edited ones from DB
+    if (alreadyEdited.size > 0) {
+      setEditedFields(alreadyEdited);
+    }
   }, []); // Only run once on mount
 
   // Load disbursement types and statuses on mount
@@ -332,7 +346,8 @@ export function ExtractedDataPanel({
     setIsSaving(true);
     try {
       const fieldValue = editedValues[key];
-      const originalValue = originalValuesRef.current[key];
+      const originalField = originalFieldsRef.current[key];
+      const originalValue = originalField?.value !== undefined ? String(originalField.value) : '';
 
       // Save to database
       const result = await updateInvoiceFieldAction(invoiceData.id, key, fieldValue, true);
@@ -382,8 +397,10 @@ export function ExtractedDataPanel({
 
   // Handle reset to original extracted value - persists to database
   const handleResetField = async (key: string) => {
-    const originalValue = originalValuesRef.current[key];
-    if (originalValue === undefined) return;
+    const originalField = originalFieldsRef.current[key];
+    if (!originalField) return;
+
+    const originalValue = originalField.value !== undefined ? String(originalField.value) : '';
 
     setIsSaving(true);
     try {
@@ -394,16 +411,12 @@ export function ExtractedDataPanel({
         throw new Error(result.error || 'Failed to reset field');
       }
 
-      // Create updated invoice data with original value restored
+      // Create updated invoice data with FULL original field restored (including confidence, bbox)
       const updatedInvoice = { ...invoiceData };
-      const originalField = (invoiceData as any)[key];
 
       if (updatedInvoice[key as keyof StoredInvoice]) {
-        (updatedInvoice as any)[key] = {
-          ...originalField,
-          value: originalValue,
-          reasoning: undefined, // Remove 'User edited' reasoning
-        };
+        // Restore the complete original field with confidence, bbox, reasoning, etc.
+        (updatedInvoice as any)[key] = { ...originalField };
       }
 
       // Remove from edited fields set
@@ -706,7 +719,7 @@ export function ExtractedDataPanel({
         )}
 
         {/* Mismatch Warning Message */}
-        {bothNamesPresent && !namesMatch && caseLookupStatus !== 'error' && (
+        {bothNamesPresent && !namesMatch && (
           <div className="mt-3 flex items-start gap-2 p-2 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200">
             <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <p className="text-xs">
@@ -716,7 +729,7 @@ export function ExtractedDataPanel({
         )}
 
         {/* Match Success Message */}
-        {bothNamesPresent && namesMatch && caseLookupStatus !== 'error' && (
+        {bothNamesPresent && namesMatch && (
           <div className="mt-3 flex items-start gap-2 p-2 rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
             <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <p className="text-xs">
@@ -771,9 +784,9 @@ export function ExtractedDataPanel({
         </div>
       </div>
 
-      {/* Reset All Edited Fields Button */}
-      {editedFields.size > 0 && (
-        <div className="flex justify-end">
+      {/* Reset All Edited Fields Button - Always reserve space to prevent UI shift */}
+      <div className="flex justify-end h-8">
+        {editedFields.size > 0 && (
           <Button
             variant="outline"
             size="sm"
@@ -792,8 +805,8 @@ export function ExtractedDataPanel({
             )}
             Reset All Edited ({editedFields.size})
           </Button>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Extracted Fields - Editable Single Row Layout */}
       <div className="rounded-md border overflow-hidden divide-y">
