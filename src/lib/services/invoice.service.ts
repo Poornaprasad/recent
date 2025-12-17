@@ -20,9 +20,6 @@ import { vendorService } from './vendor.service';
 import { createPendingVendor, findPendingVendorByInvoiceId } from '../repositories/pending-vendor.repository';
 import type { StoredInvoice } from '../domain/types';
 import { stateDetectionService } from '../core/state/state-detection.service';
-import { getCaseInfo, extractPlaintiffName } from '../crm/smartadvocate';
-import type { ExtractedField } from '../domain/types';
-import { serializeMeta } from '../repositories/mappers/invoice.mapper';
 
 export class InvoiceService {
   /**
@@ -339,9 +336,8 @@ export class InvoiceService {
 
   /**
    * Update case number
-   * Fetches case info from SmartAdvocate API and updates plaintiff name
-   * Validates that case number is provided when plaintiff name (clientName/customerName) is present
-   * Auto-sets state based on case number (CA if contains CA, otherwise NY)
+   * Saves the case number and auto-detects state
+   * Does NOT overwrite AI-extracted plaintiff names - case info is fetched separately by frontend
    */
   async updateCaseNumber(id: string, caseNumber: string | undefined): Promise<void> {
     try {
@@ -350,136 +346,33 @@ export class InvoiceService {
       console.error('Failed to initialize database:', error);
       throw new Error('Database connection failed');
     }
-    
+
     const db = getDb();
-    
-    // Get the invoice to check for plaintiff name
+
+    // Get the invoice to verify it exists
     const invoice = await findInvoiceById(id);
     if (!invoice) {
       throw new Error('Invoice not found');
     }
-    
+
     // Normalize case number (trim whitespace, convert empty string to undefined)
     const normalizedCaseNumber = caseNumber?.trim() || undefined;
-    
-    // Helper to extract value from ExtractedField or string
-    const extractValue = (field: any): string | null => {
-      if (!field) return null;
-      if (typeof field === 'string') return field.trim() || null;
-      if (typeof field === 'object' && field !== null && 'value' in field) {
-        const val = field.value;
-        if (typeof val === 'string') return val.trim() || null;
-      }
-      return null;
-    };
-    
-    // Helper to create ExtractedField from string value
-    const createExtractedField = (value: string | null): ExtractedField<string> | null => {
-      if (!value || value.trim() === '') return null;
-      return {
-        value: value.trim(),
-        confidence: 1.0, // High confidence since it's from API
-        reasoning: 'Fetched from SmartAdvocate Case Info API',
-      };
-    };
-    
-    // Fetch case info from API if case number is provided
-    let plaintiffNameFromApi: string | null = null;
-    let updatedClientName: ExtractedField<string> | null = invoice.clientName;
-    let updatedCustomerName: ExtractedField<string> | null = invoice.customerName;
-    
-    if (normalizedCaseNumber && normalizedCaseNumber !== '') {
-      try {
-        const caseInfo = await getCaseInfo({ 
-          caseNumber: normalizedCaseNumber,
-          addContactInfo: true 
-        });
-        if (caseInfo) {
-          plaintiffNameFromApi = extractPlaintiffName(caseInfo);
-          
-          // Update plaintiff name if fetched from API
-          // Prefer updating customerName, but also set clientName if customerName doesn't exist
-          if (plaintiffNameFromApi) {
-            const existingCustomerName = extractValue(invoice.customerName);
-            const existingClientName = extractValue(invoice.clientName);
-            
-            // If neither exists, set customerName (preferred field)
-            if (!existingCustomerName && !existingClientName) {
-              updatedCustomerName = createExtractedField(plaintiffNameFromApi);
-            }
-            // If customerName exists but clientName doesn't, also set clientName
-            else if (existingCustomerName && !existingClientName) {
-              updatedClientName = createExtractedField(plaintiffNameFromApi);
-            }
-            // If customerName doesn't exist but clientName does, update customerName
-            else if (!existingCustomerName && existingClientName) {
-              updatedCustomerName = createExtractedField(plaintiffNameFromApi);
-            }
-            // If both exist, update customerName (preferred field)
-            else {
-              updatedCustomerName = createExtractedField(plaintiffNameFromApi);
-            }
-          }
-        }
-      } catch (error) {
-        // Log error but don't fail the update - case number can still be saved
-        console.error('Error fetching case info from API:', error);
-        // Continue with the update even if API call fails
-      }
-    }
-    
-    // Check if plaintiff name (clientName or customerName) is present after potential API update
-    const plaintiffNameValue = extractValue(updatedClientName) || extractValue(updatedCustomerName);
-    const hasPlaintiffName = plaintiffNameValue !== null && plaintiffNameValue !== '';
-    
-    // Validate: case number is mandatory when plaintiff name is present
-    if (hasPlaintiffName && !normalizedCaseNumber) {
-      throw new Error('Case number is required when plaintiff name is present');
-    }
-    
+
     // Auto-detect state based on case number
     let detectedState: 'CA' | 'NY' | null = null;
     if (normalizedCaseNumber) {
       const stateResult = stateDetectionService.detectState(normalizedCaseNumber);
       detectedState = stateResult.state;
     }
-    
-    // Prepare update data
+
+    // Prepare update data - only update case number and state
+    // Do NOT overwrite AI-extracted clientName/customerName
     const updateData: any = {
       caseNumber: normalizedCaseNumber || null,
       state: detectedState,
       updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
     };
-    
-    // Update plaintiff name fields if they were fetched from API
-    if (plaintiffNameFromApi) {
-      // Check if customerName needs updating (compare values, not object references)
-      const currentCustomerName = extractValue(invoice.customerName);
-      const newCustomerName = extractValue(updatedCustomerName);
-      if (newCustomerName && newCustomerName !== currentCustomerName) {
-        updateData.customerName = newCustomerName;
-        try {
-          updateData.customerNameMeta = serializeMeta(updatedCustomerName);
-        } catch (error) {
-          console.error('Error serializing customerName metadata:', error);
-          updateData.customerNameMeta = null;
-        }
-      }
-      
-      // Check if clientName needs updating (compare values, not object references)
-      const currentClientName = extractValue(invoice.clientName);
-      const newClientName = extractValue(updatedClientName);
-      if (newClientName && newClientName !== currentClientName) {
-        updateData.clientName = newClientName;
-        try {
-          updateData.clientNameMeta = serializeMeta(updatedClientName);
-        } catch (error) {
-          console.error('Error serializing clientName metadata:', error);
-          updateData.clientNameMeta = null;
-        }
-      }
-    }
-    
+
     try {
       await db
         .update(invoices)

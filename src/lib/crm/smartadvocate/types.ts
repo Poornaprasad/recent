@@ -10,27 +10,140 @@ export interface SmartAdvocateConfig {
   SA_PASSWORD?: string;
 }
 
+/**
+ * Contact email from SmartAdvocate API
+ */
+export interface SmartAdvocateEmail {
+  emailID: number;
+  name: string;
+  primary: boolean;
+  preventAutoContact?: boolean;
+  createdDate?: string;
+  modifiedDate?: string;
+}
+
+/**
+ * Contact phone from SmartAdvocate API
+ */
+export interface SmartAdvocatePhone {
+  phoneID: number;
+  name: string;
+  phoneNumber: string;
+  primary: boolean;
+  useForTexting?: boolean;
+  preventAutoContact?: boolean;
+  createdDate?: string;
+  modifiedDate?: string;
+}
+
+/**
+ * Contact address from SmartAdvocate API
+ */
+export interface SmartAdvocateAddress {
+  addressID: number;
+  address1?: string;
+  city?: string;
+  state?: string;
+  zip?: string;
+  county?: string;
+  country?: string;
+  primary: boolean;
+  residence?: boolean;
+  current?: boolean;
+  addressType?: string;
+  mailing?: boolean;
+  createdDate?: string;
+  modifiedDate?: string;
+}
+
+/**
+ * Contact details from SmartAdvocate API
+ */
+export interface SmartAdvocateContact {
+  contactId: number;
+  contactCtg?: number;
+  firstName?: string;
+  lastName?: string;
+  middleName?: string;
+  name?: string; // For company contacts
+  prefix?: string;
+  suffix?: string;
+  nickName?: string;
+  maidenName?: string;
+  contactTypeId?: number;
+  contactSubCtgID?: number;
+  contactType?: string;
+  contactSubCtg?: string;
+  comments?: string;
+  dateOfBirth?: string;
+  genderID?: number;
+  birthPlace?: string;
+  occupation?: string;
+  spouse?: string;
+  einNo?: string;
+  ssnNo?: string;
+  primaryLanguage?: string;
+  secondaryLanguage?: string;
+  licenseNo?: string;
+  licenseStateID?: number;
+  noSSN?: boolean;
+  active?: boolean;
+  preventAutoContact?: boolean;
+  preventMailing?: boolean;
+  locked?: boolean;
+  addresses?: SmartAdvocateAddress[];
+  emails?: SmartAdvocateEmail[];
+  phones?: SmartAdvocatePhone[];
+  createdDate?: string;
+  modifiedDate?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Plaintiff from SmartAdvocate API
+ */
+export interface SmartAdvocatePlaintiff {
+  id: number;
+  name: string;
+  roleID?: number;
+  role?: string;
+  contactID?: number;
+  primary: boolean;
+  primaryContact?: boolean;
+  comments?: string;
+  missing?: boolean;
+  markedAsRemoved?: boolean;
+  client?: boolean;
+  group?: number;
+  contact?: SmartAdvocateContact;
+  tableType?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Case response from SmartAdvocate API
+ * Based on actual API response structure
+ */
 export interface SmartAdvocateCase {
-  caseID?: string | number;
-  caseNumber?: string;
+  caseID: number;
+  caseNumber: string;
   caseName?: string;
+  caseGroupID?: number;
+  caseGroup?: string;
+  caseTypeID?: number;
   caseType?: string;
+  caseStatusID?: number;
   caseStatus?: string;
-  plaintiffs?: Array<{
-    id?: number;
-    name?: string;
-    roleID?: number;
-    role?: string;
-    contactID?: number;
-    primary?: boolean;
-  }>;
+  caseStatusFrom?: string;
+  caseOpenedDate?: string;
+  wantedAcceptedDate?: string;
+  officeID?: number;
+  officeName?: string;
+  plaintiffs?: SmartAdvocatePlaintiff[];
   defendant?: Array<{
-    id?: number;
-    name?: string;
-    roleID?: number;
-    role?: string;
-    contactID?: number;
-    primary?: boolean;
+    id: number;
+    name: string;
+    [key: string]: unknown;
   }>;
   caseStaff?: Array<{
     uniqueContactId?: number;
@@ -38,20 +151,13 @@ export interface SmartAdvocateCase {
     lastName?: string;
     email?: string;
     role?: string;
+    phone?: string;
+    userID?: number;
+    [key: string]: unknown;
   }>;
+  createdDate?: string;
+  modifiedDate?: string;
   [key: string]: unknown;
-}
-
-/**
- * Case Info response structure from SmartAdvocate API
- */
-export interface CaseInfo {
-  CaseNumber?: string;
-  PlaintiffName?: string;
-  Plaintiff?: string;
-  ClientName?: string;
-  CustomerName?: string;
-  [key: string]: unknown; // Allow for other fields
 }
 
 /**
@@ -62,3 +168,12 @@ export interface GetCaseInfoParams {
   addContactInfo?: boolean;
 }
 
+/**
+ * Extracted plaintiff info from case lookup
+ */
+export interface PlaintiffInfo {
+  name: string;
+  email?: string;
+  phone?: string;
+  isPrimary: boolean;
+}
