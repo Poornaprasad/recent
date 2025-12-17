@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils/utils';
-import { Search, Loader2, AlertTriangle, CheckCircle2, DollarSign, Save, X, RotateCcw } from 'lucide-react';
+import { Search, Loader2, AlertTriangle, CheckCircle2, Save, X, RotateCcw } from 'lucide-react';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import type { StoredInvoice, DocumentType } from '@/lib/domain/types';
 import {
@@ -29,23 +29,14 @@ import {
 } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
+import { formatCurrency } from '@/lib/utils/invoice-utils';
+import { matchPlaintiffData, type MatchResult } from '@/lib/utils/name-matching';
 
 const toTitleCase = (str: string) => {
   if (!str) return '';
   str = str.replace(/([A-Z])/g, ' $1');
   str = str.replace(/(\d+)/g, ' $1');
   return str.replace(/^./, (s) => s.toUpperCase());
-};
-
-// Format amount as currency
-const formatCurrency = (value: string | number | undefined | null): string => {
-  if (value === undefined || value === null || value === '') return '$0.00';
-  const num = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]/g, '')) : value;
-  if (isNaN(num)) return '$0.00';
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-  }).format(num);
 };
 
 interface DisbursementOption {
@@ -456,18 +447,18 @@ export function ExtractedDataPanel({
     id: s.id,
   }));
 
-  // Compare plaintiff names - normalize for comparison
-  const normalizeNameForComparison = (name: string): string => {
-    return name.toLowerCase().trim().replace(/\s+/g, ' ');
-  };
-
+  // Plaintiff name comparison using fuzzy matching
   const hasAiExtractedName = aiExtractedPlaintiffName.trim().length > 0;
   const hasCaseName = casePlaintiffName.trim().length > 0;
   const caseSearchSuccessful = caseLookupStatus === 'success';
   const bothNamesPresent = hasAiExtractedName && hasCaseName && caseSearchSuccessful;
-  const namesMatch = bothNamesPresent
-    ? normalizeNameForComparison(aiExtractedPlaintiffName) === normalizeNameForComparison(casePlaintiffName)
-    : false;
+
+  // Use the name matching utility for comparison (handles permutations and email)
+  const matchResult: MatchResult = bothNamesPresent
+    ? matchPlaintiffData(aiExtractedPlaintiffName, casePlaintiffName)
+    : { isMatch: false, matchType: 'none', confidence: 'none' };
+
+  const namesMatch = matchResult.isMatch;
 
   // Prepare fields to render (exclude system fields and special fields handled separately)
   const excludedFields = [
@@ -480,63 +471,42 @@ export function ExtractedDataPanel({
     'amountDeviationPercent', 'hasMultipleVendors', 'accuracyScore',
     'requiresSpecialHandling', 'specialHandlingReason', 'vendorRequires1099',
     'comment', 'paymentType', 'clientName', 'customerName', // plaintiff name handled separately
-    'totalAmount', // only show amount field
+    'totalAmount', 'amount', // amount handled separately
   ];
 
+  // Dynamically render all fields except excluded ones
   const fieldsToRender = Object.entries(invoiceData)
     .filter(([key, value]) => {
-      if (value === null) return false;
-      return !excludedFields.includes(key);
+      if (excludedFields.includes(key)) return false;
+      if (value === null || value === undefined) return false;
+      // Only render fields that have extractedField structure with value
+      if (typeof value === 'object' && 'value' in value) return true;
+      return false;
     })
-    .map(([key, value]) => ({ key, title: toTitleCase(key), value }));
+    .map(([key, value]) => ({
+      key,
+      title: toTitleCase(key),
+      value: value as { value: any; confidence?: number; bbox?: any; reasoning?: string },
+    }));
 
-  // Get amount data for header display
+  // Get amount data for display
   const amountData = invoiceData.amount;
   const amountValue = amountData?.value;
   const amountConfidence = amountData?.confidence;
   const amountHasBbox = amountData?.bbox && Array.isArray(amountData.bbox) && amountData.bbox.length >= 4;
+  const isAmountEdited = editedFields.has('amount');
 
   return (
     <div className="space-y-3 p-4">
-      {/* Header with Amount Display */}
-      <div className="flex items-center justify-between pb-2 border-b">
-        <h3 className="font-semibold text-base">Extracted Data</h3>
-        <div
-          className={cn(
-            'flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors',
-            hoveredField === 'amount'
-              ? 'bg-green-50 dark:bg-green-900/20 border-green-500'
-              : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
-          )}
-          onMouseEnter={() => {
-            if (amountHasBbox && amountData?.bbox) {
-              validateAndSetBbox(amountData.bbox, 'amount', amountConfidence);
-            }
-          }}
-          onMouseLeave={() => onFieldHover(null, null, null)}
-        >
-          <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
-            {formatCurrency(amountValue)}
-          </span>
-          {amountConfidence !== undefined && amountConfidence !== null && (
-            <ConfidenceBadge score={amountConfidence} />
-          )}
-          {amountHasBbox && (
-            <Badge
-              variant="outline"
-              className="text-xs h-5 px-1.5 bg-emerald-100 dark:bg-emerald-900/30 border-emerald-300"
-            >
-              Located
-            </Badge>
-          )}
-        </div>
-      </div>
-
-      {/* Document Type - Single Line */}
-      <div className="p-3 rounded-md border bg-muted/30">
+      {/* Document Type - Single Line (Required) */}
+      <div className={cn(
+        'p-3 rounded-md border',
+        !documentType ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
+      )}>
         <div className="flex items-center gap-3">
-          <Label className="font-medium text-sm flex-shrink-0 w-32">Document Type</Label>
+          <Label className="font-medium text-sm flex-shrink-0 w-32">
+            Document Type<span className="text-destructive">*</span>
+          </Label>
           <div className="flex-1">
             <Select value={documentType} onValueChange={(v) => handleDocumentTypeChange(v as DocumentType)}>
               <SelectTrigger className="h-9">
@@ -733,7 +703,10 @@ export function ExtractedDataPanel({
           <div className="mt-3 flex items-start gap-2 p-2 rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
             <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
             <p className="text-xs">
-              <span className="font-medium">Names match.</span> The document plaintiff name matches the case record.
+              <span className="font-medium">Names match.</span>{' '}
+              {matchResult.confidence === 'permutation'
+                ? 'The names match (different format detected - e.g., "First Last" vs "Last, First").'
+                : 'The document plaintiff name matches the case record.'}
             </p>
           </div>
         )}
@@ -746,10 +719,15 @@ export function ExtractedDataPanel({
         )}
       </div>
 
-      {/* Disbursement Type - Single Line */}
-      <div className="p-3 rounded-md border bg-muted/30">
+      {/* Disbursement Type - Single Line (Required) */}
+      <div className={cn(
+        'p-3 rounded-md border',
+        !selectedDisbursementType ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
+      )}>
         <div className="flex items-center gap-3">
-          <Label className="font-medium text-sm flex-shrink-0 w-32">Disbursement Type</Label>
+          <Label className="font-medium text-sm flex-shrink-0 w-32">
+            Disbursement Type<span className="text-destructive">*</span>
+          </Label>
           <div className="flex-1">
             <Combobox
               options={typeOptions}
@@ -765,10 +743,15 @@ export function ExtractedDataPanel({
         </div>
       </div>
 
-      {/* Disbursement Status - Single Line */}
-      <div className="p-3 rounded-md border bg-muted/30">
+      {/* Disbursement Status - Single Line (Required) */}
+      <div className={cn(
+        'p-3 rounded-md border',
+        !selectedDisbursementStatus ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
+      )}>
         <div className="flex items-center gap-3">
-          <Label className="font-medium text-sm flex-shrink-0 w-32">Disbursement Status</Label>
+          <Label className="font-medium text-sm flex-shrink-0 w-32">
+            Disbursement Status<span className="text-destructive">*</span>
+          </Label>
           <div className="flex-1">
             <Combobox
               options={statusOptions}
@@ -784,184 +767,182 @@ export function ExtractedDataPanel({
         </div>
       </div>
 
-      {/* Reset All Edited Fields Button - Always reserve space to prevent UI shift */}
-      <div className="flex justify-end h-8">
-        {editedFields.size > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              for (const key of editedFields) {
-                await handleResetField(key);
-              }
-            }}
-            disabled={isSaving}
-            className="gap-1.5 text-xs"
-          >
-            {isSaving ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : (
-              <RotateCcw className="h-3 w-3" />
-            )}
-            Reset All Edited ({editedFields.size})
-          </Button>
-        )}
-      </div>
+      {/* Extracted Fields - Invoice Number, Date, Vendor Name, Address, etc. */}
+      {fieldsToRender.length > 0 && (
+        <div className="rounded-md border overflow-hidden divide-y">
+          {fieldsToRender.map(({ key, title, value }) => {
+            const confidence = value?.confidence;
+            const reasoning = value?.reasoning;
+            const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
+            const rawValue = value?.value ?? '';
+            const isEditing = editingField === key;
+            const isEdited = editedFields.has(key);
+            const displayValue = String(rawValue);
 
-      {/* Extracted Fields - Editable Single Row Layout */}
-      <div className="rounded-md border overflow-hidden divide-y">
-        {fieldsToRender.map(({ key, title, value }) => {
-          const confidence = value?.confidence;
-          const reasoning = value?.reasoning;
-          const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
-          const rawValue = value?.value ?? '';
-          const isEditing = editingField === key;
-          const isEdited = editedFields.has(key);
-
-          // Format currency for amount field
-          const isAmountField = key === 'amount';
-          const displayValue = isAmountField ? formatCurrency(rawValue) : String(rawValue);
-
-          return (
-            <div
-              key={key}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 transition-colors group',
-                hoveredField === key
-                  ? 'bg-green-50 dark:bg-green-900/20'
-                  : 'hover:bg-muted/50',
-                isAmountField && 'bg-emerald-50/50 dark:bg-emerald-900/10',
-                isEditing && 'bg-blue-50 dark:bg-blue-900/20',
-                isEdited && !isEditing && 'bg-amber-50/50 dark:bg-amber-900/10'
-              )}
-              onMouseEnter={() => {
-                if (hasBbox && !isEditing) {
-                  validateAndSetBbox(value.bbox, key, confidence);
-                }
-              }}
-              onMouseLeave={() => {
-                if (!isEditing) {
-                  onFieldHover(null, null, null);
-                }
-              }}
-              title={reasoning || undefined}
-            >
-              {/* Field Label */}
-              <div className="w-32 flex-shrink-0">
-                <span className={cn(
-                  'text-sm font-medium',
-                  hoveredField === key ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground',
-                  isAmountField && 'text-emerald-700 dark:text-emerald-400'
-                )}>
-                  {title}
-                </span>
-              </div>
-
-              {/* Field Value - Editable */}
-              <div className="flex-1 min-w-0">
-                {isEditing ? (
-                  <Input
-                    value={editedValues[key] || ''}
-                    onChange={(e) => setEditedValues(prev => ({ ...prev, [key]: e.target.value }))}
-                    className="h-8 text-sm"
-                    autoFocus
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        handleSaveField(key);
-                      } else if (e.key === 'Escape') {
-                        handleCancelEdit();
-                      }
-                    }}
-                  />
-                ) : (
-                  <span
-                    className={cn(
-                      'text-sm truncate block cursor-pointer',
-                      rawValue ? 'font-medium' : 'text-muted-foreground italic',
-                      isAmountField && 'text-emerald-700 dark:text-emerald-300 font-semibold'
-                    )}
-                    title={displayValue}
-                    onClick={() => handleStartEdit(key, String(rawValue))}
-                  >
-                    {displayValue || 'Not found'}
+            return (
+              <div
+                key={key}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 transition-colors group',
+                  hoveredField === key
+                    ? 'bg-green-50 dark:bg-green-900/20'
+                    : 'hover:bg-muted/50',
+                  isEditing && 'bg-blue-50 dark:bg-blue-900/20',
+                  isEdited && !isEditing && 'bg-amber-50/50 dark:bg-amber-900/10'
+                )}
+                onMouseEnter={() => {
+                  if (hasBbox && !isEditing) {
+                    validateAndSetBbox(value.bbox, key, confidence);
+                  }
+                }}
+                onMouseLeave={() => {
+                  if (!isEditing) {
+                    onFieldHover(null, null, null);
+                  }
+                }}
+                title={reasoning || undefined}
+              >
+                <div className="w-32 flex-shrink-0">
+                  <span className={cn(
+                    'text-sm font-medium',
+                    hoveredField === key ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'
+                  )}>
+                    {title}
                   </span>
-                )}
-              </div>
-
-              {/* Badges & Actions */}
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {isEditing ? (
-                  <>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      onClick={() => handleSaveField(key)}
-                      disabled={isSaving}
+                </div>
+                <div className="flex-1 min-w-0">
+                  {isEditing ? (
+                    <Input
+                      value={editedValues[key] || ''}
+                      onChange={(e) => setEditedValues(prev => ({ ...prev, [key]: e.target.value }))}
+                      className="h-8 text-sm"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSaveField(key);
+                        else if (e.key === 'Escape') handleCancelEdit();
+                      }}
+                    />
+                  ) : (
+                    <span
+                      className={cn('text-sm truncate block cursor-pointer', rawValue ? 'font-medium' : 'text-muted-foreground italic')}
+                      title={displayValue}
+                      onClick={() => handleStartEdit(key, String(rawValue))}
                     >
-                      {isSaving ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      {displayValue || 'Not found'}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {isEditing ? (
+                    <>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSaveField(key)} disabled={isSaving}>
+                        {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 text-green-600" />}
+                      </Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancelEdit}>
+                        <X className="h-3.5 w-3.5 text-red-600" />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      {isEdited ? (
+                        <>
+                          <Badge variant="outline" className="text-xs h-5 px-1.5 bg-amber-100 dark:bg-amber-900/30 border-amber-400 text-amber-700 dark:text-amber-400">Edited</Badge>
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleResetField(key)} title="Reset to extracted value">
+                            <RotateCcw className="h-3 w-3 text-muted-foreground hover:text-amber-600" />
+                          </Button>
+                        </>
                       ) : (
-                        <Save className="h-3.5 w-3.5 text-green-600" />
+                        <>
+                          {confidence !== undefined && confidence !== null && <ConfidenceBadge score={confidence} />}
+                          {hasBbox && (
+                            <Badge variant="outline" className={cn('text-xs h-5 px-1.5', hoveredField === key ? 'border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30' : 'bg-muted/50')}>
+                              Located
+                            </Badge>
+                          )}
+                        </>
                       )}
-                    </Button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      onClick={handleCancelEdit}
-                    >
-                      <X className="h-3.5 w-3.5 text-red-600" />
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Amount Field */}
+      <div
+        className={cn(
+          'p-3 rounded-md border transition-colors cursor-pointer',
+          hoveredField === 'amount'
+            ? 'bg-green-50 dark:bg-green-900/20 border-green-500'
+            : isAmountEdited
+            ? 'bg-amber-50/50 dark:bg-amber-900/10 border-amber-300'
+            : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+        )}
+        onMouseEnter={() => {
+          if (amountHasBbox && amountData?.bbox) {
+            validateAndSetBbox(amountData.bbox, 'amount', amountConfidence);
+          }
+        }}
+        onMouseLeave={() => onFieldHover(null, null, null)}
+      >
+        <div className="flex items-center gap-3">
+          <Label className="font-medium text-sm flex-shrink-0 w-32 text-emerald-700 dark:text-emerald-400">Amount</Label>
+          <div className="flex-1 min-w-0">
+            {editingField === 'amount' ? (
+              <Input
+                value={editedValues['amount'] || ''}
+                onChange={(e) => setEditedValues(prev => ({ ...prev, amount: e.target.value }))}
+                className="h-8 text-sm"
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') handleSaveField('amount');
+                  else if (e.key === 'Escape') handleCancelEdit();
+                }}
+              />
+            ) : (
+              <span
+                className="text-lg font-bold text-emerald-700 dark:text-emerald-300 cursor-pointer"
+                onClick={() => handleStartEdit('amount', String(amountValue || ''))}
+              >
+                {formatCurrency(amountValue)}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {editingField === 'amount' ? (
+              <>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSaveField('amount')} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 text-green-600" />}
+                </Button>
+                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancelEdit}>
+                  <X className="h-3.5 w-3.5 text-red-600" />
+                </Button>
+              </>
+            ) : (
+              <>
+                {isAmountEdited ? (
+                  <>
+                    <Badge variant="outline" className="text-xs h-5 px-1.5 bg-amber-100 dark:bg-amber-900/30 border-amber-400 text-amber-700 dark:text-amber-400">Edited</Badge>
+                    <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleResetField('amount')} title="Reset to extracted value">
+                      <RotateCcw className="h-3 w-3 text-muted-foreground hover:text-amber-600" />
                     </Button>
                   </>
                 ) : (
                   <>
-                    {/* Show Edited badge instead of confidence when edited */}
-                    {isEdited ? (
-                      <>
-                        <Badge
-                          variant="outline"
-                          className="text-xs h-5 px-1.5 bg-amber-100 dark:bg-amber-900/30 border-amber-400 text-amber-700 dark:text-amber-400"
-                        >
-                          Edited
-                        </Badge>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-6 w-6"
-                          onClick={() => handleResetField(key)}
-                          title="Reset to extracted value"
-                        >
-                          <RotateCcw className="h-3 w-3 text-muted-foreground hover:text-amber-600" />
-                        </Button>
-                      </>
-                    ) : (
-                      <>
-                        {confidence !== undefined && confidence !== null && (
-                          <ConfidenceBadge score={confidence} />
-                        )}
-                        {hasBbox && (
-                          <Badge
-                            variant="outline"
-                            className={cn(
-                              'text-xs h-5 px-1.5',
-                              hoveredField === key
-                                ? 'border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
-                                : 'bg-muted/50'
-                            )}
-                          >
-                            Located
-                          </Badge>
-                        )}
-                      </>
+                    {amountConfidence !== undefined && amountConfidence !== null && <ConfidenceBadge score={amountConfidence} />}
+                    {amountHasBbox && (
+                      <Badge variant="outline" className="text-xs h-5 px-1.5 bg-emerald-100 dark:bg-emerald-900/30 border-emerald-300">Located</Badge>
                     )}
                   </>
                 )}
-              </div>
-            </div>
-          );
-        })}
+              </>
+            )}
+          </div>
+        </div>
       </div>
+
     </div>
   );
 }
