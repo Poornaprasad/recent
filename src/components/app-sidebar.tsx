@@ -156,10 +156,8 @@ export function AppSidebar() {
                      <Accordion.Content>
                         <SidebarMenuSub>
                              {vendorLinks.map(({ href, label, icon: Icon }) => {
-                                // For w9-requests, check if we're on vendors page (it will be handled by tab)
-                                const isActive = href.includes('w9-requests') 
-                                  ? pathname.startsWith('/vendors') || pathname.startsWith('/w9-requests')
-                                  : pathname.startsWith(href.split('?')[0]);
+                                // Each link should only be active when on its own page
+                                const isActive = pathname === href || pathname.startsWith(href + '/');
                                 return (
                                   <SidebarMenuSubItem key={href}>
                                        <Link href={href} className={cn(sidebarMenuButtonVariants({size: 'sm'}), 'h-auto p-2 justify-start w-full')} data-active={isActive}>
