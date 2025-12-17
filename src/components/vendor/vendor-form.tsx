@@ -31,12 +31,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { Vendor as DomainVendor } from '@/lib/domain/types';
+import type { DisbursementOption } from '@/lib/crm/smartadvocate/types';
 import { useEffect, useState } from 'react';
 import { 
   getVendorTypesAction, 
   getSuggestedVendorTypesAction,
   checkVendorExistsAction,
-  fetchDisbursementTypesAction,
+  fetchContactTypesAction,
   getPreviousDisbursementTypeForVendorAction,
   saveDisbursementTypeMappingAction,
 } from '@/lib/actions/index';
@@ -70,15 +71,23 @@ interface VendorFormProps {
   caseNumber?: string; // Optional case number for fetching disbursement types
 }
 
+// Helper function to clean up contact type descriptions
+const cleanContactTypeText = (text: string): string => {
+  return text
+    .replace(/^Disbursement Type\s*:?\s*/i, '')
+    .replace(/^disbursement type\s*:?\s*/i, '')
+    .trim() || text;
+};
+
 export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber }: VendorFormProps) {
   const { toast } = useToast();
   const [vendorTypes, setVendorTypes] = useState<Array<{ name: string; description?: string }>>([]);
-  const [disbursementTypes, setDisbursementTypes] = useState<string[]>([]);
+  const [contactTypes, setContactTypes] = useState<DisbursementOption[]>([]);
   const [suggestedTypes, setSuggestedTypes] = useState<string[]>([]);
   const [showNewTypeInput, setShowNewTypeInput] = useState(false);
   const [newTypeName, setNewTypeName] = useState('');
   const [isCheckingVendor, setIsCheckingVendor] = useState(false);
-  const [isLoadingDisbursementTypes, setIsLoadingDisbursementTypes] = useState(false);
+  const [isLoadingContactTypes, setIsLoadingContactTypes] = useState(false);
   const [show1099Alert, setShow1099Alert] = useState(false);
 
   const form = useForm<VendorFormData>({
@@ -94,11 +103,11 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
     },
   });
 
-  // Load disbursement types (common across all cases)
+  // Load contact types from SmartAdvocate API
   useEffect(() => {
     if (isOpen) {
-      // Always load disbursement types from API (common across cases)
-      loadDisbursementTypes();
+      // Load contact types from API (ContactCtg=2)
+      loadContactTypes();
       // Also load traditional vendor types as fallback
       loadVendorTypes();
     }
@@ -127,25 +136,9 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
     }
   };
 
-  // Load previous disbursement type when vendor name is available
-  useEffect(() => {
-    if (vendor?.name) {
-      loadPreviousDisbursementType();
-    }
-  }, [vendor]);
+  // Note: When editing a vendor, the vendor's vendorType is set via form.reset() above
+  // We don't need to load previous mapping when editing - the vendor's existing type is already loaded
 
-  const loadPreviousDisbursementType = async () => {
-    if (!vendor?.name) return;
-    
-    try {
-      const result = await getPreviousDisbursementTypeForVendorAction(vendor.name);
-      if (result.data) {
-        form.setValue('vendorType', result.data);
-      }
-    } catch (error) {
-      console.error('Error loading previous disbursement type:', error);
-    }
-  };
 
   const loadVendorTypes = async () => {
     try {
@@ -158,28 +151,29 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
     }
   };
 
-  const loadDisbursementTypes = async () => {
-    setIsLoadingDisbursementTypes(true);
+  const loadContactTypes = async () => {
+    setIsLoadingContactTypes(true);
     try {
-      const result = await fetchDisbursementTypesAction();
+      // Fetch contact types with ContactCtg=2
+      const result = await fetchContactTypesAction(2);
       if (result.data) {
-        setDisbursementTypes(result.data);
+        setContactTypes(result.data);
       } else if (result.error) {
         toast({
           variant: 'destructive',
           title: 'Error',
-          description: result.error || 'Failed to load disbursement types',
+          description: result.error || 'Failed to load contact types',
         });
       }
     } catch (error) {
-      console.error('Error loading disbursement types:', error);
+      console.error('Error loading contact types:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to load disbursement types from API',
+        description: 'Failed to load contact types from API',
       });
     } finally {
-      setIsLoadingDisbursementTypes(false);
+      setIsLoadingContactTypes(false);
     }
   };
 
@@ -352,7 +346,7 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
                   name="vendorType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Vendor Disbursement Type</FormLabel>
+                      <FormLabel>Contact Type</FormLabel>
                       {!vendor && (
                         <p className="text-xs text-muted-foreground mb-2">
                           Optional - Selection varies by case. Previous selection for this vendor will be pre-filled if available.
@@ -363,38 +357,41 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
                           <Select 
                             onValueChange={field.onChange} 
                             value={field.value || ''}
-                            disabled={isCheckingVendor || isLoadingDisbursementTypes}
+                            disabled={isCheckingVendor || isLoadingContactTypes}
                           >
                             <SelectTrigger className="h-10">
                               <SelectValue placeholder={
-                                isLoadingDisbursementTypes
+                                isLoadingContactTypes
                                   ? "Loading types..."
-                                  : disbursementTypes.length === 0
+                                  : contactTypes.length === 0
                                   ? "No types available"
                                   : !vendor
-                                  ? "Select disbursement type (optional)"
-                                  : "Select disbursement type"
+                                  ? "Select contact type (optional)"
+                                  : "Select contact type"
                               } />
                             </SelectTrigger>
                             <SelectContent>
-                              {isLoadingDisbursementTypes ? (
+                              {isLoadingContactTypes ? (
                                 <div className="flex items-center justify-center p-4">
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 </div>
-                              ) : disbursementTypes.length === 0 ? (
+                              ) : contactTypes.length === 0 ? (
                                 <div className="p-2 text-sm text-muted-foreground">
-                                  No disbursement types available
+                                  No contact types available
                                 </div>
                               ) : (
                                 <>
                                   {!vendor && (
                                     <SelectItem value="">None (Optional)</SelectItem>
                                   )}
-                                  {disbursementTypes.map((type) => (
-                                    <SelectItem key={type} value={type}>
-                                      {type}
-                                    </SelectItem>
-                                  ))}
+                                  {contactTypes.map((type) => {
+                                    const displayText = cleanContactTypeText(type.description);
+                                    return (
+                                      <SelectItem key={type.id} value={type.description}>
+                                        {displayText}
+                                      </SelectItem>
+                                    );
+                                  })}
                                 </>
                               )}
                             </SelectContent>

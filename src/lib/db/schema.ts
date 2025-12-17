@@ -331,13 +331,13 @@ export const invoiceAttachments = pgTable('invoice_attachments', {
 export type InvoiceAttachment = typeof invoiceAttachments.$inferSelect;
 export type NewInvoiceAttachment = typeof invoiceAttachments.$inferInsert;
 
-// Case-vendor-disbursement type mappings table
-// Stores which disbursement type was used for a vendor in a specific case
+// Case-vendor-contact type mappings table
+// Stores which contact type was used for a vendor in a specific case
 export const caseVendorDisbursementTypes = pgTable('case_vendor_disbursement_types', {
   id: text('id').primaryKey(),
   caseNumber: text('case_number').notNull(), // SmartAdvocate case number
   vendorName: text('vendor_name').notNull(), // Vendor name
-  disbursementType: text('disbursement_type').notNull(), // Disbursement type name from API
+  disbursementType: text('contact_type').notNull(), // Contact type name from API (renamed from disbursement_type)
   invoiceId: text('invoice_id'), // Optional reference to the invoice that set this mapping
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

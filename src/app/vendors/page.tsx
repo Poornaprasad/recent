@@ -609,7 +609,7 @@ export default function VendorsPage() {
                             className="h-8 -ml-3"
                             onClick={() => handleSort('type')}
                           >
-                            Disbursement Type
+                            Contact Type
                             <SortIcon field="type" />
                           </Button>
                         </TableHead>

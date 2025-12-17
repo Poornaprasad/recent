@@ -152,7 +152,7 @@ export function VendorSetupDialog({
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="vendor-type">Vendor Disbursement Type</Label>
+            <Label htmlFor="vendor-type">Contact Type</Label>
             <p className="text-xs text-muted-foreground mb-2">
               Optional - Selection varies by case. Previous selection for this vendor will be pre-filled if available.
             </p>
@@ -168,7 +168,7 @@ export function VendorSetupDialog({
                       ? "Loading types..." 
                       : disbursementTypes.length === 0
                       ? "No types available"
-                      : "Select disbursement type (optional)"
+                      : "Select contact type (optional)"
                   } 
                 />
               </SelectTrigger>
@@ -179,7 +179,7 @@ export function VendorSetupDialog({
                   </div>
                 ) : disbursementTypes.length === 0 ? (
                   <div className="p-2 text-sm text-muted-foreground">
-                    No disbursement types available
+                    No contact types available
                   </div>
                 ) : (
                   <>

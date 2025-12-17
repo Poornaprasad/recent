@@ -1,6 +1,8 @@
 /**
  * Disbursement Type Service
- * Handles database operations for case-vendor disbursement type mappings
+ * Handles database operations for case-vendor contact type mappings
+ * Note: The database column was renamed from disbursement_type to contact_type
+ * but the variable names remain as disbursementType for backward compatibility
  */
 
 import 'server-only';

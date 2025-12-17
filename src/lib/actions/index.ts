@@ -69,6 +69,10 @@ export {
 } from './disbursement-type.actions';
 
 export {
+  fetchContactTypesAction,
+} from './contact-type.actions';
+
+export {
   lookupCaseInfoAction,
 } from './case.actions';
 
