@@ -19,7 +19,7 @@ import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
 import { ExtractedDataPanel } from '@/components/invoice/extracted-data-panel';
 import { decodeId, encodeId } from '@/lib/utils/id-utils';
 import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
-import { formatTotalAmount } from '@/lib/utils/invoice-utils';
+import { formatTotalAmount, formatCurrency } from '@/lib/utils/invoice-utils';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import { useAuthStore } from '@/hooks/use-auth-store';
 
@@ -494,7 +494,12 @@ export default function InvoiceDetailPage() {
             {/* Main Extracted Data Panel */}
             <Card className="flex-1">
               <CardHeader className="py-3 px-4">
-                <CardTitle className="text-lg">Extracted Data</CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Extracted Data</CardTitle>
+                  <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                    {formatCurrency(invoiceData.amount?.value)}
+                  </span>
+                </div>
               </CardHeader>
               <CardContent className="p-0">
                 <ExtractedDataPanel
