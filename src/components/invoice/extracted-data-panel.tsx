@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils/utils';
-import { Search, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Search, Loader2, AlertTriangle, CheckCircle2, DollarSign } from 'lucide-react';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import type { StoredInvoice, DocumentType } from '@/lib/domain/types';
 import {
@@ -34,6 +34,17 @@ const toTitleCase = (str: string) => {
   str = str.replace(/([A-Z])/g, ' $1');
   str = str.replace(/(\d+)/g, ' $1');
   return str.replace(/^./, (s) => s.toUpperCase());
+};
+
+// Format amount as currency
+const formatCurrency = (value: string | number | undefined | null): string => {
+  if (value === undefined || value === null || value === '') return '$0.00';
+  const num = typeof value === 'string' ? parseFloat(value.replace(/[^0-9.-]/g, '')) : value;
+  if (isNaN(num)) return '$0.00';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+  }).format(num);
 };
 
 interface DisbursementOption {
@@ -316,8 +327,54 @@ export function ExtractedDataPanel({
     })
     .map(([key, value]) => ({ key, title: toTitleCase(key), value }));
 
+  // Get amount data for header display
+  const amountData = invoiceData.amount;
+  const amountValue = amountData?.value;
+  const amountConfidence = amountData?.confidence;
+  const amountHasBbox = amountData?.bbox && Array.isArray(amountData.bbox) && amountData.bbox.length >= 4;
+
   return (
     <div className="space-y-3 p-4">
+      {/* Header with Amount Display */}
+      <div className="flex items-center justify-between pb-2 border-b">
+        <h3 className="font-semibold text-base">Extracted Data</h3>
+        <div
+          className={cn(
+            'flex items-center gap-2 px-3 py-1.5 rounded-lg border cursor-pointer transition-colors',
+            hoveredField === 'amount'
+              ? 'bg-green-50 dark:bg-green-900/20 border-green-500'
+              : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
+          )}
+          onMouseEnter={() => {
+            if (amountHasBbox) {
+              validateAndSetBbox(amountData.bbox, 'amount', amountConfidence);
+            }
+          }}
+          onMouseLeave={() => onFieldHover(null, null, null)}
+        >
+          <DollarSign className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+            {formatCurrency(amountValue)}
+          </span>
+          {amountConfidence !== undefined && (
+            <ConfidenceBadge score={amountConfidence} />
+          )}
+          {amountHasBbox && (
+            <Badge
+              variant="outline"
+              className={cn(
+                'text-xs h-5 px-1.5',
+                hoveredField === 'amount'
+                  ? 'border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
+                  : 'bg-emerald-100 dark:bg-emerald-900/30 border-emerald-300'
+              )}
+            >
+              📍
+            </Badge>
+          )}
+        </div>
+      </div>
+
       {/* Document Type - Single Line */}
       <div className="p-3 rounded-md border bg-muted/30">
         <div className="flex items-center gap-3">
@@ -544,7 +601,11 @@ export function ExtractedDataPanel({
           const confidence = value?.confidence;
           const reasoning = value?.reasoning;
           const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
-          const displayValue = value?.value ?? '';
+          const rawValue = value?.value ?? '';
+
+          // Format currency for amount field
+          const isAmountField = key === 'amount';
+          const displayValue = isAmountField ? formatCurrency(rawValue) : String(rawValue);
 
           return (
             <div
@@ -553,7 +614,8 @@ export function ExtractedDataPanel({
                 'flex items-center gap-3 px-3 py-2.5 transition-colors cursor-pointer',
                 hoveredField === key
                   ? 'bg-green-50 dark:bg-green-900/20'
-                  : 'hover:bg-muted/50'
+                  : 'hover:bg-muted/50',
+                isAmountField && 'bg-emerald-50/50 dark:bg-emerald-900/10'
               )}
               onMouseEnter={() => {
                 if (hasBbox) {
@@ -569,7 +631,8 @@ export function ExtractedDataPanel({
               <div className="w-32 flex-shrink-0">
                 <span className={cn(
                   'text-sm font-medium',
-                  hoveredField === key ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground'
+                  hoveredField === key ? 'text-green-700 dark:text-green-400' : 'text-muted-foreground',
+                  isAmountField && 'text-emerald-700 dark:text-emerald-400'
                 )}>
                   {title}
                 </span>
@@ -580,11 +643,12 @@ export function ExtractedDataPanel({
                 <span
                   className={cn(
                     'text-sm truncate block',
-                    displayValue ? 'font-medium' : 'text-muted-foreground italic'
+                    rawValue ? 'font-medium' : 'text-muted-foreground italic',
+                    isAmountField && 'text-emerald-700 dark:text-emerald-300 font-semibold'
                   )}
-                  title={String(displayValue)}
+                  title={displayValue}
                 >
-                  {String(displayValue) || 'Not found'}
+                  {displayValue || 'Not found'}
                 </span>
               </div>
 
