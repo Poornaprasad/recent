@@ -25,6 +25,7 @@ import {
   saveDisbursementTypeMappingAction,
   updateInvoiceCaseNumberAction,
   lookupCaseInfoAction,
+  updateInvoiceFieldAction,
 } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
@@ -326,16 +327,22 @@ export function ExtractedDataPanel({
     setEditedValues(prev => ({ ...prev, [key]: currentValue }));
   };
 
-  // Handle save field
+  // Handle save field - persists to database
   const handleSaveField = async (key: string) => {
     setIsSaving(true);
     try {
-      // Create updated invoice data with the edited field
-      const updatedInvoice = { ...invoiceData };
       const fieldValue = editedValues[key];
       const originalValue = originalValuesRef.current[key];
 
-      // Update the field value - remove confidence since it's user-edited
+      // Save to database
+      const result = await updateInvoiceFieldAction(invoiceData.id, key, fieldValue, true);
+
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to save field');
+      }
+
+      // Update local state
+      const updatedInvoice = { ...invoiceData };
       if (updatedInvoice[key as keyof StoredInvoice]) {
         (updatedInvoice as any)[key] = {
           ...(updatedInvoice as any)[key],
@@ -354,14 +361,14 @@ export function ExtractedDataPanel({
       setEditingField(null);
 
       toast({
-        title: 'Field Updated',
-        description: `${toTitleCase(key)} has been updated.`,
+        title: 'Field Saved',
+        description: `${toTitleCase(key)} has been saved to database.`,
       });
     } catch (error) {
       toast({
         variant: 'destructive',
-        title: 'Update Failed',
-        description: 'Failed to update field.',
+        title: 'Save Failed',
+        description: error instanceof Error ? error.message : 'Failed to save field.',
       });
     } finally {
       setIsSaving(false);
@@ -373,38 +380,54 @@ export function ExtractedDataPanel({
     setEditingField(null);
   };
 
-  // Handle reset to original extracted value
-  const handleResetField = (key: string) => {
+  // Handle reset to original extracted value - persists to database
+  const handleResetField = async (key: string) => {
     const originalValue = originalValuesRef.current[key];
     if (originalValue === undefined) return;
 
-    // Create updated invoice data with original value restored
-    const updatedInvoice = { ...invoiceData };
-    const originalField = (invoiceData as any)[key];
+    setIsSaving(true);
+    try {
+      // Save original value to database (mark as not user-edited)
+      const result = await updateInvoiceFieldAction(invoiceData.id, key, originalValue, false);
 
-    if (updatedInvoice[key as keyof StoredInvoice]) {
-      (updatedInvoice as any)[key] = {
-        ...originalField,
-        value: originalValue,
-        // Note: We can't restore original confidence since we didn't store it
-        // But we remove the 'User edited' reasoning
-        reasoning: originalField?.reasoning !== 'User edited' ? originalField?.reasoning : undefined,
-      };
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to reset field');
+      }
+
+      // Create updated invoice data with original value restored
+      const updatedInvoice = { ...invoiceData };
+      const originalField = (invoiceData as any)[key];
+
+      if (updatedInvoice[key as keyof StoredInvoice]) {
+        (updatedInvoice as any)[key] = {
+          ...originalField,
+          value: originalValue,
+          reasoning: undefined, // Remove 'User edited' reasoning
+        };
+      }
+
+      // Remove from edited fields set
+      setEditedFields(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(key);
+        return newSet;
+      });
+
+      onInvoiceUpdate(updatedInvoice);
+
+      toast({
+        title: 'Field Reset',
+        description: `${toTitleCase(key)} has been reset to extracted value.`,
+      });
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Reset Failed',
+        description: error instanceof Error ? error.message : 'Failed to reset field.',
+      });
+    } finally {
+      setIsSaving(false);
     }
-
-    // Remove from edited fields set
-    setEditedFields(prev => {
-      const newSet = new Set(prev);
-      newSet.delete(key);
-      return newSet;
-    });
-
-    onInvoiceUpdate(updatedInvoice);
-
-    toast({
-      title: 'Field Reset',
-      description: `${toTitleCase(key)} has been reset to extracted value.`,
-    });
   };
 
   // Convert disbursement options to combobox format
@@ -754,12 +777,19 @@ export function ExtractedDataPanel({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => {
-              editedFields.forEach(key => handleResetField(key));
+            onClick={async () => {
+              for (const key of editedFields) {
+                await handleResetField(key);
+              }
             }}
+            disabled={isSaving}
             className="gap-1.5 text-xs"
           >
-            <RotateCcw className="h-3 w-3" />
+            {isSaving ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RotateCcw className="h-3 w-3" />
+            )}
             Reset All Edited ({editedFields.size})
           </Button>
         </div>

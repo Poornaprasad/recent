@@ -12,6 +12,7 @@ export {
   flagInvoiceForReviewAction,
   addInvoiceCommentAction,
   updateInvoiceCaseNumberAction,
+  updateInvoiceFieldAction,
 } from './invoice.actions';
 
 export {
