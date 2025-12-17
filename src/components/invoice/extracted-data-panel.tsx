@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils/utils';
-import { Search, Loader2, AlertTriangle, CheckCircle2, DollarSign, Save, X, Pencil } from 'lucide-react';
+import { Search, Loader2, AlertTriangle, CheckCircle2, DollarSign, Save, X, RotateCcw } from 'lucide-react';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import type { StoredInvoice, DocumentType } from '@/lib/domain/types';
 import {
@@ -24,7 +24,7 @@ import {
   getPreviousDisbursementTypeForVendorAction,
   saveDisbursementTypeMappingAction,
   updateInvoiceCaseNumberAction,
-  getInvoiceByIdAction,
+  lookupCaseInfoAction,
 } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
@@ -88,18 +88,19 @@ export function ExtractedDataPanel({
 }: ExtractedDataPanelProps) {
   const { toast } = useToast();
 
+  // Store original extracted values for reset functionality
+  const originalValuesRef = useRef<Record<string, string>>({});
+
   // Case number state (not auto-search, requires explicit submit)
   const [caseNumber, setCaseNumber] = useState(invoiceData.caseNumber || '');
   const [isSubmittingCaseNumber, setIsSubmittingCaseNumber] = useState(false);
   const [caseLookupStatus, setCaseLookupStatus] = useState<CaseLookupStatus>('idle');
   const [caseLookupError, setCaseLookupError] = useState<string>('');
 
-  // Plaintiff name state - track both sources
-  // AI Extracted (from document) - this is the original extraction
-  const [aiExtractedPlaintiffName] = useState<string>(
-    invoiceData.clientName?.value || invoiceData.customerName?.value || ''
-  );
-  // Case Sourced (from case number lookup) - updated after case search
+  // Plaintiff name state - track both sources SEPARATELY
+  // AI Extracted (from document) - this is the original extraction, never changes
+  const aiExtractedPlaintiffName = invoiceData.clientName?.value || invoiceData.customerName?.value || '';
+  // Case Sourced (from case number lookup) - fetched separately from SmartAdvocate API
   const [casePlaintiffName, setCasePlaintiffName] = useState<string>('');
 
   // Document type state
@@ -116,7 +117,19 @@ export function ExtractedDataPanel({
   // Editable fields state
   const [editingField, setEditingField] = useState<string | null>(null);
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
+  const [editedFields, setEditedFields] = useState<Set<string>>(new Set());
   const [isSaving, setIsSaving] = useState(false);
+
+  // Initialize original values on mount
+  useEffect(() => {
+    const originals: Record<string, string> = {};
+    Object.entries(invoiceData).forEach(([key, value]) => {
+      if (value && typeof value === 'object' && 'value' in value) {
+        originals[key] = String(value.value || '');
+      }
+    });
+    originalValuesRef.current = originals;
+  }, []); // Only run once on mount
 
   // Load disbursement types and statuses on mount
   useEffect(() => {
@@ -188,7 +201,7 @@ export function ExtractedDataPanel({
     return '';
   };
 
-  // Handle case number submission
+  // Handle case number submission - saves case number AND looks up plaintiff info
   const handleCaseNumberSubmit = async () => {
     if (!caseNumber.trim()) {
       toast({
@@ -205,59 +218,46 @@ export function ExtractedDataPanel({
     setCasePlaintiffName(''); // Clear previous result
 
     try {
-      const result = await updateInvoiceCaseNumberAction(invoiceData.id, caseNumber);
+      // First save the case number to the invoice
+      const saveResult = await updateInvoiceCaseNumberAction(invoiceData.id, caseNumber);
 
-      if (result.success) {
-        // Refresh invoice data to get case details
-        const updatedResult = await getInvoiceByIdAction(invoiceData.id);
+      if (!saveResult.success) {
+        throw new Error(saveResult.error || 'Failed to save case number');
+      }
 
-        if (updatedResult.data) {
-          onInvoiceUpdate(updatedResult.data);
+      // Then lookup case info from SmartAdvocate API
+      const lookupResult = await lookupCaseInfoAction(caseNumber);
 
-          // Check if we got plaintiff name from the case (not from AI extraction)
-          // The case lookup should populate a specific field for case plaintiff
-          // For now, we assume the API returns the case plaintiff name
-          const plaintiffNameFromCase = updatedResult.data.clientName?.value || '';
-
-          if (plaintiffNameFromCase) {
-            setCasePlaintiffName(plaintiffNameFromCase);
-            setCaseLookupStatus('success');
-            toast({
-              title: 'Case Found',
-              description: `Plaintiff: ${plaintiffNameFromCase}`,
-            });
-          } else {
-            // Case found but no plaintiff name
-            setCaseLookupStatus('success');
-            setCasePlaintiffName('N/A');
-            toast({
-              title: 'Case Found',
-              description: 'Case number saved. No plaintiff name in case record.',
-            });
-          }
-        } else {
-          setCaseLookupStatus('error');
-          setCaseLookupError('Failed to retrieve case details');
-          toast({
-            variant: 'destructive',
-            title: 'Lookup Failed',
-            description: 'Failed to retrieve case details.',
-          });
-        }
-      } else {
-        // API returned error
+      if (lookupResult.error) {
         setCaseLookupStatus('error');
-        const errorMsg = result.error || 'Failed to fetch case details';
-        setCaseLookupError(errorMsg);
+        setCaseLookupError(lookupResult.error);
         toast({
           variant: 'destructive',
           title: 'Case Lookup Failed',
-          description: errorMsg,
+          description: lookupResult.error,
+        });
+        return;
+      }
+
+      if (lookupResult.data) {
+        setCasePlaintiffName(lookupResult.data.name);
+        setCaseLookupStatus('success');
+        toast({
+          title: 'Case Found',
+          description: `Plaintiff: ${lookupResult.data.name}`,
+        });
+      } else {
+        setCaseLookupStatus('error');
+        setCaseLookupError('No plaintiff found in case');
+        toast({
+          variant: 'destructive',
+          title: 'Case Lookup Failed',
+          description: 'No plaintiff found in case record.',
         });
       }
     } catch (error) {
       setCaseLookupStatus('error');
-      const errorMsg = error instanceof Error ? error.message : 'Failed to fetch case details';
+      const errorMsg = error instanceof Error ? error.message : 'Failed to lookup case';
       setCaseLookupError(errorMsg);
       toast({
         variant: 'destructive',
@@ -333,13 +333,21 @@ export function ExtractedDataPanel({
       // Create updated invoice data with the edited field
       const updatedInvoice = { ...invoiceData };
       const fieldValue = editedValues[key];
+      const originalValue = originalValuesRef.current[key];
 
-      // Update the field value while preserving other metadata
+      // Update the field value - remove confidence since it's user-edited
       if (updatedInvoice[key as keyof StoredInvoice]) {
         (updatedInvoice as any)[key] = {
           ...(updatedInvoice as any)[key],
           value: fieldValue,
+          confidence: undefined, // Remove confidence for edited fields
+          reasoning: 'User edited',
         };
+      }
+
+      // Track that this field was edited (if value changed from original)
+      if (fieldValue !== originalValue) {
+        setEditedFields(prev => new Set(prev).add(key));
       }
 
       onInvoiceUpdate(updatedInvoice);
@@ -365,6 +373,40 @@ export function ExtractedDataPanel({
     setEditingField(null);
   };
 
+  // Handle reset to original extracted value
+  const handleResetField = (key: string) => {
+    const originalValue = originalValuesRef.current[key];
+    if (originalValue === undefined) return;
+
+    // Create updated invoice data with original value restored
+    const updatedInvoice = { ...invoiceData };
+    const originalField = (invoiceData as any)[key];
+
+    if (updatedInvoice[key as keyof StoredInvoice]) {
+      (updatedInvoice as any)[key] = {
+        ...originalField,
+        value: originalValue,
+        // Note: We can't restore original confidence since we didn't store it
+        // But we remove the 'User edited' reasoning
+        reasoning: originalField?.reasoning !== 'User edited' ? originalField?.reasoning : undefined,
+      };
+    }
+
+    // Remove from edited fields set
+    setEditedFields(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(key);
+      return newSet;
+    });
+
+    onInvoiceUpdate(updatedInvoice);
+
+    toast({
+      title: 'Field Reset',
+      description: `${toTitleCase(key)} has been reset to extracted value.`,
+    });
+  };
+
   // Convert disbursement options to combobox format
   const typeOptions: ComboboxOption[] = disbursementTypes.map(t => ({
     value: String(t.id),
@@ -384,7 +426,7 @@ export function ExtractedDataPanel({
   };
 
   const hasAiExtractedName = aiExtractedPlaintiffName.trim().length > 0;
-  const hasCaseName = casePlaintiffName.trim().length > 0 && casePlaintiffName !== 'N/A';
+  const hasCaseName = casePlaintiffName.trim().length > 0;
   const caseSearchSuccessful = caseLookupStatus === 'success';
   const bothNamesPresent = hasAiExtractedName && hasCaseName && caseSearchSuccessful;
   const namesMatch = bothNamesPresent
@@ -706,6 +748,23 @@ export function ExtractedDataPanel({
         </div>
       </div>
 
+      {/* Reset All Edited Fields Button */}
+      {editedFields.size > 0 && (
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              editedFields.forEach(key => handleResetField(key));
+            }}
+            className="gap-1.5 text-xs"
+          >
+            <RotateCcw className="h-3 w-3" />
+            Reset All Edited ({editedFields.size})
+          </Button>
+        </div>
+      )}
+
       {/* Extracted Fields - Editable Single Row Layout */}
       <div className="rounded-md border overflow-hidden divide-y">
         {fieldsToRender.map(({ key, title, value }) => {
@@ -714,6 +773,7 @@ export function ExtractedDataPanel({
           const hasBbox = value?.bbox && Array.isArray(value.bbox) && value.bbox.length >= 4;
           const rawValue = value?.value ?? '';
           const isEditing = editingField === key;
+          const isEdited = editedFields.has(key);
 
           // Format currency for amount field
           const isAmountField = key === 'amount';
@@ -723,12 +783,13 @@ export function ExtractedDataPanel({
             <div
               key={key}
               className={cn(
-                'flex items-center gap-3 px-3 py-2.5 transition-colors',
+                'flex items-center gap-3 px-3 py-2.5 transition-colors group',
                 hoveredField === key
                   ? 'bg-green-50 dark:bg-green-900/20'
                   : 'hover:bg-muted/50',
                 isAmountField && 'bg-emerald-50/50 dark:bg-emerald-900/10',
-                isEditing && 'bg-blue-50 dark:bg-blue-900/20'
+                isEditing && 'bg-blue-50 dark:bg-blue-900/20',
+                isEdited && !isEditing && 'bg-amber-50/50 dark:bg-amber-900/10'
               )}
               onMouseEnter={() => {
                 if (hasBbox && !isEditing) {
@@ -812,30 +873,45 @@ export function ExtractedDataPanel({
                   </>
                 ) : (
                   <>
-                    {confidence !== undefined && confidence !== null && (
-                      <ConfidenceBadge score={confidence} />
-                    )}
-                    {hasBbox && (
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          'text-xs h-5 px-1.5',
-                          hoveredField === key
-                            ? 'border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
-                            : 'bg-muted/50'
+                    {/* Show Edited badge instead of confidence when edited */}
+                    {isEdited ? (
+                      <>
+                        <Badge
+                          variant="outline"
+                          className="text-xs h-5 px-1.5 bg-amber-100 dark:bg-amber-900/30 border-amber-400 text-amber-700 dark:text-amber-400"
+                        >
+                          Edited
+                        </Badge>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => handleResetField(key)}
+                          title="Reset to extracted value"
+                        >
+                          <RotateCcw className="h-3 w-3 text-muted-foreground hover:text-amber-600" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        {confidence !== undefined && confidence !== null && (
+                          <ConfidenceBadge score={confidence} />
                         )}
-                      >
-                        Located
-                      </Badge>
+                        {hasBbox && (
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              'text-xs h-5 px-1.5',
+                              hoveredField === key
+                                ? 'border-green-500 text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30'
+                                : 'bg-muted/50'
+                            )}
+                          >
+                            Located
+                          </Badge>
+                        )}
+                      </>
                     )}
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6 opacity-0 group-hover:opacity-100 hover:opacity-100"
-                      onClick={() => handleStartEdit(key, String(rawValue))}
-                    >
-                      <Pencil className="h-3 w-3 text-muted-foreground" />
-                    </Button>
                   </>
                 )}
               </div>

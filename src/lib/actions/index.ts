@@ -67,3 +67,7 @@ export {
   getDisbursementTypesForVendorAction,
 } from './disbursement-type.actions';
 
+export {
+  lookupCaseInfoAction,
+} from './case.actions';
+
