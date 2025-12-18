@@ -68,6 +68,7 @@ import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { ApprovalActions } from "./_components/approval-actions";
 import { useToast } from "@/hooks/use-toast";
+import { DisbursementFormModal } from "@/components/invoice/disbursement-form-modal";
 
 export default function ApprovalsPage() {
   const { user } = useAuthStore();
@@ -89,6 +90,26 @@ export default function ApprovalsPage() {
   const [bulkAction, setBulkAction] = useState<'approve' | 'reject' | null>(null);
   const [approvalReason, setApprovalReason] = useState('');
   const [isProcessingBulk, setIsProcessingBulk] = useState(false);
+  const [isDisbursementModalOpen, setIsDisbursementModalOpen] = useState(false);
+  const [selectedInvoiceForDisbursement, setSelectedInvoiceForDisbursement] = useState<StoredInvoice | null>(null);
+
+  // Ensure modal opens when invoice is set
+  useEffect(() => {
+    if (selectedInvoiceForDisbursement) {
+      console.log('=== useEffect: Invoice set for disbursement ===');
+      console.log('Invoice ID:', selectedInvoiceForDisbursement.id);
+      console.log('Current modal state:', isDisbursementModalOpen);
+      if (!isDisbursementModalOpen) {
+        console.log('Opening modal from useEffect...');
+        setIsDisbursementModalOpen(true);
+      }
+    }
+  }, [selectedInvoiceForDisbursement]);
+  
+  // Debug: Log modal state changes
+  useEffect(() => {
+    console.log('Modal state changed - isOpen:', isDisbursementModalOpen, 'invoice:', selectedInvoiceForDisbursement?.id);
+  }, [isDisbursementModalOpen, selectedInvoiceForDisbursement]);
 
   const loadInvoices = useCallback(async () => {
       setIsLoading(true);
@@ -727,6 +748,39 @@ export default function ApprovalsPage() {
                             onApprovalChange={loadInvoices}
                             isSameCaseDuplicate={isSameCaseDuplicate}
                             caseNumber={invoice.caseNumber}
+                            invoice={invoice}
+                            onOpenDisbursementModal={(inv) => {
+                              console.log('=== MODAL CALLBACK TRIGGERED ===');
+                              console.log('Setting up disbursement modal for invoice:', inv?.id);
+                              console.log('Invoice object keys:', inv ? Object.keys(inv) : 'null');
+                              
+                              if (inv && inv.id) {
+                                // Set both states together using functional updates
+                                setSelectedInvoiceForDisbursement(() => {
+                                  console.log('Setting selected invoice:', inv.id);
+                                  return inv;
+                                });
+                                setIsDisbursementModalOpen(() => {
+                                  console.log('Setting modal open state to true');
+                                  return true;
+                                });
+                                console.log('✅ Modal state set to open for invoice:', inv.id);
+                                
+                                // Show toast to confirm
+                                toast({
+                                  title: 'Disbursement Form Opening',
+                                  description: `Preparing form for invoice ${inv.invoiceNumber?.value || inv.id}`,
+                                });
+                              } else {
+                                console.error('❌ No invoice or invoice.id provided to openDisbursementModal');
+                                console.error('Invoice received:', inv);
+                                toast({
+                                  variant: 'destructive',
+                                  title: 'Error',
+                                  description: 'Invalid invoice data. Cannot open disbursement form.',
+                                });
+                              }
+                            }}
                           />
                         </TableCell>
                       </TableRow>
@@ -814,6 +868,23 @@ export default function ApprovalsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Disbursement Form Modal - Always render, control visibility with isOpen */}
+      {selectedInvoiceForDisbursement ? (
+        <DisbursementFormModal
+          isOpen={isDisbursementModalOpen}
+          onOpenChange={(open) => {
+            console.log('Disbursement modal onOpenChange called with:', open);
+            setIsDisbursementModalOpen(open);
+            if (!open) {
+              setSelectedInvoiceForDisbursement(null);
+              // Reload invoices after modal closes
+              loadInvoices();
+            }
+          }}
+          invoice={selectedInvoiceForDisbursement}
+        />
+      ) : null}
     </div>
   );
 }

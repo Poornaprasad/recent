@@ -23,12 +23,16 @@ export function ApprovalActions({
   invoiceId, 
   onApprovalChange,
   isSameCaseDuplicate = false,
-  caseNumber
+  caseNumber,
+  invoice,
+  onOpenDisbursementModal
 }: { 
   invoiceId: string; 
   onApprovalChange?: () => void;
   isSameCaseDuplicate?: boolean;
   caseNumber?: string;
+  invoice?: any;
+  onOpenDisbursementModal?: (invoice: any) => void;
 }) {
     const [isUpdating, setIsUpdating] = useState(false);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -37,21 +41,73 @@ export function ApprovalActions({
     const { toast } = useToast();
     const router = useRouter();
 
+    // Debug: Log props on mount
+    console.log('ApprovalActions rendered with props:', {
+        invoiceId,
+        hasInvoice: !!invoice,
+        invoiceIdFromInvoice: invoice?.id,
+        hasCallback: !!onOpenDisbursementModal,
+    });
+
     const handleStatusUpdate = async (status: 'Pending' | 'Draft', reason?: string) => {
         setIsUpdating(true);
         try {
             await updateInvoiceStatusAction(invoiceId, status);
-            toast({
-                title: `Invoice ${status === 'Pending' ? 'Approved' : 'Rejected'}`,
-                description: status === 'Pending' 
-                  ? 'The invoice has been approved and moved to the invoices list.'
-                  : 'The invoice has been rejected and marked as draft.',
-            });
-            // Trigger callback to reload data, or refresh the page
-            if (onApprovalChange) {
-                onApprovalChange();
+            
+            // If approved, open disbursement modal BEFORE showing success toast
+            if (status === 'Pending') {
+                // Try to open modal FIRST, before any reloads
+                if (invoice && onOpenDisbursementModal) {
+                    try {
+                        // Call callback synchronously
+                        onOpenDisbursementModal(invoice);
+                        
+                        // Show success toast AFTER opening modal
+                        toast({
+                            title: `Invoice Approved`,
+                            description: 'Opening disbursement form...',
+                        });
+                        
+                        // DO NOT call onApprovalChange here - let modal handle reload when closed
+                        return; // Exit early to prevent reload
+                    } catch (error) {
+                        console.error('Error opening disbursement modal:', error);
+                        toast({
+                            variant: 'destructive',
+                            title: 'Error',
+                            description: 'Failed to open disbursement form.',
+                        });
+                        // Fallback: reload if modal fails
+                        if (onApprovalChange) {
+                            onApprovalChange();
+                        }
+                    }
+                } else {
+                    // Missing invoice or callback - show toast and reload
+                    toast({
+                        title: `Invoice Approved`,
+                        description: 'The invoice has been approved and moved to the invoices list.',
+                    });
+                    
+                    // Reload since modal can't open
+                    if (onApprovalChange) {
+                        onApprovalChange();
+                    } else {
+                        window.location.reload();
+                    }
+                }
             } else {
-                window.location.reload();
+                // Rejection - show toast and reload
+                toast({
+                    title: `Invoice Rejected`,
+                    description: 'The invoice has been rejected and marked as draft.',
+                });
+                
+                if (onApprovalChange) {
+                    onApprovalChange();
+                } else {
+                    window.location.reload();
+                }
             }
         } catch (error) {
             toast({

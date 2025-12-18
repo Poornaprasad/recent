@@ -17,6 +17,7 @@ import { VendorSetupDialog } from '@/components/dialogs/vendor-setup-dialog';
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
 import { ExtractedDataPanel } from '@/components/invoice/extracted-data-panel';
+import { DisbursementFormModal } from '@/components/invoice/disbursement-form-modal';
 import { decodeId, encodeId } from '@/lib/utils/id-utils';
 import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
 import { formatTotalAmount, formatCurrency } from '@/lib/utils/invoice-utils';
@@ -48,7 +49,14 @@ export default function InvoiceDetailPage() {
   const [isProcessingVendor, setIsProcessingVendor] = useState(false);
   const [invoiceList, setInvoiceList] = useState<StoredInvoice[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
+  const [isDisbursementModalOpen, setIsDisbursementModalOpen] = useState(false);
   const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(autoAdvance);
+
+  // Debug: Log modal state changes
+  useEffect(() => {
+    console.log('Disbursement modal state changed:', isDisbursementModalOpen);
+    console.log('Invoice data available:', !!invoiceData);
+  }, [isDisbursementModalOpen, invoiceData]);
 
   // Load invoice list for navigation
   useEffect(() => {
@@ -147,12 +155,36 @@ export default function InvoiceDetailPage() {
     setIsUpdating(true);
     try {
       await updateInvoiceStatusAction(invoiceData.id, status);
-      toast({
-        title: `Invoice ${status === 'Pending' ? 'Approved' : 'Rejected'}`,
-        description: status === 'Pending'
-          ? 'The invoice has been approved and moved to the invoices list.'
-          : 'The invoice has been rejected and marked as draft.',
-      });
+      
+      // If approved, open disbursement modal
+      if (status === 'Pending') {
+        console.log('✅ Invoice approved, opening disbursement modal');
+        console.log('Invoice data:', invoiceData?.id);
+        console.log('Setting modal state to true');
+        
+        // Open the disbursement modal FIRST
+        setIsDisbursementModalOpen(true);
+        
+        // Small delay to ensure state is set
+        setTimeout(() => {
+          console.log('Modal state after timeout:', isDisbursementModalOpen);
+        }, 100);
+        
+        toast({
+          title: `Invoice Approved`,
+          description: 'Opening disbursement form...',
+        });
+        
+        // Don't auto-advance or reload yet - let modal handle it when closed
+        setIsUpdating(false);
+        return;
+      } else {
+        // Rejection - show toast and continue
+        toast({
+          title: `Invoice Rejected`,
+          description: 'The invoice has been rejected and marked as draft.',
+        });
+      }
       
       // Auto-advance to next invoice if enabled and available
       if (autoAdvanceEnabled && navigationInfo.hasNext && navigationInfo.nextId) {
@@ -582,6 +614,51 @@ export default function InvoiceDetailPage() {
         isSubmitting={isAddingComment}
         onSubmit={handleAddComment}
       />
+
+      {/* Disbursement Form Modal */}
+      {invoiceData && (
+        <DisbursementFormModal
+          isOpen={isDisbursementModalOpen}
+          onOpenChange={(open) => {
+            console.log('Disbursement modal onOpenChange called with:', open);
+            setIsDisbursementModalOpen(open);
+            if (!open && invoiceData) {
+              // Reload invoice list to get updated data
+              const reloadData = async () => {
+                const userPermissions = user ? {
+                  role: user.role,
+                  assignedStates: user.assignedStates
+                } : undefined;
+                
+                const result = await getInvoicesAction(userPermissions);
+                if (result.data) {
+                  let filtered = result.data;
+                  if (source === 'approvals') {
+                    filtered = filtered.filter(inv => 
+                      inv.status !== 'Paid' && 
+                      inv.approvalStatus !== 'Approved'
+                    );
+                  }
+                  setInvoiceList(filtered);
+                }
+              };
+              
+              reloadData();
+              
+              // If auto-advance is enabled, navigate to next invoice
+              if (autoAdvanceEnabled && navigationInfo.hasNext && navigationInfo.nextId) {
+                setTimeout(() => {
+                  navigateToInvoice(navigationInfo.nextId!);
+                }, 500);
+              } else if (source === 'approvals') {
+                // If on approvals page, go back to approvals list
+                router.push('/approvals');
+              }
+            }
+          }}
+          invoice={invoiceData}
+        />
+      )}
 
       <VendorSetupDialog
         open={isVendorSetupDialogOpen}

@@ -7,7 +7,7 @@
 
 import { getCaseInfo, extractPlaintiffInfo } from '../crm/smartadvocate';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
-import type { PlaintiffInfo } from '../crm/smartadvocate/types';
+import type { PlaintiffInfo, SmartAdvocateCase } from '../crm/smartadvocate/types';
 
 /**
  * Lookup case info from SmartAdvocate API
@@ -38,4 +38,29 @@ export async function lookupCaseInfoAction(
 
     return plaintiffInfo;
   }, 'Failed to lookup case info');
+}
+
+/**
+ * Get full case info from SmartAdvocate API
+ * Returns the complete case object including caseID
+ */
+export async function getCaseInfoAction(
+  caseNumber: string
+): Promise<ActionResult<SmartAdvocateCase>> {
+  return withActionHandler(async () => {
+    if (!caseNumber || caseNumber.trim() === '') {
+      throw new Error('Case number is required');
+    }
+
+    const caseInfo = await getCaseInfo({
+      caseNumber: caseNumber.trim(),
+      addContactInfo: true,
+    });
+
+    if (!caseInfo) {
+      throw new Error(`Case not found: ${caseNumber}`);
+    }
+
+    return caseInfo;
+  }, 'Failed to get case info');
 }

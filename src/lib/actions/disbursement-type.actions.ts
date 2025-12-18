@@ -8,6 +8,8 @@
 import {
   getDisbursementTypes,
   getDisbursementStatuses,
+  createDisbursement,
+  type CreateDisbursementRequest,
 } from '../crm/smartadvocate/disbursement';
 import {
   getPreviousDisbursementType,
@@ -93,6 +95,19 @@ export async function getDisbursementTypesForVendorAction(
   return withActionHandler(
     () => getDisbursementTypesForVendor(vendorName),
     'Failed to get disbursement types for vendor'
+  );
+}
+
+/**
+ * Create a disbursement in SmartAdvocate CRM
+ */
+export async function createDisbursementAction(
+  caseID: number,
+  disbursementData: CreateDisbursementRequest
+): Promise<ActionResult<any>> {
+  return withActionHandler(
+    () => createDisbursement(caseID, disbursementData),
+    'Failed to create disbursement in CRM'
   );
 }
 

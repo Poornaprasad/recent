@@ -177,14 +177,21 @@ export async function lookupContacts(params: ContactLookupParams): Promise<Conta
   // Handle response format: array of contacts
   if (Array.isArray(data)) {
     return data.map((item: any) => ({
-      contactId: item.contactId ?? item.contactID ?? item.id ?? 0,
+      contactId: item.contactId ?? item.contactID ?? item.uniqueContactId ?? item.id ?? 0,
       name: item.name || (item.firstName && item.lastName ? `${item.firstName} ${item.lastName}`.trim() : undefined),
       firstName: item.firstName,
       lastName: item.lastName,
       contactType: item.contactType || item.contactTypeId,
       email: item.email || item.emailAddress,
-      phone: item.phone || item.phoneNumber,
-      address: item.address || item.address1,
+      phone: item.phone || item.phoneNumber || item.contactNumber,
+      address: item.address || item.address1 || (item.address1 && item.city && item.state 
+        ? `${item.address1}, ${item.city}, ${item.state} ${item.zip || ''}`.trim() 
+        : undefined),
+      // Include address components separately for better matching
+      address1: item.address1,
+      city: item.city,
+      state: item.state,
+      zip: item.zip,
       ...item, // Include any additional fields
     }));
   }
