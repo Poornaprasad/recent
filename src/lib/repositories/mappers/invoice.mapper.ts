@@ -77,6 +77,13 @@ export function mapDbRowToInvoice(row: Invoice): StoredInvoice {
     approvedAt: row.approvedAt ? new Date((row.approvedAt as Date).getTime() * 1000) : undefined,
     createdBy: row.createdBy || undefined,
     assignedTo: row.assignedTo || undefined,
+    disbursementResponse: row.disbursementResponse ? (() => {
+      try {
+        return JSON.parse(row.disbursementResponse);
+      } catch {
+        return row.disbursementResponse;
+      }
+    })() : undefined,
 
     // Extracted fields with metadata
     invoiceNumber: createField(row.invoiceNumber, row.invoiceNumberMeta),
@@ -137,6 +144,9 @@ export function mapInvoiceToDbRow(invoice: Partial<StoredInvoice>): Partial<Invo
     approvedAt: invoice.approvedAt ? Math.floor(invoice.approvedAt.getTime() / 1000) as any : undefined,
     createdBy: invoice.createdBy,
     assignedTo: invoice.assignedTo,
+    disbursementResponse: invoice.disbursementResponse ? (typeof invoice.disbursementResponse === 'string' 
+      ? invoice.disbursementResponse 
+      : JSON.stringify(invoice.disbursementResponse)) : undefined,
 
     // Extract values and metadata
     invoiceNumber: extractValue(invoice.invoiceNumber),

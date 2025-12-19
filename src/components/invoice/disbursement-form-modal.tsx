@@ -25,6 +25,7 @@ import {
   lookupContactsAction,
   getCaseInfoAction,
   getPreviousDisbursementTypeForVendorAction,
+  updateInvoiceDisbursementResponseAction,
 } from '@/lib/actions/index';
 import type { DisbursementOption, ContactLookupResult } from '@/lib/crm/smartadvocate/types';
 import { formatCurrency } from '@/lib/utils/invoice-utils';
@@ -511,6 +512,16 @@ export function DisbursementFormModal({
 
       if (result.error) {
         throw new Error(result.error);
+      }
+
+      // Save the disbursement response to the invoice
+      if (result.data) {
+        try {
+          await updateInvoiceDisbursementResponseAction(invoice.id, result.data);
+        } catch (error) {
+          console.error('Failed to save disbursement response:', error);
+          // Don't fail the whole operation if saving response fails
+        }
       }
 
       toast({

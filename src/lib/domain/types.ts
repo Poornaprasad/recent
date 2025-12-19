@@ -41,6 +41,7 @@ export type StoredInvoice = BaseEntity & ExtractedDataOnly & {
   assignedTo?: string; // User ID assigned to process
   vendorRequires1099?: boolean; // Flag indicating vendor requires 1099 (not in vendor list or marked as requiring 1099)
   documentType?: 'Webhook Source' | 'Invoice' | 'Receipt' | 'Per Diem' | 'Estate' | 'Other Document' | 'Other' | 'Office Disbursement' | 'Office Reimbursement' | 'Case Details' | 'Reimbursement' | 'Office Credit Card Bill'; // Document type classification
+  disbursementResponse?: any; // Disbursement creation response from CRM (JSON object)
 };
 
 export type User = BaseEntity & {

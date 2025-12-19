@@ -5,3 +5,4 @@
 ALTER TABLE case_vendor_disbursement_types 
 RENAME COLUMN disbursement_type TO contact_type;
 
+

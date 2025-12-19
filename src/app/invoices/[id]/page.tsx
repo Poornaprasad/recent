@@ -13,6 +13,9 @@ import { cn } from '@/lib/utils/utils';
 import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, completeVendorSetupAction, getInvoicesAction } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { VendorSetupDialog } from '@/components/dialogs/vendor-setup-dialog';
 import { CommentDialog } from '@/components/dialogs/comment-dialog';
 import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
@@ -549,6 +552,306 @@ export default function InvoiceDetailPage() {
                   <div className="p-3 mx-4 mb-4 rounded-md border bg-muted/50">
                     <Label className="font-medium mb-1 block text-sm">Comment</Label>
                     <p className="text-sm text-muted-foreground whitespace-pre-wrap">{invoiceData.comment}</p>
+                  </div>
+                )}
+
+                {/* Disbursement Response Section */}
+                {invoiceData.disbursementResponse && (
+                  <div className="p-3 mx-4 mb-4 rounded-md border bg-muted/50">
+                    <Accordion type="single" collapsible className="w-full">
+                      <AccordionItem value="disbursement-response" className="border-none">
+                        <AccordionTrigger className="py-2 hover:no-underline">
+                          <div className="flex items-center justify-between w-full pr-4">
+                            <Label className="font-medium text-sm">Disbursement Response</Label>
+                            <Badge variant="outline" className="text-xs">
+                              {(() => {
+                                const response = invoiceData.disbursementResponse;
+                                if (typeof response === 'object' && response !== null) {
+                                  if (response.id && typeof response.id === 'number') {
+                                    return `ID: ${response.id}`;
+                                  }
+                                  if (response.disbursementId && typeof response.disbursementId === 'number') {
+                                    return `ID: ${response.disbursementId}`;
+                                  }
+                                  if (response.status) {
+                                    if (typeof response.status === 'string') return response.status;
+                                    if (typeof response.status === 'object' && response.status !== null) {
+                                      return response.status.description || `Status ID: ${response.status.id}` || 'Status';
+                                    }
+                                  }
+                                  return 'View Details';
+                                }
+                                return 'View Response';
+                              })()}
+                            </Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="pt-4 space-y-4">
+                            {(() => {
+                              const response = invoiceData.disbursementResponse;
+                              if (typeof response !== 'object' || response === null) {
+                                return (
+                                  <div className="text-sm text-muted-foreground">
+                                    {String(response)}
+                                  </div>
+                                );
+                              }
+
+                              // Helper to get value from response
+                              const getValue = (key: string): any => {
+                                return response[key];
+                              };
+
+                              // Helper to format object values (id, description)
+                              const formatObjectValue = (obj: any): string => {
+                                if (!obj || typeof obj !== 'object') return '';
+                                if (obj.description) return obj.description;
+                                if (obj.id) return String(obj.id);
+                                return JSON.stringify(obj);
+                              };
+
+                              // Helper to format date
+                              const formatDate = (dateStr: string): string => {
+                                if (!dateStr) return '';
+                                try {
+                                  const date = new Date(dateStr);
+                                  return date.toISOString().split('T')[0];
+                                } catch {
+                                  return dateStr;
+                                }
+                              };
+
+                              // Helper to format datetime
+                              const formatDateTime = (dateStr: string): string => {
+                                if (!dateStr) return '';
+                                try {
+                                  const date = new Date(dateStr);
+                                  const year = date.getFullYear();
+                                  const month = String(date.getMonth() + 1).padStart(2, '0');
+                                  const day = String(date.getDate()).padStart(2, '0');
+                                  const hours = String(date.getHours()).padStart(2, '0');
+                                  const minutes = String(date.getMinutes()).padStart(2, '0');
+                                  return `${year}-${month}-${day}T${hours}:${minutes}`;
+                                } catch {
+                                  return dateStr;
+                                }
+                              };
+
+                              return (
+                                <>
+                                  {/* Case ID and Case Number */}
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <Label>Case ID</Label>
+                                      <Input
+                                        value={getValue('caseID') || ''}
+                                        disabled
+                                        placeholder="N/A"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Case Number</Label>
+                                      <Input
+                                        value={invoiceData.caseNumber || ''}
+                                        disabled
+                                        placeholder="No case number"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Invoice Number and Check Number */}
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <Label>Invoice Number</Label>
+                                      <Input
+                                        value={getValue('invoiceNumber') || ''}
+                                        disabled
+                                        placeholder="N/A"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Check Number</Label>
+                                      <Input
+                                        value={getValue('checkNumber') || ''}
+                                        disabled
+                                        placeholder="N/A"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Amount */}
+                                  <div>
+                                    <Label>Amount</Label>
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      value={getValue('amount') || ''}
+                                      disabled
+                                      placeholder="0.00"
+                                    />
+                                  </div>
+
+                                  {/* Description */}
+                                  <div>
+                                    <Label>Description</Label>
+                                    <Textarea
+                                      value={getValue('description') || ''}
+                                      disabled
+                                      placeholder="N/A"
+                                      rows={3}
+                                    />
+                                  </div>
+
+                                  {/* Invoice Date */}
+                                  <div>
+                                    <Label>Invoice Date</Label>
+                                    <Input
+                                      type="date"
+                                      value={formatDate(getValue('invoiceDate') || '')}
+                                      disabled
+                                    />
+                                  </div>
+
+                                  {/* Disbursement Type and Status */}
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <Label>Disbursement Type</Label>
+                                      <Input
+                                        value={formatObjectValue(getValue('disbursementType'))}
+                                        disabled
+                                        placeholder="N/A"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Disbursement Status</Label>
+                                      <Input
+                                        value={formatObjectValue(getValue('status'))}
+                                        disabled
+                                        placeholder="N/A"
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Payee */}
+                                  <div>
+                                    <Label>Payee (Vendor)</Label>
+                                    <div className="space-y-2">
+                                      <Input
+                                        value={getValue('payee')?.name || ''}
+                                        disabled
+                                        placeholder="N/A"
+                                      />
+                                      {getValue('payee')?.contactId && (
+                                        <div className="flex items-center gap-2">
+                                          <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 border-green-300 text-green-700 dark:text-green-400">
+                                            ✓ Contact ID: {getValue('payee').contactId}
+                                          </Badge>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+
+                                  {/* Plaintiff ID */}
+                                  <div>
+                                    <Label>Plaintiff ID</Label>
+                                    <Input
+                                      type="number"
+                                      value={getValue('client')?.[0]?.id || ''}
+                                      disabled
+                                      placeholder="N/A"
+                                    />
+                                  </div>
+
+                                  {/* Checkboxes */}
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div className="flex items-center space-x-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={getValue('recoverable') || false}
+                                        disabled
+                                        className="rounded"
+                                      />
+                                      <Label className="cursor-default">Recoverable</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={getValue('shareAcrossClients') || false}
+                                        disabled
+                                        className="rounded"
+                                      />
+                                      <Label className="cursor-default">Share Across Clients</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={getValue('waived') || false}
+                                        disabled
+                                        className="rounded"
+                                      />
+                                      <Label className="cursor-default">Waived</Label>
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                      <input
+                                        type="checkbox"
+                                        checked={getValue('isLienor') || false}
+                                        disabled
+                                        className="rounded"
+                                      />
+                                      <Label className="cursor-default">Is Lienor</Label>
+                                    </div>
+                                  </div>
+
+                                  {/* Comments */}
+                                  <div>
+                                    <Label>Comments</Label>
+                                    <Textarea
+                                      value={getValue('comments') || ''}
+                                      disabled
+                                      placeholder="N/A"
+                                      rows={3}
+                                    />
+                                  </div>
+
+                                  {/* Additional Fields */}
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <Label>Document IDs</Label>
+                                      <Input
+                                        value={Array.isArray(getValue('documentIDs')) 
+                                          ? getValue('documentIDs').join(', ') 
+                                          : getValue('documentIDs') || ''}
+                                        disabled
+                                        placeholder="N/A"
+                                      />
+                                    </div>
+                                    <div>
+                                      <Label>Status Date</Label>
+                                      <Input
+                                        type="datetime-local"
+                                        value={formatDateTime(getValue('statusDate') || '')}
+                                        disabled
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Custom Field */}
+                                  <div>
+                                    <Label>Custom Field 1</Label>
+                                    <Input
+                                      value={getValue('customField1') || ''}
+                                      disabled
+                                      placeholder="N/A"
+                                    />
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
                   </div>
                 )}
               </CardContent>

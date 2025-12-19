@@ -13,6 +13,7 @@ export {
   addInvoiceCommentAction,
   updateInvoiceCaseNumberAction,
   updateInvoiceFieldAction,
+  updateInvoiceDisbursementResponseAction,
 } from './invoice.actions';
 
 export {

@@ -225,3 +225,33 @@ export async function updateInvoiceFieldAction(
   return result.data || { success: false, error: 'Unknown error' };
 }
 
+/**
+ * Update invoice with disbursement response
+ */
+export async function updateInvoiceDisbursementResponseAction(
+  invoiceId: string,
+  disbursementResponse: any
+): Promise<{ success: boolean; error?: string }> {
+  return withActionHandler(async () => {
+    await initDb();
+    const db = getDb();
+
+    const updateData: Record<string, any> = {
+      disbursementResponse: typeof disbursementResponse === 'string' 
+        ? disbursementResponse 
+        : JSON.stringify(disbursementResponse),
+      updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
+    };
+
+    await db
+      .update(invoices)
+      .set(updateData)
+      .where(eq(invoices.id, invoiceId));
+
+    revalidatePath(`/invoices/${invoiceId}`);
+    revalidatePath('/approvals');
+    revalidatePath('/invoices');
+    return { success: true };
+  }, 'Failed to update disbursement response');
+}
+
