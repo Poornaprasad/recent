@@ -694,298 +694,294 @@ export function ExtractedDataPanel({
   const isAmountEdited = editedFields.has('amount');
 
   return (
-    <div className="space-y-3 p-4">
-      {/* Document Type - Single Line (Required) */}
-      <div className={cn(
-        'p-3 rounded-md border',
-        !documentType ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
-      )}>
-        <div className="flex items-center gap-3">
-          <Label className="font-medium text-sm flex-shrink-0 w-32">
-            Document Type<span className="text-destructive">*</span>
+    <div className="space-y-4 p-4">
+      {/* Key Information Section - Compact Grid Layout */}
+      <div className="space-y-2.5">
+        <div className="flex items-center gap-2 mb-3">
+          <div className="h-px flex-1 bg-border"></div>
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
+            Key Information
           </Label>
-          <div className="flex-1">
-            <Select value={documentType} onValueChange={(v) => handleDocumentTypeChange(v as DocumentType)}>
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Select type..." />
-              </SelectTrigger>
-              <SelectContent>
-                {DOCUMENT_TYPES.map((type) => (
-                  <SelectItem key={type} value={type}>
-                    {type}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {documentType && (
-            <Badge
-              variant="outline"
-              className={cn('flex-shrink-0', getDocumentTypeBadgeClass(documentType))}
-            >
-              {documentType}
-            </Badge>
-          )}
+          <div className="h-px flex-1 bg-border"></div>
         </div>
-      </div>
 
-      {/* Vendor Name - Single Line with CRM lookup */}
-      <div className="p-3 rounded-md border bg-muted/30">
-        <div className="flex items-center gap-3">
-          <Label className="font-medium text-sm flex-shrink-0 w-32">Vendor Name</Label>
-          <div className="flex-1 flex items-center gap-2">
-            <span className="text-sm font-medium flex-1 truncate">
-              {invoiceData.vendorName?.value || 'Not found'}
-            </span>
-            {invoiceData.vendorName?.value && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={handleVendorContactLookup}
-                className="h-8 gap-1.5"
-              >
-                <Search className="h-3.5 w-3.5" />
-                Lookup in CRM
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Case Number - Single Line with submit button */}
-      <div className="p-3 rounded-md border bg-muted/30">
-        <div className="flex items-center gap-3">
-          <Label htmlFor="case-number" className="font-medium text-sm flex-shrink-0 w-32">
-            Case Number<span className="text-destructive">*</span>
-          </Label>
-          <div className="flex-1 flex gap-2">
-            <Input
-              id="case-number"
-              value={caseNumber}
-              onChange={(e) => setCaseNumber(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleCaseNumberSubmit();
-                }
-              }}
-              placeholder="Enter case number..."
-              disabled={isSubmittingCaseNumber}
-              className="flex-1 h-9"
-            />
-            <Button
-              type="button"
-              onClick={handleCaseNumberSubmit}
-              disabled={isSubmittingCaseNumber || !caseNumber.trim()}
-              size="icon"
-              className="h-9 w-9 flex-shrink-0"
-            >
-              {isSubmittingCaseNumber ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Search className="h-4 w-4" />
+        {/* Compact Grid: 2 columns */}
+        <div className="grid grid-cols-2 gap-2.5">
+          {/* Document Type */}
+          <div className={cn(
+            'p-2.5 rounded-lg border transition-colors',
+            !documentType ? 'border-destructive/50 bg-destructive/5' : 'border-border bg-card'
+          )}>
+            <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Document Type<span className="text-destructive ml-0.5">*</span>
+            </Label>
+            <div className="flex items-center gap-2">
+              <Select value={documentType} onValueChange={(v) => handleDocumentTypeChange(v as DocumentType)}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Select..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_TYPES.map((type) => (
+                    <SelectItem key={type} value={type}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {documentType && (
+                <Badge
+                  variant="outline"
+                  className={cn('flex-shrink-0 text-xs h-6', getDocumentTypeBadgeClass(documentType))}
+                >
+                  {documentType}
+                </Badge>
               )}
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Plaintiff Name - Side by Side Comparison */}
-      <div
-        className={cn(
-          'p-3 rounded-md border',
-          caseLookupStatus === 'error'
-            ? 'border-red-500/50 bg-red-50 dark:bg-red-950/20'
-            : bothNamesPresent && !namesMatch
-            ? 'border-orange-500/50 bg-orange-50 dark:bg-orange-950/20'
-            : bothNamesPresent && namesMatch
-            ? 'border-green-500/50 bg-green-50 dark:bg-green-950/20'
-            : 'bg-muted/30'
-        )}
-      >
-        <div className="flex items-center justify-between mb-3">
-          <Label className="font-medium">Plaintiff Name</Label>
-          {caseLookupStatus === 'error' ? (
-            <Badge variant="outline" className="gap-1 border-red-500 text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30">
-              <AlertTriangle className="h-3 w-3" />
-              Lookup Failed
-            </Badge>
-          ) : bothNamesPresent && (
-            namesMatch ? (
-              <Badge variant="outline" className="gap-1 border-green-500 text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30">
-                <CheckCircle2 className="h-3 w-3" />
-                Match
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="gap-1 border-orange-500 text-orange-700 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30">
-                <AlertTriangle className="h-3 w-3" />
-                Mismatch
-              </Badge>
-            )
-          )}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          {/* From Document (AI Extracted) */}
-          <div
-            className={cn(
-              'rounded-md p-2 border',
-              bothNamesPresent && !namesMatch
-                ? 'border-orange-300 dark:border-orange-700'
-                : 'border-border'
-            )}
-          >
-            <Label className="text-xs text-muted-foreground mb-1 block">From Document (AI)</Label>
-            <div
-              className={cn(
-                'text-sm font-mono px-2 py-1.5 rounded bg-background/70 truncate',
-                hasAiExtractedName ? '' : 'text-muted-foreground italic'
-              )}
-              title={aiExtractedPlaintiffName || 'Not extracted'}
-            >
-              {aiExtractedPlaintiffName || 'Not extracted'}
             </div>
-            {invoiceData.clientName?.confidence !== undefined && (
-              <div className="flex items-center gap-1 mt-1">
-                <ConfidenceBadge score={invoiceData.clientName.confidence} />
-                {invoiceData.clientName?.bbox && (
-                  <Badge variant="outline" className="text-xs">Located</Badge>
+          </div>
+
+          {/* Vendor Name - Editable */}
+          <div className={cn(
+            'p-2.5 rounded-lg border transition-colors',
+            editingField === 'vendorName' 
+              ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+              : editedFields.has('vendorName')
+              ? 'border-amber-300 bg-amber-50/50 dark:bg-amber-900/10'
+              : 'border-border bg-card'
+          )}>
+            <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Vendor Name
+            </Label>
+            <div className="flex items-center gap-1.5">
+              {editingField === 'vendorName' ? (
+                <Input
+                  value={editedValues['vendorName'] || ''}
+                  onChange={(e) => setEditedValues(prev => ({ ...prev, vendorName: e.target.value }))}
+                  className="h-8 text-sm flex-1"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveField('vendorName');
+                    } else if (e.key === 'Escape') {
+                      handleCancelEdit();
+                    }
+                  }}
+                />
+              ) : (
+                <span
+                  className="text-sm font-medium flex-1 truncate cursor-pointer"
+                  title={invoiceData.vendorName?.value || 'Not found'}
+                  onClick={() => handleStartEdit('vendorName', invoiceData.vendorName?.value || '')}
+                >
+                  {invoiceData.vendorName?.value || 'Not found'}
+                </span>
+              )}
+              <div className="flex items-center gap-1 flex-shrink-0">
+                {editingField === 'vendorName' ? (
+                  <>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleSaveField('vendorName')} disabled={isSaving}>
+                      {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5 text-green-600" />}
+                    </Button>
+                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancelEdit}>
+                      <X className="h-3.5 w-3.5 text-red-600" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    {editedFields.has('vendorName') && (
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => handleResetField('vendorName')} title="Reset to extracted value">
+                        <RotateCcw className="h-3 w-3 text-muted-foreground hover:text-amber-600" />
+                      </Button>
+                    )}
+                    {invoiceData.vendorName?.value && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleVendorContactLookup}
+                        className="h-7 px-2 gap-1.5 text-xs"
+                      >
+                        <Search className="h-3 w-3" />
+                        Lookup
+                      </Button>
+                    )}
+                  </>
                 )}
               </div>
+            </div>
+            {editedFields.has('vendorName') && editingField !== 'vendorName' && (
+              <Badge variant="outline" className="text-xs h-5 px-1.5 mt-1.5 bg-amber-100 dark:bg-amber-900/30 border-amber-400 text-amber-700 dark:text-amber-400">
+                Edited
+              </Badge>
             )}
           </div>
 
-          {/* From Case (Case Lookup) */}
+          {/* Case Number */}
+          <div className={cn(
+            'p-2.5 rounded-lg border transition-colors',
+            (!invoiceData.caseNumber || !invoiceData.caseNumber.trim()) 
+              ? 'border-destructive/50 bg-destructive/5' 
+              : 'border-border bg-card'
+          )}>
+            <Label htmlFor="case-number" className="text-xs font-medium text-muted-foreground mb-1.5 block">
+              Case Number<span className="text-destructive ml-0.5">*</span>
+            </Label>
+            <div className="flex gap-1.5">
+              <Input
+                id="case-number"
+                value={caseNumber}
+                onChange={(e) => setCaseNumber(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleCaseNumberSubmit();
+                  }
+                }}
+                placeholder="Enter case number..."
+                disabled={isSubmittingCaseNumber}
+                className="h-8 text-sm flex-1"
+              />
+              <Button
+                type="button"
+                onClick={handleCaseNumberSubmit}
+                disabled={isSubmittingCaseNumber || !caseNumber.trim()}
+                size="icon"
+                className="h-8 w-8 flex-shrink-0"
+              >
+                {isSubmittingCaseNumber ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Search className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {/* Plaintiff Name - Compact */}
           <div
             className={cn(
-              'rounded-md p-2 border',
+              'p-2.5 rounded-lg border transition-colors',
               caseLookupStatus === 'error'
-                ? 'border-red-300 dark:border-red-700'
+                ? 'border-red-500/50 bg-red-50 dark:bg-red-950/20'
                 : bothNamesPresent && !namesMatch
-                ? 'border-orange-300 dark:border-orange-700'
-                : 'border-border'
+                ? 'border-orange-500/50 bg-orange-50 dark:bg-orange-950/20'
+                : bothNamesPresent && namesMatch
+                ? 'border-green-500/50 bg-green-50 dark:bg-green-950/20'
+                : 'border-border bg-card'
             )}
           >
-            <Label className="text-xs text-muted-foreground mb-1 block">From Case</Label>
-            <div
-              className={cn(
-                'text-sm font-mono px-2 py-1.5 rounded bg-background/70 truncate',
-                caseLookupStatus === 'error'
-                  ? 'text-red-600 dark:text-red-400'
-                  : hasCaseName
-                  ? ''
-                  : 'text-muted-foreground italic'
-              )}
-              title={
-                caseLookupStatus === 'error'
-                  ? caseLookupError
-                  : casePlaintiffName || 'Search case number first'
-              }
-            >
-              {caseLookupStatus === 'error'
-                ? 'Error - See details below'
-                : caseLookupStatus === 'loading'
-                ? 'Searching...'
-                : casePlaintiffName || 'Search case number first'}
-            </div>
-            {caseSearchSuccessful && hasCaseName && (
-              <div className="flex items-center gap-1 mt-1">
-                <Badge variant="outline" className="text-xs bg-blue-50 dark:bg-blue-900/30 border-blue-300 text-blue-700 dark:text-blue-400">
-                  Case Data
+            <div className="flex items-center justify-between mb-1.5">
+              <Label className="text-xs font-medium text-muted-foreground">Plaintiff Name</Label>
+              {caseLookupStatus === 'error' ? (
+                <Badge variant="outline" className="gap-1 border-red-500 text-red-700 dark:text-red-400 bg-red-100 dark:bg-red-900/30 text-xs h-5">
+                  <AlertTriangle className="h-2.5 w-2.5" />
+                  Error
                 </Badge>
+              ) : bothNamesPresent && (
+                namesMatch ? (
+                  <Badge variant="outline" className="gap-1 border-green-500 text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 text-xs h-5">
+                    <CheckCircle2 className="h-2.5 w-2.5" />
+                    Match
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="gap-1 border-orange-500 text-orange-700 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/30 text-xs h-5">
+                    <AlertTriangle className="h-2.5 w-2.5" />
+                    Mismatch
+                  </Badge>
+                )
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground w-16 flex-shrink-0">AI:</span>
+                <span className="text-xs font-medium truncate flex-1" title={aiExtractedPlaintiffName || 'Not extracted'}>
+                  {aiExtractedPlaintiffName || 'Not extracted'}
+                </span>
+                {invoiceData.clientName?.confidence !== undefined && (
+                  <ConfidenceBadge score={invoiceData.clientName.confidence} />
+                )}
               </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-muted-foreground w-16 flex-shrink-0">Case:</span>
+                <span 
+                  className={cn(
+                    'text-xs font-medium truncate flex-1',
+                    caseLookupStatus === 'error' ? 'text-red-600 dark:text-red-400' : ''
+                  )}
+                  title={casePlaintiffName || 'Search case number first'}
+                >
+                  {caseLookupStatus === 'error'
+                    ? 'Error'
+                    : caseLookupStatus === 'loading'
+                    ? 'Searching...'
+                    : casePlaintiffName || 'Not searched'}
+                </span>
+              </div>
+            </div>
+            {/* Compact error/mismatch messages */}
+            {caseLookupStatus === 'error' && (
+              <p className="text-xs text-red-600 dark:text-red-400 mt-1.5 truncate" title={caseLookupError}>
+                {caseLookupError || 'Lookup failed'}
+              </p>
+            )}
+            {bothNamesPresent && !namesMatch && (
+              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1.5">
+                Names don't match
+              </p>
             )}
           </div>
         </div>
-
-        {/* Error Message for Failed Lookup */}
-        {caseLookupStatus === 'error' && (
-          <div className="mt-3 flex items-start gap-2 p-2 rounded bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200">
-            <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-            <p className="text-xs">
-              <span className="font-medium">Case lookup failed.</span> {caseLookupError || 'Unable to retrieve case details. Please verify the case number and try again.'}
-            </p>
-          </div>
-        )}
-
-        {/* Mismatch Warning Message */}
-        {bothNamesPresent && !namesMatch && (
-          <div className="mt-3 flex items-start gap-2 p-2 rounded bg-orange-100 dark:bg-orange-900/30 text-orange-800 dark:text-orange-200">
-            <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
-            <p className="text-xs">
-              <span className="font-medium">Name mismatch detected.</span> The name extracted from the document does not match the case plaintiff name. Please verify and confirm the correct party.
-            </p>
-          </div>
-        )}
-
-        {/* Match Success Message */}
-        {bothNamesPresent && namesMatch && (
-          <div className="mt-3 flex items-start gap-2 p-2 rounded bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
-            <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0" />
-            <p className="text-xs">
-              <span className="font-medium">Names match.</span>{' '}
-              {matchResult.confidence === 'permutation'
-                ? 'The names match (different format detected - e.g., "First Last" vs "Last, First").'
-                : 'The document plaintiff name matches the case record.'}
-            </p>
-          </div>
-        )}
-
-        {/* Help text when no case lookup yet */}
-        {caseLookupStatus === 'idle' && (
-          <p className="text-xs text-muted-foreground mt-2">
-            Enter a case number above and search to compare with the AI-extracted name.
-          </p>
-        )}
       </div>
 
-      {/* Disbursement Type - Single Line (Required) */}
-      <div className={cn(
-        'p-3 rounded-md border',
-        !selectedDisbursementType ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
-      )}>
-        <div className="flex items-center gap-3">
-          <Label className="font-medium text-sm flex-shrink-0 w-32">
-            Disbursement Type<span className="text-destructive">*</span>
+      {/* Disbursement Fields - Compact Grid */}
+      <div className="grid grid-cols-2 gap-2.5">
+        {/* Disbursement Type */}
+        <div className={cn(
+          'p-2.5 rounded-lg border transition-colors',
+          !selectedDisbursementType ? 'border-destructive/50 bg-destructive/5' : 'border-border bg-card'
+        )}>
+          <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+            Disbursement Type<span className="text-destructive ml-0.5">*</span>
           </Label>
-          <div className="flex-1">
-            <Combobox
-              options={typeOptions}
-              value={selectedDisbursementType}
-              onValueChange={handleDisbursementTypeChange}
-              placeholder="Select type..."
-              searchPlaceholder="Search types..."
-              emptyText="No type found."
-              isLoading={isLoadingTypes}
-              triggerClassName="h-9"
-            />
-          </div>
+          <Combobox
+            options={typeOptions}
+            value={selectedDisbursementType}
+            onValueChange={handleDisbursementTypeChange}
+            placeholder="Select type..."
+            searchPlaceholder="Search types..."
+            emptyText="No type found."
+            isLoading={isLoadingTypes}
+            triggerClassName="h-8 text-sm"
+          />
+        </div>
+
+        {/* Disbursement Status */}
+        <div className={cn(
+          'p-2.5 rounded-lg border transition-colors',
+          !selectedDisbursementStatus ? 'border-destructive/50 bg-destructive/5' : 'border-border bg-card'
+        )}>
+          <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+            Disbursement Status<span className="text-destructive ml-0.5">*</span>
+          </Label>
+          <Combobox
+            options={statusOptions}
+            value={selectedDisbursementStatus}
+            onValueChange={setSelectedDisbursementStatus}
+            placeholder="Select status..."
+            searchPlaceholder="Search statuses..."
+            emptyText="No status found."
+            isLoading={isLoadingStatuses}
+            triggerClassName="h-8 text-sm"
+          />
         </div>
       </div>
 
-      {/* Disbursement Status - Single Line (Required) */}
-      <div className={cn(
-        'p-3 rounded-md border',
-        !selectedDisbursementStatus ? 'border-destructive/50 bg-destructive/5' : 'bg-muted/30'
-      )}>
-        <div className="flex items-center gap-3">
-          <Label className="font-medium text-sm flex-shrink-0 w-32">
-            Disbursement Status<span className="text-destructive">*</span>
-          </Label>
-          <div className="flex-1">
-            <Combobox
-              options={statusOptions}
-              value={selectedDisbursementStatus}
-              onValueChange={setSelectedDisbursementStatus}
-              placeholder="Select status..."
-              searchPlaceholder="Search statuses..."
-              emptyText="No status found."
-              isLoading={isLoadingStatuses}
-              triggerClassName="h-9"
-            />
-          </div>
-        </div>
+      {/* Separator */}
+      <div className="flex items-center gap-2 my-4">
+        <div className="h-px flex-1 bg-border"></div>
+        <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
+          Extracted Data
+        </Label>
+        <div className="h-px flex-1 bg-border"></div>
       </div>
 
       {/* Extracted Fields - Editable Single Row Layout */}
