@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -32,10 +32,14 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { setUser } = useAuthStore();
   const { toast } = useToast();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Get redirect URL from query params
+  const redirectUrl = searchParams.get('redirect') || '/dashboard';
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -87,9 +91,10 @@ export default function LoginPage() {
 
       // Set user and tokens in auth store
       setUser(result.user);
-      useAuthStore.getState().setTokens(result.token, result.refreshToken);
-      
-      router.push("/dashboard");
+      useAuthStore.getState().setTokens(result.token, result.refreshToken, result.tokenExpiry);
+
+      // Redirect to the original URL or dashboard
+      router.push(decodeURIComponent(redirectUrl));
     } catch (error) {
       console.error('Login error:', error);
       const errorMessage = error instanceof Error 
