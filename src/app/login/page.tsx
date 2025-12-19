@@ -11,19 +11,17 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/hooks/use-auth-store";
-import Link from "next/link";
 import { APP_NAME } from "@/lib/constants";
 import { Eye, EyeOff, Workflow } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { parseJsonResponse, handleApiError } from "@/lib/utils/api-helpers";
-import type { User } from "@/lib/types";
+import type { User } from "@/lib/domain/types";
 
 const loginSchema = z.object({
   email: z.string().email({ message: "Invalid email address." }),
@@ -173,14 +171,6 @@ export default function LoginPage() {
           </Button>
         </form>
       </CardContent>
-      <CardFooter className="flex flex-col items-center space-y-2">
-        <p className="text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link href="/signup" className="font-medium text-primary hover:underline">
-            Sign up
-          </Link>
-        </p>
-      </CardFooter>
     </Card>
   );
 }
