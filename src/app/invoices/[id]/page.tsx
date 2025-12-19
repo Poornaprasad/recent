@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { type StoredInvoice, type DocumentType } from '@/lib/domain/types';
 import { cn } from '@/lib/utils/utils';
 import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, completeVendorSetupAction, getInvoicesAction } from '@/lib/actions/index';
@@ -56,6 +56,8 @@ export default function InvoiceDetailPage() {
   const [isDisbursementModalOpen, setIsDisbursementModalOpen] = useState(false);
   const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(autoAdvance);
   const [caseName, setCaseName] = useState<string | null>(null);
+  const [isFormValid, setIsFormValid] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
 
   // Debug: Log modal state changes
   useEffect(() => {
@@ -132,6 +134,12 @@ export default function InvoiceDetailPage() {
     };
     fetchInvoice();
   }, [id, toast]);
+
+  // Memoize validation callback to prevent infinite loops
+  const handleValidationChange = useCallback((isValid: boolean, missing: string[]) => {
+    setIsFormValid(isValid);
+    setMissingFields(missing);
+  }, []);
 
   // Fetch case info when caseNumber is available
   useEffect(() => {
@@ -576,6 +584,7 @@ export default function InvoiceDetailPage() {
                   onDocumentTypeChange={(newType) => {
                     setInvoiceData(prev => prev ? { ...prev, documentType: newType } : null);
                   }}
+                  onValidationChange={handleValidationChange}
                 />
 
                 {/* Comment Section */}
@@ -895,13 +904,28 @@ export default function InvoiceDetailPage() {
                       <X className="mr-2 h-4 w-4" />
                       Reject
                     </Button>
-                    <Button onClick={() => handleStatusUpdate('Pending')} disabled={isUpdating || invoiceData.vendorRequires1099} title={invoiceData.vendorRequires1099 ? 'Vendor must be set up before approving' : ''}>
+                    <Button 
+                      onClick={() => handleStatusUpdate('Pending')} 
+                      disabled={isUpdating || invoiceData.vendorRequires1099 || !isFormValid} 
+                      title={
+                        invoiceData.vendorRequires1099 
+                          ? 'Vendor must be set up before approving' 
+                          : !isFormValid && missingFields.length > 0
+                          ? `Please fill in required fields: ${missingFields.join(', ')}`
+                          : ''
+                      }
+                    >
                       <Check className="mr-2 h-4 w-4" />
                       Approve
                     </Button>
                     {invoiceData.vendorRequires1099 && (
                       <p className="text-xs text-muted-foreground self-center">
                         Complete vendor setup to approve
+                      </p>
+                    )}
+                    {!isFormValid && missingFields.length > 0 && !invoiceData.vendorRequires1099 && (
+                      <p className="text-xs text-destructive self-center">
+                        Required fields missing: {missingFields.join(', ')}
                       </p>
                     )}
                   </>

@@ -59,6 +59,7 @@ interface ExtractedDataPanelProps {
   onFieldHover: (field: string | null, bbox: BoundingBox | null, confidence: number | null) => void;
   onInvoiceUpdate: (updatedInvoice: StoredInvoice) => void;
   onDocumentTypeChange?: (documentType: DocumentType) => void;
+  onValidationChange?: (isValid: boolean, missingFields: string[]) => void;
 }
 
 // Document types available for selection
@@ -86,6 +87,7 @@ export function ExtractedDataPanel({
   onFieldHover,
   onInvoiceUpdate,
   onDocumentTypeChange,
+  onValidationChange,
 }: ExtractedDataPanelProps) {
   const { toast } = useToast();
 
@@ -136,6 +138,48 @@ export function ExtractedDataPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceData.caseNumber]);
+
+  // Track previous validation state to avoid unnecessary callbacks
+  const prevValidationRef = useRef<{ isValid: boolean; missingFields: string[] } | null>(null);
+
+  // Validate mandatory fields and notify parent
+  useEffect(() => {
+    if (!onValidationChange) return;
+
+    const missingFields: string[] = [];
+    
+    // Check Document Type
+    if (!documentType) {
+      missingFields.push('Document Type');
+    }
+    
+    // Check Case Number (must be saved to invoiceData, not just in local state)
+    if (!invoiceData.caseNumber || !invoiceData.caseNumber.trim()) {
+      missingFields.push('Case Number');
+    }
+    
+    // Check Disbursement Type
+    if (!selectedDisbursementType) {
+      missingFields.push('Disbursement Type');
+    }
+    
+    // Check Disbursement Status
+    if (!selectedDisbursementStatus) {
+      missingFields.push('Disbursement Status');
+    }
+
+    const isValid = missingFields.length === 0;
+    
+    // Only call callback if validation state actually changed
+    const prevValidation = prevValidationRef.current;
+    if (!prevValidation || 
+        prevValidation.isValid !== isValid || 
+        JSON.stringify(prevValidation.missingFields) !== JSON.stringify(missingFields)) {
+      prevValidationRef.current = { isValid, missingFields };
+      onValidationChange(isValid, missingFields);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentType, invoiceData.caseNumber, selectedDisbursementType, selectedDisbursementStatus]);
 
   // Initialize original field data and detect already-edited fields on mount
   useEffect(() => {
