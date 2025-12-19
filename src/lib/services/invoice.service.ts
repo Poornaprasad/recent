@@ -401,9 +401,10 @@ export class InvoiceService {
 
   /**
    * Check for duplicate invoice
+   * If caseNumber is provided, only checks for duplicates within that case
    */
-  async checkDuplicate(invoiceNumber: string, vendorName: string, invoiceDate: string) {
-    return await checkForDuplicateInvoice(invoiceNumber, vendorName, invoiceDate);
+  async checkDuplicate(invoiceNumber: string, vendorName: string, invoiceDate: string, caseNumber?: string | null) {
+    return await checkForDuplicateInvoice(invoiceNumber, vendorName, invoiceDate, undefined, caseNumber);
   }
 
   /**
@@ -426,6 +427,7 @@ export class InvoiceService {
    * Update case number
    * Saves the case number and auto-detects state
    * Does NOT overwrite AI-extracted plaintiff names - case info is fetched separately by frontend
+   * Re-checks for duplicates within the case when case number is set
    */
   async updateCaseNumber(id: string, caseNumber: string | undefined): Promise<void> {
     try {
@@ -453,13 +455,76 @@ export class InvoiceService {
       detectedState = stateResult.state;
     }
 
-    // Prepare update data - only update case number and state
-    // Do NOT overwrite AI-extracted clientName/customerName
+    // Re-check for duplicates within the case if case number is provided
+    let duplicateCheckResult: { isDuplicate: boolean; duplicateReason?: string } | null = null;
+    if (normalizedCaseNumber) {
+      const invoiceNumber = typeof invoice.invoiceNumber === 'object' && invoice.invoiceNumber !== null
+        ? invoice.invoiceNumber.value
+        : invoice.invoiceNumber;
+      const vendorName = typeof invoice.vendorName === 'object' && invoice.vendorName !== null
+        ? invoice.vendorName.value
+        : invoice.vendorName;
+      const invoiceDate = typeof invoice.invoiceDate === 'object' && invoice.invoiceDate !== null
+        ? invoice.invoiceDate.value
+        : invoice.invoiceDate;
+
+      if (invoiceNumber && vendorName && invoiceDate) {
+        const duplicate = await checkForDuplicateInvoice(
+          invoiceNumber,
+          vendorName,
+          invoiceDate,
+          id, // Exclude current invoice
+          normalizedCaseNumber // Only check within this case
+        );
+
+        if (duplicate) {
+          // Build duplicate reason
+          const reasonParts = [];
+          const duplicateInvoiceNumber = typeof duplicate.invoiceNumber === 'object' && duplicate.invoiceNumber !== null
+            ? duplicate.invoiceNumber.value
+            : duplicate.invoiceNumber;
+          const duplicateVendorName = typeof duplicate.vendorName === 'object' && duplicate.vendorName !== null
+            ? duplicate.vendorName.value
+            : duplicate.vendorName;
+          const duplicateInvoiceDate = typeof duplicate.invoiceDate === 'object' && duplicate.invoiceDate !== null
+            ? duplicate.invoiceDate.value
+            : duplicate.invoiceDate;
+
+          if (duplicateInvoiceNumber && duplicateInvoiceNumber === invoiceNumber) {
+            reasonParts.push(`Invoice number ${duplicateInvoiceNumber}`);
+          }
+          if (duplicateVendorName && duplicateVendorName === vendorName) {
+            reasonParts.push(`vendor ${duplicateVendorName}`);
+          }
+          if (duplicateInvoiceDate && duplicateInvoiceDate === invoiceDate) {
+            reasonParts.push(`date ${duplicateInvoiceDate}`);
+          }
+
+          duplicateCheckResult = {
+            isDuplicate: true,
+            duplicateReason: reasonParts.length > 0
+              ? `Duplicate found: matching ${reasonParts.join(', ')} (within case ${normalizedCaseNumber})`
+              : `Duplicate invoice found (within case ${normalizedCaseNumber})`
+          };
+        } else {
+          // No duplicate found within the case
+          duplicateCheckResult = { isDuplicate: false };
+        }
+      }
+    }
+
+    // Prepare update data - update case number, state, and duplicate status if re-checked
     const updateData: any = {
       caseNumber: normalizedCaseNumber || null,
       state: detectedState,
       updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
     };
+
+    // Update duplicate status if we re-checked
+    if (duplicateCheckResult !== null) {
+      updateData.isDuplicate = duplicateCheckResult.isDuplicate;
+      updateData.duplicateReason = duplicateCheckResult.duplicateReason || null;
+    }
 
     try {
       await db

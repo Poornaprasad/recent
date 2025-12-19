@@ -49,6 +49,162 @@ export async function extractInvoiceData(input: ExtractInvoiceDataInput): Promis
   return extractInvoiceDataFlow(input);
 }
 
+/**
+ * Retry plaintiff name extraction with a specific name to search for
+ * This is used when the AI-extracted name doesn't match the case name
+ */
+const RetryPlaintiffNameInputSchema = z.object({
+  invoiceDataUri: z
+    .string()
+    .describe(
+      "An invoice PDF, as a data URI that must include a MIME type and use Base64 encoding. Expected format: 'data:<mimetype>;base64,<encoded_data>'."
+    ),
+  caseName: z
+    .string()
+    .describe("The plaintiff name from the case that we want to search for in the document."),
+});
+
+const RetryPlaintiffNameOutputSchema = z.object({
+  clientName: ExtractedFieldSchema,
+  found: z.boolean().describe("Whether the case name was found in the document."),
+});
+
+export async function retryPlaintiffNameExtraction(
+  invoiceDataUri: string,
+  caseName: string
+): Promise<{ clientName?: { value: string | null; confidence: number; reasoning: string; bbox: any }; found: boolean; error?: string }> {
+  try {
+    // Extract name parts for better matching
+    // Case name from CRM is in "Last, First" format
+    const nameParts = caseName.split(',').map(p => p.trim()).filter(p => p);
+    const lastName = nameParts[0] || '';
+    const firstName = nameParts[1]?.split(/\s+/)[0] || '';
+    
+    // Create both format variations
+    const lastFirstFormat = `${lastName}, ${firstName}`; // "Ceparano, Joseph"
+    const firstLastFormat = `${firstName} ${lastName}`;   // "Joseph Ceparano"
+    
+    // Create prompt dynamically with the case name
+    const retryPlaintiffNamePrompt = ai.definePrompt({
+      name: 'retryPlaintiffNamePrompt',
+      input: { schema: RetryPlaintiffNameInputSchema },
+      output: { schema: RetryPlaintiffNameOutputSchema },
+      prompt: `
+You are an expert document data extractor. Your task is SIMPLE: search the ENTIRE document for the plaintiff name.
+
+## The Name You're Looking For
+The plaintiff name from the case is: "${caseName}" (format: Last, First)
+- Last name: "${lastName}"
+- First name: "${firstName}"
+
+## Your Task
+1. Read through the ENTIRE document from top to bottom
+2. Look for BOTH "${lastName}" AND "${firstName}" anywhere in the document
+3. Check ALL text in the document, including:
+
+**CRITICAL - Check These Common Fields First:**
+- **"Patient Name"** or **"PATIENT"** field - plaintiff names often appear here
+- **"Case Name"** or **"CASE NAME"** or **"Case:"** field - very common location
+- **"Client Name"** or **"CLIENT"** field
+- **"Plaintiff Name"** or **"PLAINTIFF"** field
+- **"Patient"** field (without "Name")
+- **"Case"** field (without "Name")
+- **"Name"** field (standalone)
+- Any field with labels like "Name:", "Patient:", "Case:", "Client:", "Plaintiff:"
+
+**Also Check:**
+- Headers and footers
+- Tables and structured data sections
+- Body text
+- Invoice details sections
+- Anywhere text appears
+
+## What to Look For (ALL FORMATS)
+The name might appear in different formats - search for ALL of these:
+
+**Format 1: Last, First (like CRM format)**
+- "${lastFirstFormat}" (exact: "${caseName}")
+- "${lastFirstFormat.toUpperCase()}" (e.g., "CEPARANO, JOSEPH")
+- "${lastFirstFormat.toLowerCase()}" (e.g., "ceparano, joseph")
+- As part of longer string: "${lastFirstFormat} V. SOMETHING" or "${lastFirstFormat} vs. SOMETHING"
+
+**Format 2: First Last (common in documents)**
+- "${firstLastFormat}" (e.g., "Joseph Ceparano")
+- "${firstLastFormat.toUpperCase()}" (e.g., "JOSEPH CEPARANO")
+- "${firstLastFormat.toLowerCase()}" (e.g., "joseph ceparano")
+- As part of longer string: "${firstLastFormat} V. SOMETHING" or "${firstLastFormat} vs. SOMETHING"
+
+**Format 3: Just the parts**
+- "${lastName}" and "${firstName}" appearing separately (even in different locations)
+- "${lastName}" and "${firstName}" as part of longer text
+
+## Simple Rule
+If you see "${lastName}" (like "Ceparano") AND "${firstName}" (like "Joseph") anywhere in the document - in ANY format, in ANY location, even as part of longer text - the name EXISTS in the document.
+
+## What to Return
+1. **clientName**:
+   - If you find "${lastFirstFormat}" or "${firstLastFormat}" anywhere:
+     - Extract the name in "Last, First" format: "${lastFirstFormat}"
+     - Set confidence to 0.95 (high confidence - you found it!)
+     - Include bounding box if you can locate where you saw it
+   - If you find "${lastName}" and "${firstName}" in different order or as part of longer text:
+     - Extract in "Last, First" format: "${lastFirstFormat}"
+     - Set confidence to 0.9
+     - Include bounding box
+   - If you CANNOT find both "${lastName}" AND "${firstName}" anywhere:
+     - Set value = null
+     - Set confidence = 0.1
+     - Set found = false
+
+2. **found**:
+   - TRUE if you see "${lastName}" AND "${firstName}" anywhere in the document (in any format, even as part of longer text)
+   - FALSE only if you cannot find both "${lastName}" and "${firstName}" anywhere
+
+## Critical Instructions
+- **START by checking common fields**: Look specifically in fields labeled "Patient Name", "Case Name", "Client Name", "Plaintiff Name", "Patient", "Case", etc.
+- Read the ENTIRE document carefully, but prioritize these common field locations
+- Look for "${lastName}" (like "Ceparano") and "${firstName}" (like "Joseph") in ANY format:
+  - "Ceparano, Joseph" (Last, First)
+  - "Joseph Ceparano" (First Last)
+  - "CEPARANO, JOSEPH" (uppercase)
+  - As part of "CEPARANO, JOSEPH V. NEW YORK CITY HOUSING AUTHORITY"
+- The name might be in a field like:
+  - "PATIENT: DEREK GARRITY" (but you're looking for "${lastName}, ${firstName}")
+  - "Case Name: CEPARANO, JOSEPH V. SOMETHING"
+  - "Patient Name: Joseph Ceparano"
+- Don't overthink it - if you see both parts of the name in ANY field, it EXISTS
+- Always extract in "Last, First" format: "${lastFirstFormat}"
+
+## Document Source
+Document: {{media url=invoiceDataUri}}
+
+**Search Strategy:**
+1. First, check all fields with labels like "Patient Name", "Case Name", "Client Name", "Plaintiff Name", "Patient", "Case"
+2. Then search the rest of the document
+3. If "${lastName}" and "${firstName}" appear anywhere (in any format, in any field), return found=true and extract the name as "${lastFirstFormat}"
+`,
+      model: 'openai/gpt-4o',
+    });
+
+    const { output } = await retryPlaintiffNamePrompt({
+      invoiceDataUri,
+      caseName,
+    });
+
+    if (!output) {
+      return { found: false, error: 'Failed to extract data from document' };
+    }
+
+    return {
+      clientName: output.clientName,
+      found: output.found,
+    };
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    return { found: false, error: errorMessage };
+  }
+}
+
 
 import { checkForDuplicateInvoice } from '@/lib/repositories/invoice.repository';
 

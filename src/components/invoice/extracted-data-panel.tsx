@@ -27,6 +27,8 @@ import {
   lookupCaseInfoAction,
   updateInvoiceFieldAction,
   lookupContactsAction,
+  retryPlaintiffNameAction,
+  getInvoiceByIdAction,
 } from '@/lib/actions/index';
 import type { ContactLookupResult } from '@/lib/crm/smartadvocate/types';
 import {
@@ -535,6 +537,62 @@ export function ExtractedDataPanel({
 
   const namesMatch = matchResult.isMatch;
 
+  // Retry plaintiff name extraction state
+  const [isRetryingPlaintiffName, setIsRetryingPlaintiffName] = useState(false);
+
+  // Handle retry plaintiff name extraction
+  const handleRetryPlaintiffName = async () => {
+    if (!casePlaintiffName || !caseSearchSuccessful) {
+      toast({
+        variant: 'destructive',
+        title: 'Case Name Required',
+        description: 'Please search for a case number first to get the plaintiff name.',
+      });
+      return;
+    }
+
+    setIsRetryingPlaintiffName(true);
+    try {
+      const result = await retryPlaintiffNameAction(invoiceData.id, casePlaintiffName);
+      
+      if (result.error) {
+        toast({
+          variant: 'destructive',
+          title: 'Retry Failed',
+          description: result.error,
+        });
+      } else if (result.found) {
+        toast({
+          title: 'Name Found',
+          description: `Found "${casePlaintiffName}" in the document. The plaintiff name has been updated.`,
+        });
+        // Refresh the invoice data to show the updated name
+        try {
+          const updatedInvoice = await getInvoiceByIdAction(invoiceData.id);
+          if (updatedInvoice.data) {
+            onInvoiceUpdate(updatedInvoice.data);
+          }
+        } catch (error) {
+          console.error('Failed to refresh invoice data:', error);
+        }
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Name Not Found',
+          description: `Could not find "${casePlaintiffName}" in the document. Please verify the case name is correct.`,
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: error instanceof Error ? error.message : 'Failed to retry plaintiff name extraction',
+      });
+    } finally {
+      setIsRetryingPlaintiffName(false);
+    }
+  };
+
   // Handle vendor contact lookup
   const handleVendorContactLookup = async () => {
     const vendorName = invoiceData.vendorName?.value;
@@ -924,9 +982,30 @@ export function ExtractedDataPanel({
               </p>
             )}
             {bothNamesPresent && !namesMatch && (
-              <p className="text-xs text-orange-600 dark:text-orange-400 mt-1.5">
-                Names don't match
-              </p>
+              <div className="flex items-center justify-between mt-1.5 gap-2">
+                <p className="text-xs text-orange-600 dark:text-orange-400 flex-1">
+                  Names don't match
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetryPlaintiffName}
+                  disabled={isRetryingPlaintiffName}
+                  className="h-6 px-2 text-xs"
+                >
+                  {isRetryingPlaintiffName ? (
+                    <>
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                      Searching...
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="h-3 w-3 mr-1" />
+                      Retry
+                    </>
+                  )}
+                </Button>
+              </div>
             )}
           </div>
         </div>

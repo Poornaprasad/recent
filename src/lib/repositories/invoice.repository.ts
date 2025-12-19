@@ -118,12 +118,14 @@ export async function updateInvoiceStatus(
 
 /**
  * Check for duplicate invoices based on invoice number, vendor name, and date
+ * If caseNumber is provided, only checks for duplicates within that case
  */
 export async function checkForDuplicateInvoice(
   invoiceNumber: string | null | undefined,
   vendorName: string | null | undefined,
   invoiceDate: string | null | undefined,
-  excludeId?: string
+  excludeId?: string,
+  caseNumber?: string | null | undefined
 ): Promise<StoredInvoice | null> {
   const db = await getDatabase();
 
@@ -144,6 +146,11 @@ export async function checkForDuplicateInvoice(
 
   if (invoiceDate) {
     conditions.push(eq(invoices.invoiceDate, invoiceDate));
+  }
+
+  // If caseNumber is provided, only check duplicates within that case
+  if (caseNumber) {
+    conditions.push(eq(invoices.caseNumber, caseNumber));
   }
 
   let query = db

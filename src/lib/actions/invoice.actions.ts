@@ -14,6 +14,8 @@ import { getDb, initDb } from '../db';
 import { invoices } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import { serializeMeta } from '../repositories/mappers/invoice.mapper';
+import { retryPlaintiffNameExtraction } from '@/ai/flows/extract-invoice-data';
+import { findInvoiceById } from '../repositories/invoice.repository';
 
 /**
  * Process a new invoice upload
@@ -253,5 +255,76 @@ export async function updateInvoiceDisbursementResponseAction(
     revalidatePath('/invoices');
     return { success: true };
   }, 'Failed to update disbursement response');
+}
+
+/**
+ * Retry plaintiff name extraction with case name hint
+ * Searches the document for the case name and updates the clientName field if found
+ */
+export async function retryPlaintiffNameAction(
+  invoiceId: string,
+  caseName: string
+): Promise<{ success: boolean; found: boolean; error?: string }> {
+  return withActionHandler(async () => {
+    // Get the invoice to retrieve the document URI
+    const invoice = await findInvoiceById(invoiceId);
+    if (!invoice) {
+      throw new Error('Invoice not found');
+    }
+
+    // Get the invoice data URI (convert file path to data URI if needed)
+    const invoiceDataUri = await getInvoiceDataUri(invoice.invoiceDataUri);
+
+    // Retry extraction with case name hint
+    const result = await retryPlaintiffNameExtraction(invoiceDataUri, caseName);
+
+    if (result.error) {
+      throw new Error(result.error);
+    }
+
+    // If the name was found, update the invoice field with full metadata
+    if (result.found && result.clientName?.value) {
+      await initDb();
+      const db = getDb();
+
+      const mapping = fieldToColumnMap['clientName'];
+      if (!mapping) {
+        throw new Error('Unknown field: clientName');
+      }
+
+      // Prepare the update data with full metadata from AI extraction
+      const updateData: Record<string, any> = {
+        updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
+      };
+
+      // Set the value column
+      updateData[mapping.valueCol] = result.clientName.value || null;
+
+      // Set the metadata column with full AI extraction metadata
+      if (mapping.metaCol && result.clientName) {
+        const meta: { value: string; confidence?: number; reasoning?: string; bbox?: any } = {
+          value: result.clientName.value,
+        };
+        if (result.clientName.confidence !== undefined) {
+          meta.confidence = result.clientName.confidence;
+        }
+        if (result.clientName.reasoning) {
+          meta.reasoning = result.clientName.reasoning + ' (Retried with case name hint)';
+        }
+        if (result.clientName.bbox) {
+          meta.bbox = result.clientName.bbox;
+        }
+        updateData[mapping.metaCol] = serializeMeta(meta);
+      }
+
+      await db
+        .update(invoices)
+        .set(updateData)
+        .where(eq(invoices.id, invoiceId));
+    }
+
+    revalidatePath(`/invoices/${invoiceId}`);
+    return { success: true, found: result.found };
+  }, 'Failed to retry plaintiff name extraction');
 }
 
