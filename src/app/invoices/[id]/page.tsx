@@ -11,6 +11,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { type StoredInvoice, type DocumentType } from '@/lib/domain/types';
 import { cn } from '@/lib/utils/utils';
 import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, completeVendorSetupAction, getInvoicesAction } from '@/lib/actions/index';
+import { getCaseInfoAction } from '@/lib/actions/case.actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -54,6 +55,7 @@ export default function InvoiceDetailPage() {
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isDisbursementModalOpen, setIsDisbursementModalOpen] = useState(false);
   const [autoAdvanceEnabled, setAutoAdvanceEnabled] = useState(autoAdvance);
+  const [caseName, setCaseName] = useState<string | null>(null);
 
   // Debug: Log modal state changes
   useEffect(() => {
@@ -130,6 +132,29 @@ export default function InvoiceDetailPage() {
     };
     fetchInvoice();
   }, [id, toast]);
+
+  // Fetch case info when caseNumber is available
+  useEffect(() => {
+    const fetchCaseInfo = async () => {
+      const currentCaseNumber = invoiceData?.caseNumber;
+      if (currentCaseNumber) {
+        try {
+          const result = await getCaseInfoAction(currentCaseNumber);
+          if (result.data) {
+            setCaseName(result.data.caseName || null);
+          } else {
+            setCaseName(null);
+          }
+        } catch (error) {
+          console.error('Failed to fetch case info:', error);
+          setCaseName(null);
+        }
+      } else {
+        setCaseName(null);
+      }
+    };
+    fetchCaseInfo();
+  }, [invoiceData?.caseNumber]);
 
   // Get current index and navigation info
   const navigationInfo = useMemo(() => {
@@ -530,7 +555,13 @@ export default function InvoiceDetailPage() {
             <Card className="flex-1">
               <CardHeader className="py-3 px-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">Extracted Data</CardTitle>
+                  <CardTitle className="text-lg">
+                    {invoiceData.caseNumber && caseName
+                      ? `${invoiceData.caseNumber} - ${caseName}`
+                      : invoiceData.caseNumber
+                      ? invoiceData.caseNumber
+                      : 'Extracted Data'}
+                  </CardTitle>
                   <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                     {formatCurrency(invoiceData.amount?.value)}
                   </span>

@@ -128,6 +128,15 @@ export function ExtractedDataPanel({
   const [isSearchingContacts, setIsSearchingContacts] = useState(false);
   const [contactSearchError, setContactSearchError] = useState<string>('');
 
+  // Sync case number state when invoiceData.caseNumber changes from parent
+  useEffect(() => {
+    const newCaseNumber = invoiceData.caseNumber || '';
+    if (newCaseNumber !== caseNumber) {
+      setCaseNumber(newCaseNumber);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceData.caseNumber]);
+
   // Initialize original field data and detect already-edited fields on mount
   useEffect(() => {
     const originals: Record<string, any> = {};
@@ -246,6 +255,12 @@ export function ExtractedDataPanel({
       if (!saveResult.success) {
         throw new Error(saveResult.error || 'Failed to save case number');
       }
+
+      // Update parent component with new case number
+      onInvoiceUpdate({
+        ...invoiceData,
+        caseNumber: caseNumber.trim(),
+      });
 
       // Then lookup case info from SmartAdvocate API
       const lookupResult = await lookupCaseInfoAction(caseNumber);

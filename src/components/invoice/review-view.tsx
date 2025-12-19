@@ -3,11 +3,12 @@
 import type { StoredInvoice, DocumentType } from '@/lib/domain/types';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { InvoiceViewer } from './invoice-viewer';
 import { ExtractedDataPanel } from './extracted-data-panel';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import { formatCurrency } from '@/lib/utils/invoice-utils';
+import { getCaseInfoAction } from '@/lib/actions/case.actions';
 
 interface ReviewViewProps {
   data: StoredInvoice;
@@ -26,6 +27,7 @@ export function ReviewView({
   const [highlightBox, setHighlightBox] = useState<BoundingBox | null>(null);
   const [hoveredField, setHoveredField] = useState<string | null>(null);
   const [hoveredConfidence, setHoveredConfidence] = useState<number | null>(null);
+  const [caseName, setCaseName] = useState<string | null>(null);
 
   const handleFieldHover = (field: string | null, bbox: BoundingBox | null, confidence: number | null) => {
     setHoveredField(field);
@@ -45,6 +47,28 @@ export function ReviewView({
     onSave(invoiceData);
   };
 
+  // Fetch case info when caseNumber is available
+  useEffect(() => {
+    const fetchCaseInfo = async () => {
+      if (invoiceData?.caseNumber) {
+        try {
+          const result = await getCaseInfoAction(invoiceData.caseNumber);
+          if (result.data) {
+            setCaseName(result.data.caseName || null);
+          } else {
+            setCaseName(null);
+          }
+        } catch (error) {
+          console.error('Failed to fetch case info:', error);
+          setCaseName(null);
+        }
+      } else {
+        setCaseName(null);
+      }
+    };
+    fetchCaseInfo();
+  }, [invoiceData?.caseNumber]);
+
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
       <div className="flex-1 flex flex-row overflow-hidden">
@@ -63,7 +87,13 @@ export function ReviewView({
             <Card className="flex-1">
               <CardHeader className="py-3 px-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">Extracted Data</CardTitle>
+                  <CardTitle className="text-lg">
+                    {invoiceData.caseNumber && caseName
+                      ? `${invoiceData.caseNumber} - ${caseName}`
+                      : invoiceData.caseNumber
+                      ? invoiceData.caseNumber
+                      : 'Extracted Data'}
+                  </CardTitle>
                   <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                     {formatCurrency(invoiceData.amount?.value)}
                   </span>
