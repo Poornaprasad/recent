@@ -421,11 +421,13 @@ export function DisbursementFormModal({
     setDuplicateCheckResult(null);
 
     try {
+      const amountValue = amount ? parseFloat(amount) : 0;
       const result = await checkCaseForDuplicatesAction(
         caseID,
         payeeName,
         invoiceNumber,
-        invoiceDate
+        invoiceDate,
+        amountValue
       );
 
       if (result.error) {
@@ -773,19 +775,40 @@ export function DisbursementFormModal({
               <div className={`mt-2 p-3 rounded border ${
                 duplicateCheckResult.isDuplicate 
                   ? 'bg-destructive/10 border-destructive/50' 
+                  : duplicateCheckResult.partialMatches && duplicateCheckResult.partialMatches.length > 0
+                  ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-300'
                   : 'bg-green-50 dark:bg-green-900/20 border-green-300'
               }`}>
                 <div className="text-sm font-medium mb-2">
-                  {duplicateCheckResult.isDuplicate ? '⚠️ Duplicates Found' : '✓ No Duplicates'}
+                  {duplicateCheckResult.isDuplicate 
+                    ? '⚠️ Exact Duplicates Found' 
+                    : duplicateCheckResult.partialMatches && duplicateCheckResult.partialMatches.length > 0
+                    ? '⚠️ Partial Matches Found'
+                    : '✓ No Duplicates'}
                 </div>
                 <div className="text-xs text-muted-foreground mb-2">
                   {duplicateCheckResult.message}
                 </div>
                 {duplicateCheckResult.duplicates.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="text-xs font-medium">Matching Disbursements:</div>
+                  <div className="space-y-2 mb-3">
+                    <div className="text-xs font-medium text-destructive">Exact Duplicates (Vendor, Invoice #, Date match):</div>
                     {duplicateCheckResult.duplicates.map((dup, index) => (
-                      <div key={index} className="text-xs bg-background p-2 rounded border">
+                      <div key={index} className="text-xs bg-background p-2 rounded border border-destructive/30">
+                        <div><strong>ID:</strong> {dup.disbursementID || 'N/A'}</div>
+                        <div><strong>Invoice #:</strong> {dup.invoiceNumber || 'N/A'}</div>
+                        <div><strong>Date:</strong> {dup.invoiceDate || 'N/A'}</div>
+                        <div><strong>Vendor:</strong> {dup.payeeName || 'N/A'}</div>
+                        {dup.amount && <div><strong>Amount:</strong> {formatCurrency(dup.amount)}</div>}
+                        {dup.checkNumber && <div><strong>Check #:</strong> {dup.checkNumber}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {duplicateCheckResult.partialMatches && duplicateCheckResult.partialMatches.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium text-orange-700 dark:text-orange-400">Partial Matches (Vendor & Amount match):</div>
+                    {duplicateCheckResult.partialMatches.map((dup, index) => (
+                      <div key={index} className="text-xs bg-background p-2 rounded border border-orange-300">
                         <div><strong>ID:</strong> {dup.disbursementID || 'N/A'}</div>
                         <div><strong>Invoice #:</strong> {dup.invoiceNumber || 'N/A'}</div>
                         <div><strong>Date:</strong> {dup.invoiceDate || 'N/A'}</div>

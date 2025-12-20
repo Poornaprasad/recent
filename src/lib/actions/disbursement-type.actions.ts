@@ -116,6 +116,7 @@ export async function createDisbursementAction(
 /**
  * Check for duplicate disbursements in a case
  * Compares vendor, invoice number, and date
+ * Also shows partial matches based on vendor name and amount
  */
 export interface DuplicateCheckResult {
   isDuplicate: boolean;
@@ -126,15 +127,70 @@ export interface DuplicateCheckResult {
     payeeName?: string;
     amount?: number;
     checkNumber?: string;
+    matchType?: 'exact' | 'partial';
+  }>;
+  partialMatches?: Array<{
+    disbursementID?: number;
+    invoiceNumber?: string;
+    invoiceDate?: string;
+    payeeName?: string;
+    amount?: number;
+    checkNumber?: string;
+    matchType?: 'exact' | 'partial';
   }>;
   message?: string;
+}
+
+/**
+ * Check if two vendor names strongly match
+ * Uses fuzzy matching to handle variations
+ */
+function isVendorNameStrongMatch(name1: string, name2: string): boolean {
+  const n1 = name1.trim().toLowerCase();
+  const n2 = name2.trim().toLowerCase();
+  
+  // Exact match
+  if (n1 === n2) return true;
+  
+  // Check if one contains the other (for abbreviations)
+  if (n1.includes(n2) || n2.includes(n1)) {
+    // Require at least 3 characters overlap for short names
+    const minLength = Math.min(n1.length, n2.length);
+    if (minLength >= 3) {
+      return true;
+    }
+  }
+  
+  // Remove common business suffixes and compare
+  const suffixes = ['inc', 'llc', 'ltd', 'corp', 'corporation', 'company', 'co'];
+  let clean1 = n1;
+  let clean2 = n2;
+  
+  for (const suffix of suffixes) {
+    clean1 = clean1.replace(new RegExp(`\\s*${suffix}\\.?$`, 'i'), '');
+    clean2 = clean2.replace(new RegExp(`\\s*${suffix}\\.?$`, 'i'), '');
+  }
+  
+  if (clean1 === clean2 && clean1.length >= 3) return true;
+  
+  // Check word-by-word match (at least 2 words must match)
+  const words1 = clean1.split(/\s+/).filter(w => w.length >= 2);
+  const words2 = clean2.split(/\s+/).filter(w => w.length >= 2);
+  
+  if (words1.length >= 2 && words2.length >= 2) {
+    const matchingWords = words1.filter(w => words2.includes(w));
+    if (matchingWords.length >= 2) return true;
+  }
+  
+  return false;
 }
 
 export async function checkCaseForDuplicatesAction(
   caseID: number,
   vendorName: string,
   invoiceNumber: string,
-  invoiceDate: string
+  invoiceDate: string,
+  amount?: number
 ): Promise<ActionResult<DuplicateCheckResult>> {
   return withActionHandler(async () => {
     if (!caseID) {
@@ -159,6 +215,7 @@ export async function checkCaseForDuplicatesAction(
     // Normalize input values for comparison
     const normalizedVendorName = vendorName.trim().toLowerCase();
     const normalizedInvoiceNumber = invoiceNumber.trim().toLowerCase();
+    const inputAmount = amount || 0;
     
     // Normalize date - handle different formats
     let normalizedInvoiceDate: string | null = null;
@@ -175,6 +232,7 @@ export async function checkCaseForDuplicatesAction(
 
     // Find potential duplicates
     const duplicates: DuplicateCheckResult['duplicates'] = [];
+    const partialMatches: DuplicateCheckResult['partialMatches'] = [];
 
     for (const disbursement of disbursements) {
       // Get payee name
@@ -198,14 +256,17 @@ export async function checkCaseForDuplicatesAction(
         }
       }
 
-      // Check if vendor, invoice number, and date match
+      // Get amount
+      const dispAmount = disbursement.amount || 0;
+
+      // Check if vendor, invoice number, and date match (exact duplicate)
       const vendorMatches = normalizedPayeeName === normalizedVendorName;
       const invoiceNumberMatches = normalizedDispInvoiceNumber === normalizedInvoiceNumber;
       const dateMatches = normalizedDispInvoiceDate && normalizedInvoiceDate
         ? normalizedDispInvoiceDate === normalizedInvoiceDate
         : false;
 
-      // Consider it a duplicate if all three match
+      // Check for exact duplicate (all three match)
       if (vendorMatches && invoiceNumberMatches && dateMatches) {
         duplicates.push({
           disbursementID: disbursement.disbursementID,
@@ -214,15 +275,45 @@ export async function checkCaseForDuplicatesAction(
           payeeName: payeeName,
           amount: disbursement.amount,
           checkNumber: disbursement.checkNumber,
+          matchType: 'exact',
         });
+        continue; // Skip partial match check for exact duplicates
+      }
+
+      // Check for partial match: vendor name strongly matches AND amount matches
+      if (inputAmount > 0 && dispAmount > 0) {
+        const vendorStrongMatch = isVendorNameStrongMatch(vendorName, payeeName);
+        const amountMatches = Math.abs(inputAmount - dispAmount) < 0.01; // Allow for floating point precision
+        
+        if (vendorStrongMatch && amountMatches) {
+          // Don't add if already in duplicates
+          const isAlreadyInDuplicates = duplicates.some(
+            d => d.disbursementID === disbursement.disbursementID
+          );
+          
+          if (!isAlreadyInDuplicates) {
+            partialMatches.push({
+              disbursementID: disbursement.disbursementID,
+              invoiceNumber: disbursement.invoiceNumber,
+              invoiceDate: disbursement.invoiceDate,
+              payeeName: payeeName,
+              amount: disbursement.amount,
+              checkNumber: disbursement.checkNumber,
+              matchType: 'partial',
+            });
+          }
+        }
       }
     }
+
+    const totalMatches = duplicates.length + partialMatches.length;
 
     return {
       isDuplicate: duplicates.length > 0,
       duplicates,
-      message: duplicates.length > 0
-        ? `Found ${duplicates.length} potential duplicate(s)`
+      partialMatches: partialMatches.length > 0 ? partialMatches : undefined,
+      message: totalMatches > 0
+        ? `Found ${duplicates.length} exact duplicate(s)${partialMatches.length > 0 ? ` and ${partialMatches.length} partial match(es)` : ''}`
         : 'No duplicates found',
     };
   }, 'Failed to check for duplicates');
