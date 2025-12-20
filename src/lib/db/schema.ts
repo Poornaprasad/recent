@@ -51,6 +51,7 @@ export const invoices = pgTable('invoices', {
   createdBy: text('created_by'), // User ID who created/uploaded
   assignedTo: text('assigned_to'), // User ID assigned to process
   disbursementResponse: text('disbursement_response'), // JSON string of disbursement creation response from CRM
+  crmStatus: text('crm_status', { enum: ['Associated', 'Draft', 'Not Found', 'Duplicate'] }), // CRM status: Associated, Draft, Not Found, or Duplicate
 
   // Extracted field metadata (JSON strings)
   invoiceNumberMeta: text('invoice_number_meta'), // {confidence, reasoning, bbox}

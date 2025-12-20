@@ -76,6 +76,7 @@ export function hasDisbursementBeenSent(invoice: StoredInvoice): boolean {
 /**
  * Check if invoice can be pushed to CRM
  * Returns true if invoice is approved (status = 'Pending') but disbursement hasn't been sent
+ * Returns false if invoice has duplicate CRM status (should not be uploaded to CRM)
  */
 export function canPushToCrm(invoice: StoredInvoice): boolean {
   // Invoice must be approved (status = 'Pending')
@@ -84,7 +85,10 @@ export function canPushToCrm(invoice: StoredInvoice): boolean {
   // Disbursement must not have been sent yet
   const notSent = !hasDisbursementBeenSent(invoice);
   
-  return isApproved && notSent;
+  // Invoice must not have duplicate CRM status (duplicates should not be uploaded)
+  const notDuplicate = invoice.crmStatus !== 'Duplicate';
+  
+  return isApproved && notSent && notDuplicate;
 }
 
 

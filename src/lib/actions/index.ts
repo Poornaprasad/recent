@@ -14,6 +14,7 @@ export {
   updateInvoiceCaseNumberAction,
   updateInvoiceFieldAction,
   updateInvoiceDisbursementResponseAction,
+  updateInvoiceCrmStatusAction,
   retryPlaintiffNameAction,
 } from './invoice.actions';
 

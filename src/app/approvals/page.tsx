@@ -744,7 +744,12 @@ export default function ApprovalsPage() {
                           </div>
                         </TableCell>
                         <TableCell>
-                          {hasDisbursementBeenSent(invoice) ? (
+                          {invoice.crmStatus === 'Duplicate' ? (
+                            <Badge variant="outline" className="text-xs bg-red-50 dark:bg-red-900/30 border-red-300 text-red-700 dark:text-red-400">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Duplicate
+                            </Badge>
+                          ) : hasDisbursementBeenSent(invoice) ? (
                             <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 border-green-300 text-green-700 dark:text-green-400">
                               <CheckCircle2 className="h-3 w-3 mr-1" />
                               Sent to CRM

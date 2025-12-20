@@ -2,7 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Download, MessageSquare, Flag, Check, X, ChevronLeft, ChevronRight, Loader2, Layers, CheckCircle2, Clock } from 'lucide-react';
+import { ArrowLeft, Download, MessageSquare, Flag, Check, X, ChevronLeft, ChevronRight, Loader2, Layers, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -551,7 +551,12 @@ export default function InvoiceDetailPage() {
               )}
               {/* CRM Status Indicator */}
               {invoiceData.status === 'Pending' || invoiceData.approvalStatus === 'Approved' ? (
-                hasDisbursementBeenSent(invoiceData) ? (
+                invoiceData.crmStatus === 'Duplicate' ? (
+                  <Badge variant="outline" className="text-xs bg-red-50 dark:bg-red-900/30 border-red-300 text-red-700 dark:text-red-400">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Duplicate
+                  </Badge>
+                ) : hasDisbursementBeenSent(invoiceData) ? (
                   <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 border-green-300 text-green-700 dark:text-green-400">
                     <CheckCircle2 className="h-3 w-3 mr-1" />
                     Sent to CRM

@@ -258,6 +258,34 @@ export async function updateInvoiceDisbursementResponseAction(
 }
 
 /**
+ * Update invoice CRM status
+ */
+export async function updateInvoiceCrmStatusAction(
+  invoiceId: string,
+  crmStatus: 'Associated' | 'Draft' | 'Not Found' | 'Duplicate'
+): Promise<{ success: boolean; error?: string }> {
+  return withActionHandler(async () => {
+    await initDb();
+    const db = getDb();
+
+    const updateData: Record<string, any> = {
+      crmStatus,
+      updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
+    };
+
+    await db
+      .update(invoices)
+      .set(updateData)
+      .where(eq(invoices.id, invoiceId));
+
+    revalidatePath(`/invoices/${invoiceId}`);
+    revalidatePath('/approvals');
+    revalidatePath('/invoices');
+    return { success: true };
+  }, 'Failed to update CRM status');
+}
+
+/**
  * Retry plaintiff name extraction with case name hint
  * Searches the document for the case name and updates the clientName field if found
  */

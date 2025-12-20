@@ -26,6 +26,7 @@ import {
   getCaseInfoAction,
   getPreviousDisbursementTypeForVendorAction,
   updateInvoiceDisbursementResponseAction,
+  updateInvoiceCrmStatusAction,
   checkCaseForDuplicatesAction,
   type DuplicateCheckResult,
 } from '@/lib/actions/index';
@@ -438,12 +439,30 @@ export function DisbursementFormModal({
         setDuplicateCheckResult(result.data);
         
         if (result.data.isDuplicate) {
+          // Set CRM status to 'Duplicate' when duplicates are found
+          // This prevents the invoice from being uploaded to CRM
+          try {
+            await updateInvoiceCrmStatusAction(invoice.id, 'Duplicate');
+          } catch (error) {
+            console.error('Failed to update CRM status:', error);
+            // Continue even if status update fails
+          }
+          
           toast({
             variant: 'destructive',
             title: 'Duplicates Found',
-            description: result.data.message || `Found ${result.data.duplicates.length} potential duplicate(s)`,
+            description: result.data.message || `Found ${result.data.duplicates.length} potential duplicate(s). This invoice will not be uploaded to CRM.`,
           });
         } else {
+          // Clear duplicate status if no duplicates found
+          if (invoice.crmStatus === 'Duplicate') {
+            try {
+              await updateInvoiceCrmStatusAction(invoice.id, 'Not Found');
+            } catch (error) {
+              console.error('Failed to update CRM status:', error);
+            }
+          }
+          
           toast({
             title: 'No Duplicates',
             description: result.data.message || 'No duplicates found in this case.',
@@ -468,6 +487,16 @@ export function DisbursementFormModal({
         variant: 'destructive',
         title: 'Case ID Required',
         description: 'Please ensure the case number is valid and case information is loaded.',
+      });
+      return;
+    }
+
+    // Prevent submission if duplicates were found
+    if (duplicateCheckResult?.isDuplicate || invoice.crmStatus === 'Duplicate') {
+      toast({
+        variant: 'destructive',
+        title: 'Cannot Submit Duplicate',
+        description: 'This invoice has been identified as a duplicate. Duplicates cannot be uploaded to CRM. Please review the duplicate check results.',
       });
       return;
     }

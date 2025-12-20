@@ -56,6 +56,7 @@ export enum CrmInvoiceStatus {
     Associated = 'Associated',
     Draft = 'Draft',
     NotFound = 'Not Found',
+    Duplicate = 'Duplicate',
 }
 
 export enum QuickBooksInvoiceStatus {
