@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Card,
   CardContent,
@@ -9,7 +9,14 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { AlertTriangle } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { AlertTriangle, MapPin } from "lucide-react";
 import { StatCard } from "@/components/dashboard/stat-card";
 import { InvoiceUrgencyMatrix } from "@/components/dashboard/invoice-urgency-matrix";
 import { OcrConfidenceChart } from "@/components/dashboard/ocr-confidence-chart";
@@ -18,12 +25,22 @@ import { getDashboardStatsAction, getDashboardTimeComparisonAction, getDuplicate
 import { useToast } from "@/hooks/use-toast";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
-import { 
-  getEnabledStatCards, 
+import {
+  getEnabledStatCards,
   buildStatCardProps,
   type DashboardStatsData,
-  type DashboardTimeComparisonData 
+  type DashboardTimeComparisonData
 } from "@/lib/config/dashboard.config";
+import { 
+  useStateFilter, 
+  STATE_OPTIONS, 
+  type StateFilterValue,
+  getEffectiveStateFilter,
+  shouldShowStateFilter,
+  getStateOptionsForUser,
+  getStateDisplayName
+} from "@/hooks/use-state-filter";
+import { useAuthStore } from "@/hooks/use-auth-store";
 
 interface DuplicateAlert {
   invoiceId: string;
@@ -37,21 +54,22 @@ interface DuplicateAlert {
 
 export default function DashboardPage() {
   const { toast } = useToast();
+  const { user } = useAuthStore();
+  const { selectedState, setSelectedState } = useStateFilter();
+  const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
+  const showStateFilter = shouldShowStateFilter(user);
+  const stateOptions = getStateOptionsForUser(user);
   const [statCards, setStatCards] = useState<ReturnType<typeof buildStatCardProps>[]>([]);
   const [duplicateAlerts, setDuplicateAlerts] = useState<DuplicateAlert[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async (stateFilter: StateFilterValue) => {
     setIsLoading(true);
     try {
       const [statsResult, comparisonResult, alertsResult] = await Promise.all([
-        getDashboardStatsAction(),
-        getDashboardTimeComparisonAction(),
-        getDuplicateAlertsAction(5),
+        getDashboardStatsAction(stateFilter),
+        getDashboardTimeComparisonAction(stateFilter),
+        getDuplicateAlertsAction(5, stateFilter),
       ]);
 
       if (statsResult.error || comparisonResult.error) {
@@ -68,7 +86,7 @@ export default function DashboardPage() {
 
       // Build stat cards from configuration
       const enabledCards = getEnabledStatCards();
-      const builtCards = enabledCards.map(config => 
+      const builtCards = enabledCards.map(config =>
         buildStatCardProps(config, dashboardStats, comparison)
       );
 
@@ -86,6 +104,14 @@ export default function DashboardPage() {
     } finally {
       setIsLoading(false);
     }
+  }, [toast]);
+
+  useEffect(() => {
+    loadDashboardData(effectiveStateFilter);
+  }, [effectiveStateFilter, loadDashboardData]);
+
+  const handleStateChange = (value: string) => {
+    setSelectedState(value as StateFilterValue);
   };
 
   if (isLoading) {
@@ -104,13 +130,39 @@ export default function DashboardPage() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <div>
+        <div className="flex items-center gap-3">
+          <div>
             <h2 className="text-3xl font-bold tracking-tight">Accounts Payable Dashboard</h2>
             <p className="text-muted-foreground">Real-time overview of invoice processing and payment status</p>
+          </div>
+          {!showStateFilter && effectiveStateFilter !== 'all' && (
+            <Badge variant="outline" className="text-sm">
+              {getStateDisplayName(effectiveStateFilter)}
+            </Badge>
+          )}
         </div>
-        <Button variant="outline" onClick={loadDashboardData}>
-          Refresh
-        </Button>
+        {showStateFilter && (
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedState} onValueChange={handleStateChange}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Select State" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stateOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="outline" onClick={() => loadDashboardData(effectiveStateFilter)}>
+              Refresh
+            </Button>
+          </div>
+        )}
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {statCards.map((stat) => (
@@ -119,7 +171,7 @@ export default function DashboardPage() {
       </div>
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
         <div className="col-span-4 space-y-4">
-            <OcrConfidenceChart />
+            <OcrConfidenceChart stateFilter={selectedState} />
             {duplicateAlerts.length > 0 && (
               <Card>
                 <CardHeader>
@@ -169,7 +221,7 @@ export default function DashboardPage() {
             )}
         </div>
         <div className="col-span-4 lg:col-span-3">
-            <InvoiceUrgencyMatrix />
+            <InvoiceUrgencyMatrix stateFilter={selectedState} />
         </div>
       </div>
     </div>

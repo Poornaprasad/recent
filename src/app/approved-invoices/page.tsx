@@ -54,7 +54,17 @@ import type { StoredInvoice } from '@/lib/domain/types';
 import { encodeId } from "@/lib/utils/id-utils";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/hooks/use-auth-store";
-import { getDocumentTypeBadgeClass } from "@/lib/utils/document-type-utils";
+import { DocumentTypeCell } from "@/components/invoice/document-type-cell";
+import { 
+  useStateFilter, 
+  type StateFilterValue, 
+  filterByState,
+  getEffectiveStateFilter,
+  shouldShowStateFilter,
+  getStateOptionsForUser,
+  getStateDisplayName,
+  getUserAccessibleStates
+} from "@/hooks/use-state-filter";
 
 interface CaseGroup {
   caseNumber: string;
@@ -67,9 +77,12 @@ interface CaseGroup {
 
 export default function ApprovedInvoicesPage() {
   const { user } = useAuthStore();
+  const { selectedState, setSelectedState } = useStateFilter();
+  const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
+  const showStateFilter = shouldShowStateFilter(user);
+  const stateOptions = getStateOptionsForUser(user);
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [stateFilter, setStateFilter] = useState<string>('all');
   const [caseFilter, setCaseFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
 
@@ -103,12 +116,17 @@ export default function ApprovedInvoicesPage() {
     loadInvoices();
   }, [loadInvoices]);
 
-  // Group invoices by case number
-  const invoicesByCase = useMemo(() => {
+  // Filter invoices by effective state filter
+  const stateFilteredInvoices = useMemo(() => {
+    return filterByState(invoices, effectiveStateFilter);
+  }, [invoices, effectiveStateFilter]);
+
+  // Create case groups from state-filtered invoices
+  const stateFilteredCaseGroups = useMemo(() => {
     const grouped = new Map<string, StoredInvoice[]>();
     const noCase: StoredInvoice[] = [];
 
-    invoices.forEach(inv => {
+    stateFilteredInvoices.forEach(inv => {
       if (inv.caseNumber) {
         if (!grouped.has(inv.caseNumber)) {
           grouped.set(inv.caseNumber, []);
@@ -119,15 +137,10 @@ export default function ApprovedInvoicesPage() {
       }
     });
 
-    return { grouped, noCase };
-  }, [invoices]);
-
-  // Create case groups with metadata
-  const caseGroups = useMemo(() => {
     const groups: CaseGroup[] = [];
 
     // Add grouped cases
-    invoicesByCase.grouped.forEach((caseInvoices, caseNumber) => {
+    grouped.forEach((caseInvoices, caseNumber) => {
       const totalAmount = caseInvoices.reduce((sum, inv) => {
         const amount = parseInvoiceAmount(inv.totalAmount?.value || inv.amount?.value);
         return sum + (amount || 0);
@@ -147,17 +160,17 @@ export default function ApprovedInvoicesPage() {
     });
 
     // Add invoices without case numbers as a separate group
-    if (invoicesByCase.noCase.length > 0) {
-      const totalAmount = invoicesByCase.noCase.reduce((sum, inv) => {
+    if (noCase.length > 0) {
+      const totalAmount = noCase.reduce((sum, inv) => {
         const amount = parseInvoiceAmount(inv.totalAmount?.value || inv.amount?.value);
         return sum + (amount || 0);
       }, 0);
 
       groups.push({
         caseNumber: 'No Case Number',
-        invoices: invoicesByCase.noCase,
+        invoices: noCase,
         totalAmount,
-        invoiceCount: invoicesByCase.noCase.length,
+        invoiceCount: noCase.length,
       });
     }
 
@@ -167,16 +180,11 @@ export default function ApprovedInvoicesPage() {
       if (b.caseNumber === 'No Case Number') return -1;
       return a.caseNumber.localeCompare(b.caseNumber);
     });
-  }, [invoicesByCase]);
+  }, [stateFilteredInvoices]);
 
   // Filter case groups
   const filteredCaseGroups = useMemo(() => {
-    let filtered = caseGroups;
-
-    // State filter
-    if (stateFilter !== 'all') {
-      filtered = filtered.filter(group => group.state === stateFilter);
-    }
+    let filtered = stateFilteredCaseGroups;
 
     // Case filter
     if (caseFilter !== 'all') {
@@ -200,56 +208,32 @@ export default function ApprovedInvoicesPage() {
     }
 
     return filtered;
-  }, [caseGroups, stateFilter, caseFilter, searchTerm]);
+  }, [stateFilteredCaseGroups, caseFilter, searchTerm]);
 
   // Get unique case numbers for filter
   const uniqueCases = useMemo(() => {
-    return caseGroups
+    return stateFilteredCaseGroups
       .filter(g => g.caseNumber !== 'No Case Number')
       .map(g => g.caseNumber)
       .sort();
-  }, [caseGroups]);
+  }, [stateFilteredCaseGroups]);
 
   // Get available states based on user permissions
   const availableStates = useMemo(() => {
-    if (!user) return ['CA', 'NY'];
-    
-    // Elevated roles can see all states
-    if (['admin', 'director', 'manager', 'senior_accountant'].includes(user.role)) {
-      return ['CA', 'NY'];
-    }
-    
-    // State accountants can see their state + assigned states
-    const states: string[] = [];
-    if (user.role === 'ny_accountant') {
-      states.push('NY');
-    } else if (user.role === 'ca_accountant') {
-      states.push('CA');
-    }
-    
-    // Add assigned states
-    if (user.assignedStates) {
-      user.assignedStates.forEach(state => {
-        if (!states.includes(state)) {
-          states.push(state);
-        }
-      });
-    }
-    
-    return states;
+    return getUserAccessibleStates(user);
   }, [user]);
 
-  // Calculate totals
+  // Calculate totals from state-filtered invoices
   const totals = useMemo(() => {
-    const totalInvoices = invoices.length;
-    const totalAmount = invoices.reduce((sum, inv) => {
+    const totalInvoices = stateFilteredInvoices.length;
+    const totalAmount = stateFilteredInvoices.reduce((sum, inv) => {
       const amount = parseInvoiceAmount(inv.totalAmount?.value || inv.amount?.value);
       return sum + (amount || 0);
     }, 0);
-    const totalCases = caseGroups.filter(g => g.caseNumber !== 'No Case Number').length;
+    const totalCases = stateFilteredCaseGroups.filter(g => g.caseNumber !== 'No Case Number').length;
 
     return { totalInvoices, totalAmount, totalCases };
-  }, [invoices, caseGroups]);
+  }, [stateFilteredInvoices, stateFilteredCaseGroups]);
 
   if (isLoading) {
     return (
@@ -264,11 +248,18 @@ export default function ApprovedInvoicesPage() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Approved Invoices</h2>
-          <p className="text-muted-foreground mt-1">
-            Approved invoices organized by case number
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Approved Invoices</h2>
+            <p className="text-muted-foreground mt-1">
+              Approved invoices organized by case number
+            </p>
+          </div>
+          {!showStateFilter && effectiveStateFilter !== 'all' && (
+            <Badge variant="outline" className="text-sm">
+              {getStateDisplayName(effectiveStateFilter)}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -283,6 +274,7 @@ export default function ApprovedInvoicesPage() {
             <div className="text-2xl font-bold">{totals.totalInvoices}</div>
             <p className="text-xs text-muted-foreground">
               {filteredCaseGroups.length} case{filteredCaseGroups.length !== 1 ? 's' : ''}
+              {effectiveStateFilter !== 'all' && ` (${effectiveStateFilter})`}
             </p>
           </CardContent>
         </Card>
@@ -294,7 +286,7 @@ export default function ApprovedInvoicesPage() {
           <CardContent>
             <div className="text-2xl font-bold">${formatTotalAmount(totals.totalAmount)}</div>
             <p className="text-xs text-muted-foreground">
-              Across all approved invoices
+              {effectiveStateFilter !== 'all' ? `Total for ${effectiveStateFilter}` : 'Across all approved invoices'}
             </p>
           </CardContent>
         </Card>
@@ -306,7 +298,7 @@ export default function ApprovedInvoicesPage() {
           <CardContent>
             <div className="text-2xl font-bold">{totals.totalCases}</div>
             <p className="text-xs text-muted-foreground">
-              {invoicesByCase.noCase.length > 0 && `${invoicesByCase.noCase.length} without case number`}
+              {effectiveStateFilter !== 'all' ? `Cases in ${effectiveStateFilter}` : 'Cases with invoices'}
             </p>
           </CardContent>
         </Card>
@@ -333,16 +325,15 @@ export default function ApprovedInvoicesPage() {
                 className="pl-9"
               />
             </div>
-            {availableStates.length > 0 && (
-              <Select value={stateFilter} onValueChange={setStateFilter}>
+            {showStateFilter && (
+              <Select value={selectedState} onValueChange={(value) => setSelectedState(value as StateFilterValue)}>
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="State" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All States</SelectItem>
-                  {availableStates.map(state => (
-                    <SelectItem key={state} value={state}>
-                      {state === 'CA' ? 'California' : state === 'NY' ? 'New York' : state}
+                  {stateOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -367,8 +358,10 @@ export default function ApprovedInvoicesPage() {
             <div className="text-center py-12">
               <h3 className="text-lg font-semibold">No Approved Invoices</h3>
               <p className="text-muted-foreground mt-2">
-                {invoices.length === 0 
-                  ? "There are currently no approved invoices."
+                {stateFilteredInvoices.length === 0 
+                  ? effectiveStateFilter !== 'all'
+                    ? `There are no approved invoices for ${effectiveStateFilter}.`
+                    : "There are currently no approved invoices."
                   : "No cases match your current filters."}
               </p>
             </div>
@@ -447,16 +440,11 @@ export default function ApprovedInvoicesPage() {
                                   <TableCell>{invoice.vendorName?.value || 'N/A'}</TableCell>
                                   <TableCell>{invoice.invoiceDate?.value || 'N/A'}</TableCell>
                                   <TableCell>
-                                    {invoice.documentType ? (
-                                      <Badge 
-                                        variant="outline" 
-                                        className={cn(getDocumentTypeBadgeClass(invoice.documentType))}
-                                      >
-                                        {invoice.documentType}
-                                      </Badge>
-                                    ) : (
-                                      <span className="text-muted-foreground">-</span>
-                                    )}
+                                    <DocumentTypeCell 
+                                      documentType={invoice.documentType}
+                                      state={invoice.state}
+                                      user={user}
+                                    />
                                   </TableCell>
                                   <TableCell className="text-right font-semibold">
                                     ${formatTotalAmount(amount)}

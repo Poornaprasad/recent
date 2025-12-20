@@ -69,15 +69,27 @@ import { useAuthStore } from "@/hooks/use-auth-store";
 import { ApprovalActions } from "./_components/approval-actions";
 import { useToast } from "@/hooks/use-toast";
 import { DisbursementFormModal } from "@/components/invoice/disbursement-form-modal";
+import { 
+  useStateFilter, 
+  STATE_OPTIONS, 
+  type StateFilterValue,
+  getEffectiveStateFilter,
+  shouldShowStateFilter,
+  getStateOptionsForUser,
+  getStateDisplayName
+} from "@/hooks/use-state-filter";
 
 export default function ApprovalsPage() {
   const { user } = useAuthStore();
   const { toast } = useToast();
+  const { selectedState, setSelectedState } = useStateFilter();
+  const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
+  const showStateFilter = shouldShowStateFilter(user);
+  const stateOptions = getStateOptionsForUser(user);
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
   const [vendorFilter, setVendorFilter] = useState<string>('all');
-  const [stateFilter, setStateFilter] = useState<string>('all');
   const [caseFilter, setCaseFilter] = useState<string>('all');
   const [duplicateFilter, setDuplicateFilter] = useState<string>('all'); // 'all', 'duplicates', 'same-case'
   const [sortField, setSortField] = useState<SortField>('date');
@@ -186,19 +198,22 @@ export default function ApprovalsPage() {
     return duplicates;
   }, [invoicesByCase]);
 
-  // Filter invoices
+  // Filter invoices by effective state filter
+  const stateFilteredInvoices = useMemo(() => {
+    if (effectiveStateFilter === 'all') {
+      return invoices;
+    }
+    return invoices.filter(inv => inv.state === effectiveStateFilter);
+  }, [invoices, effectiveStateFilter]);
+
+  // Filter invoices by other filters
   const filteredInvoices = useMemo(() => {
-    let filtered = filterInvoices(invoices, {
+    let filtered = filterInvoices(stateFilteredInvoices, {
       searchTerm,
       statusFilter: 'all', // Show all statuses (Review, Pending, Draft) - already filtered in loadInvoices
       documentTypeFilter,
       vendorFilter,
     });
-    
-    // Apply state filter if not 'all'
-    if (stateFilter !== 'all') {
-      filtered = filtered.filter(inv => inv.state === stateFilter);
-    }
 
     // Apply case filter
     if (caseFilter !== 'all') {
@@ -211,9 +226,9 @@ export default function ApprovalsPage() {
     } else if (duplicateFilter === 'same-case') {
       filtered = filtered.filter(inv => sameCaseDuplicates.has(inv.id));
     }
-    
+
     return filtered;
-  }, [invoices, searchTerm, documentTypeFilter, vendorFilter, stateFilter, caseFilter, duplicateFilter, sameCaseDuplicates]);
+  }, [stateFilteredInvoices, searchTerm, documentTypeFilter, vendorFilter, caseFilter, duplicateFilter, sameCaseDuplicates]);
 
   // Sort invoices
   const sortedInvoices = useMemo(() => {
@@ -228,46 +243,66 @@ export default function ApprovalsPage() {
 
   const totalPages = Math.ceil(sortedInvoices.length / rowsPerPage);
 
-  // Stats
+  // Stats - calculated from state-filtered invoices
   const stats = useMemo(() => {
-    const totalPending = invoices.length;
-    const highPriority = invoices.filter(inv => {
+    const totalPending = stateFilteredInvoices.length;
+    const highPriority = stateFilteredInvoices.filter(inv => {
       const confidence = getOverallConfidence(inv);
       return confidence < 0.7; // Low confidence = high priority
     }).length;
-    const avgConfidence = invoices.length > 0 
-      ? (invoices.reduce((acc, inv) => acc + getOverallConfidence(inv), 0) / invoices.length * 100).toFixed(1)
+    const avgConfidence = stateFilteredInvoices.length > 0
+      ? (stateFilteredInvoices.reduce((acc, inv) => acc + getOverallConfidence(inv), 0) / stateFilteredInvoices.length * 100).toFixed(1)
       : '0';
-    const duplicatesCount = invoices.filter(inv => inv.isDuplicate).length;
-    const sameCaseDuplicatesCount = sameCaseDuplicates.size;
+    const duplicatesCount = stateFilteredInvoices.filter(inv => inv.isDuplicate).length;
+
+    // Calculate same case duplicates for the filtered invoices
+    const stateFilteredSameCaseDuplicates = new Set<string>();
+    const groupedByCase = new Map<string, StoredInvoice[]>();
+    stateFilteredInvoices.forEach(inv => {
+      if (inv.caseNumber) {
+        if (!groupedByCase.has(inv.caseNumber)) {
+          groupedByCase.set(inv.caseNumber, []);
+        }
+        groupedByCase.get(inv.caseNumber)!.push(inv);
+      }
+    });
+    groupedByCase.forEach((caseInvoices) => {
+      if (caseInvoices.length > 1 && caseInvoices.some(inv => inv.isDuplicate)) {
+        caseInvoices.forEach(inv => stateFilteredSameCaseDuplicates.add(inv.id));
+      }
+    });
+    const sameCaseDuplicatesCount = stateFilteredSameCaseDuplicates.size;
+
+    // Footer shows count within filtered state only
+    const stateLabel = effectiveStateFilter === 'all' ? '' : ` (${effectiveStateFilter})`;
 
     return [
       {
         title: "Pending Approval",
         value: totalPending.toString(),
         icon: FileClock,
-        footerText: `${filteredInvoices.length} in current view`,
+        footerText: `${filteredInvoices.length} in current view${stateLabel}`,
       },
       {
         title: "High Priority",
         value: highPriority.toString(),
         icon: AlertCircle,
-        footerText: "Low confidence (< 70%)",
+        footerText: `Low confidence (< 70%)${stateLabel}`,
       },
       {
         title: "Duplicates",
         value: duplicatesCount.toString(),
         icon: Copy,
-        footerText: `${sameCaseDuplicatesCount} same case`,
+        footerText: `${sameCaseDuplicatesCount} same case${stateLabel}`,
       },
       {
         title: "Avg. Confidence",
         value: `${avgConfidence}%`,
         icon: Clock,
-        footerText: "Across all pending",
+        footerText: `Across pending${stateLabel}`,
       },
     ];
-  }, [invoices, filteredInvoices, sameCaseDuplicates]);
+  }, [stateFilteredInvoices, filteredInvoices, effectiveStateFilter]);
 
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
@@ -288,34 +323,6 @@ export default function ApprovalsPage() {
   });
   SortIcon.displayName = 'SortIcon';
 
-  // Get available states based on user permissions
-  const availableStates = useMemo(() => {
-    if (!user) return ['CA', 'NY'];
-    
-    // Elevated roles can see all states
-    if (['admin', 'director', 'manager', 'senior_accountant'].includes(user.role)) {
-      return ['CA', 'NY'];
-    }
-    
-    // State accountants can see their state + assigned states
-    const states: string[] = [];
-    if (user.role === 'ny_accountant') {
-      states.push('NY');
-    } else if (user.role === 'ca_accountant') {
-      states.push('CA');
-    }
-    
-    // Add assigned states
-    if (user.assignedStates) {
-      user.assignedStates.forEach(state => {
-        if (!states.includes(state)) {
-          states.push(state);
-        }
-      });
-    }
-    
-    return states;
-  }, [user]);
 
   const handleSelectAll = useCallback((checked: boolean) => {
     if (checked) {
@@ -423,11 +430,18 @@ export default function ApprovalsPage() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Review Pending Invoices</h2>
-          <p className="text-muted-foreground mt-1">
-            Invoices that require manual review and approval before processing
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Review Pending Invoices</h2>
+            <p className="text-muted-foreground mt-1">
+              Invoices that require manual review and approval before processing
+            </p>
+          </div>
+          {!showStateFilter && effectiveStateFilter !== 'all' && (
+            <Badge variant="outline" className="text-sm">
+              {getStateDisplayName(effectiveStateFilter)}
+            </Badge>
+          )}
         </div>
         {selectedInvoices.size > 0 && (
           <div className="flex gap-2">
@@ -513,19 +527,18 @@ export default function ApprovalsPage() {
                 ))}
               </SelectContent>
             </Select>
-            {availableStates.length > 0 && (
-              <Select value={stateFilter} onValueChange={(value) => {
-                setStateFilter(value);
+            {showStateFilter && (
+              <Select value={selectedState} onValueChange={(value) => {
+                setSelectedState(value as StateFilterValue);
                 setCurrentPage(1);
               }}>
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="State" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All States</SelectItem>
-                  {availableStates.map(state => (
-                    <SelectItem key={state} value={state}>
-                      {state === 'CA' ? 'California' : state === 'NY' ? 'New York' : state}
+                  {stateOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>

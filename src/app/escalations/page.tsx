@@ -49,6 +49,7 @@ import type { StoredInvoice } from '@/lib/domain/types';
 import { encodeId } from "@/lib/utils/id-utils";
 import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { useAuthStore } from "@/hooks/use-auth-store";
+import { getUserAccessibleStates } from "@/hooks/use-state-filter";
 import { parseInvoiceAmount } from '@/lib/utils/invoice-utils';
 
 export default function EscalationsPage() {
@@ -194,31 +195,7 @@ export default function EscalationsPage() {
 
   // Get available states based on user permissions
   const availableStates = useMemo(() => {
-    if (!user) return ['CA', 'NY'];
-    
-    // Elevated roles can see all states
-    if (['admin', 'director', 'manager', 'senior_accountant'].includes(user.role)) {
-      return ['CA', 'NY'];
-    }
-    
-    // State accountants can see their state + assigned states
-    const states: string[] = [];
-    if (user.role === 'ny_accountant') {
-      states.push('NY');
-    } else if (user.role === 'ca_accountant') {
-      states.push('CA');
-    }
-    
-    // Add assigned states
-    if (user.assignedStates) {
-      user.assignedStates.forEach(state => {
-        if (!states.includes(state)) {
-          states.push(state);
-        }
-      });
-    }
-    
-    return states;
+    return getUserAccessibleStates(user);
   }, [user]);
 
   const getEscalationBadgeClass = (level?: string) => {

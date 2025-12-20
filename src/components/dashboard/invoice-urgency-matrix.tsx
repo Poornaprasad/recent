@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   ScatterChart,
   Scatter,
@@ -14,6 +14,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { getInvoiceUrgencyDataAction } from '@/lib/actions/index';
+import type { StateFilterValue } from '@/hooks/use-state-filter';
 
 const COLORS = {
   Overdue: 'hsl(var(--destructive))',
@@ -37,7 +38,11 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
-export const InvoiceUrgencyMatrix = () => {
+interface InvoiceUrgencyMatrixProps {
+  stateFilter?: StateFilterValue;
+}
+
+export const InvoiceUrgencyMatrix = ({ stateFilter = 'all' }: InvoiceUrgencyMatrixProps) => {
   const [data, setData] = useState<Array<{ days: number; amount: number; urgency: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [urgencyCounts, setUrgencyCounts] = useState({
@@ -47,17 +52,13 @@ export const InvoiceUrgencyMatrix = () => {
     thisWeek: 0,
   });
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await getInvoiceUrgencyDataAction();
+      const result = await getInvoiceUrgencyDataAction(stateFilter);
       if (result.data) {
         setData(result.data);
-        
+
         // Calculate counts
         const counts = {
           overdue: result.data.filter(d => d.urgency === 'Overdue').length,
@@ -72,7 +73,11 @@ export const InvoiceUrgencyMatrix = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [stateFilter]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   // Calculate domain for chart
   const maxAmount = data.length > 0 ? Math.max(...data.map(d => d.amount)) : 60000;

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { getOcrConfidenceDataAction } from '@/lib/actions/index';
+import type { StateFilterValue } from '@/hooks/use-state-filter';
 
 const COLORS = {
   high: '#22C55E', // green-500
@@ -13,7 +14,11 @@ const COLORS = {
   failed: '#6B7280', // gray-500
 };
 
-export const OcrConfidenceChart = () => {
+interface OcrConfidenceChartProps {
+  stateFilter?: StateFilterValue;
+}
+
+export const OcrConfidenceChart = ({ stateFilter = 'all' }: OcrConfidenceChartProps) => {
   const [data, setData] = useState([
     { name: 'High (>90%)', value: 0, color: COLORS.high },
     { name: 'Medium (70-90%)', value: 0, color: COLORS.medium },
@@ -23,14 +28,10 @@ export const OcrConfidenceChart = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [actionRequired, setActionRequired] = useState(0);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const result = await getOcrConfidenceDataAction();
+      const result = await getOcrConfidenceDataAction(stateFilter);
       if (result.data) {
         const chartData = [
           { name: 'High (>90%)', value: result.data.high, color: COLORS.high },
@@ -46,7 +47,11 @@ export const OcrConfidenceChart = () => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [stateFilter]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const total = data.reduce((acc, curr) => acc + curr.value, 0);
   const highConfidenceValue = data.find(d => d.name.startsWith('High'))?.value || 0;

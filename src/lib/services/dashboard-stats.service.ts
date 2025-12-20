@@ -11,6 +11,21 @@ import type { DashboardStatsData, DashboardTimeComparisonData } from '../config/
 import { rbacService, type UserPermissions } from '../core/auth/rbac.service';
 import { State } from '../core/state/state-detection.service';
 
+export type StateFilterValue = 'all' | 'CA' | 'NY';
+
+/**
+ * Filter invoices by selected state filter (UI-level filtering)
+ */
+function filterBySelectedState(
+  invoices: Awaited<ReturnType<typeof findAllInvoices>>,
+  stateFilter?: StateFilterValue
+): Awaited<ReturnType<typeof findAllInvoices>> {
+  if (!stateFilter || stateFilter === 'all') {
+    return invoices;
+  }
+  return invoices.filter(inv => inv.state === stateFilter);
+}
+
 /**
  * Filter invoices based on user permissions and state access
  */
@@ -55,12 +70,15 @@ function filterInvoicesByAccess(
 /**
  * Calculate dashboard statistics from invoice data
  * @param userPermissions Optional user permissions for role-based filtering
+ * @param stateFilter Optional state filter for UI-level filtering
  */
 export async function calculateDashboardStats(
-  userPermissions?: UserPermissions
+  userPermissions?: UserPermissions,
+  stateFilter?: StateFilterValue
 ): Promise<DashboardStatsData> {
   const allInvoices = await findAllInvoices();
-  const filteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const accessFilteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const filteredInvoices = filterBySelectedState(accessFilteredInvoices, stateFilter);
   
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -149,12 +167,15 @@ export async function calculateDashboardStats(
 /**
  * Calculate time comparison data (vs last week)
  * @param userPermissions Optional user permissions for role-based filtering
+ * @param stateFilter Optional state filter for UI-level filtering
  */
 export async function calculateTimeComparison(
-  userPermissions?: UserPermissions
+  userPermissions?: UserPermissions,
+  stateFilter?: StateFilterValue
 ): Promise<DashboardTimeComparisonData> {
   const allInvoices = await findAllInvoices();
-  const filteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const accessFilteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const filteredInvoices = filterBySelectedState(accessFilteredInvoices, stateFilter);
   const now = new Date();
   const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   
@@ -227,13 +248,18 @@ export interface InvoiceUrgencyData {
 
 /**
  * Get duplicate alerts for dashboard
+ * @param limit Maximum number of alerts to return
+ * @param userPermissions Optional user permissions for role-based filtering
+ * @param stateFilter Optional state filter for UI-level filtering
  */
 export async function getDuplicateAlerts(
   limit: number = 5,
-  userPermissions?: UserPermissions
+  userPermissions?: UserPermissions,
+  stateFilter?: StateFilterValue
 ): Promise<DuplicateAlert[]> {
   const allInvoices = await findAllInvoices();
-  const filteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const accessFilteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const filteredInvoices = filterBySelectedState(accessFilteredInvoices, stateFilter);
 
   const duplicates = filteredInvoices
     .filter(inv => inv.isDuplicate)
@@ -253,12 +279,16 @@ export async function getDuplicateAlerts(
 
 /**
  * Get OCR confidence distribution
+ * @param userPermissions Optional user permissions for role-based filtering
+ * @param stateFilter Optional state filter for UI-level filtering
  */
 export async function getOcrConfidenceData(
-  userPermissions?: UserPermissions
+  userPermissions?: UserPermissions,
+  stateFilter?: StateFilterValue
 ): Promise<OcrConfidenceData> {
   const allInvoices = await findAllInvoices();
-  const filteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const accessFilteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const filteredInvoices = filterBySelectedState(accessFilteredInvoices, stateFilter);
 
   let high = 0;
   let medium = 0;
@@ -295,12 +325,16 @@ export async function getOcrConfidenceData(
 
 /**
  * Get invoice urgency matrix data
+ * @param userPermissions Optional user permissions for role-based filtering
+ * @param stateFilter Optional state filter for UI-level filtering
  */
 export async function getInvoiceUrgencyData(
-  userPermissions?: UserPermissions
+  userPermissions?: UserPermissions,
+  stateFilter?: StateFilterValue
 ): Promise<InvoiceUrgencyData[]> {
   const allInvoices = await findAllInvoices();
-  const filteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const accessFilteredInvoices = filterInvoicesByAccess(allInvoices, userPermissions);
+  const filteredInvoices = filterBySelectedState(accessFilteredInvoices, stateFilter);
   const now = new Date();
 
   const urgencyData: InvoiceUrgencyData[] = [];

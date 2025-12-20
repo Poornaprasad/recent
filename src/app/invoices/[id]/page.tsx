@@ -23,11 +23,12 @@ import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
 import { ExtractedDataPanel } from '@/components/invoice/extracted-data-panel';
 import { DisbursementFormModal } from '@/components/invoice/disbursement-form-modal';
 import { decodeId, encodeId } from '@/lib/utils/id-utils';
-import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
+import { DocumentTypeCell } from '@/components/invoice/document-type-cell';
 import { formatTotalAmount, formatCurrency } from '@/lib/utils/invoice-utils';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import { useAuthStore } from '@/hooks/use-auth-store';
 import { hasDisbursementBeenSent, canPushToCrm } from '@/lib/utils/status-utils';
+import { useStateFilter, type StateFilterValue, hasMultiStateAccess, getEffectiveStateFilter } from '@/hooks/use-state-filter';
 
 export default function InvoiceDetailPage() {
   const params = useParams();
@@ -36,6 +37,8 @@ export default function InvoiceDetailPage() {
   const router = useRouter();
   const { toast } = useToast();
   const { user } = useAuthStore();
+  const { selectedState } = useStateFilter();
+  const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
   
   // Get source context from URL params
   const source = searchParams.get('source') || 'invoices'; // 'approvals', 'escalations', 'invoices'
@@ -102,6 +105,31 @@ export default function InvoiceDetailPage() {
             filtered = filtered.filter(inv => inv.status !== 'Draft');
           }
           
+          // Apply effective state filter
+          if (effectiveStateFilter !== 'all') {
+            filtered = filtered.filter(inv => inv.state === effectiveStateFilter);
+          }
+          
+          // Sort invoices: group by state first, then by date/id for consistent navigation
+          // When "all" is selected, we want to navigate through all docs of a state first
+          filtered.sort((a, b) => {
+            // First sort by state (if "all" is selected, group by state)
+            if (effectiveStateFilter === 'all') {
+              const stateA = a.state || '';
+              const stateB = b.state || '';
+              if (stateA !== stateB) {
+                return stateA.localeCompare(stateB);
+              }
+            }
+            // Then sort by date (newest first) or id as fallback
+            const dateA = a.invoiceDate?.value || '';
+            const dateB = b.invoiceDate?.value || '';
+            if (dateA && dateB) {
+              return dateB.localeCompare(dateA);
+            }
+            return a.id.localeCompare(b.id);
+          });
+          
           setInvoiceList(filtered);
         }
       } catch (error) {
@@ -111,7 +139,7 @@ export default function InvoiceDetailPage() {
       }
     };
     loadInvoiceList();
-  }, [source, user]);
+  }, [source, user, effectiveStateFilter]);
 
   useEffect(() => {
     const fetchInvoice = async () => {
@@ -537,12 +565,11 @@ export default function InvoiceDetailPage() {
                 {invoiceData.documentType || 'Invoice'} {invoiceData.invoiceNumber?.value || id}
               </h2>
               {invoiceData.documentType && (
-                <Badge
-                  variant="outline"
-                  className={cn(getDocumentTypeBadgeClass(invoiceData.documentType))}
-                >
-                  {invoiceData.documentType}
-                </Badge>
+                <DocumentTypeCell 
+                  documentType={invoiceData.documentType}
+                  state={invoiceData.state}
+                  user={user}
+                />
               )}
               {navigationInfo.position && (
                 <span className="text-sm text-muted-foreground">
@@ -679,13 +706,20 @@ export default function InvoiceDetailPage() {
             <Card className="flex-1">
               <CardHeader className="py-3 px-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">
-                    {invoiceData.caseNumber && caseName
-                      ? `${invoiceData.caseNumber} - ${caseName}`
-                      : invoiceData.caseNumber
-                      ? invoiceData.caseNumber
-                      : 'Extracted Data'}
-                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg">
+                      {invoiceData.caseNumber && caseName
+                        ? `${invoiceData.caseNumber} - ${caseName}`
+                        : invoiceData.caseNumber
+                        ? invoiceData.caseNumber
+                        : 'Extracted Data'}
+                    </CardTitle>
+                    {hasMultiStateAccess(user) && invoiceData.state && (
+                      <Badge variant="outline" className="text-xs">
+                        {invoiceData.state}
+                      </Badge>
+                    )}
+                  </div>
                   <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                     {formatCurrency(invoiceData.amount?.value)}
                   </span>

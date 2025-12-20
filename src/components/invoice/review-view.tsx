@@ -3,12 +3,15 @@
 import type { StoredInvoice, DocumentType } from '@/lib/domain/types';
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { useState, useEffect } from "react";
 import { InvoiceViewer } from './invoice-viewer';
 import { ExtractedDataPanel } from './extracted-data-panel';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import { formatCurrency } from '@/lib/utils/invoice-utils';
 import { getCaseInfoAction } from '@/lib/actions/case.actions';
+import { useAuthStore } from '@/hooks/use-auth-store';
+import { hasMultiStateAccess } from '@/hooks/use-state-filter';
 
 interface ReviewViewProps {
   data: StoredInvoice;
@@ -23,6 +26,7 @@ export function ReviewView({
   onSave,
   onReset,
 }: ReviewViewProps) {
+  const { user } = useAuthStore();
   const [invoiceData, setInvoiceData] = useState<StoredInvoice>(data);
   const [highlightBox, setHighlightBox] = useState<BoundingBox | null>(null);
   const [hoveredField, setHoveredField] = useState<string | null>(null);
@@ -87,13 +91,20 @@ export function ReviewView({
             <Card className="flex-1">
               <CardHeader className="py-3 px-4">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">
-                    {invoiceData.caseNumber && caseName
-                      ? `${invoiceData.caseNumber} - ${caseName}`
-                      : invoiceData.caseNumber
-                      ? invoiceData.caseNumber
-                      : 'Extracted Data'}
-                  </CardTitle>
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg">
+                      {invoiceData.caseNumber && caseName
+                        ? `${invoiceData.caseNumber} - ${caseName}`
+                        : invoiceData.caseNumber
+                        ? invoiceData.caseNumber
+                        : 'Extracted Data'}
+                    </CardTitle>
+                    {hasMultiStateAccess(user) && invoiceData.state && (
+                      <Badge variant="outline" className="text-xs">
+                        {invoiceData.state}
+                      </Badge>
+                    )}
+                  </div>
                   <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
                     {formatCurrency(invoiceData.amount?.value)}
                   </span>

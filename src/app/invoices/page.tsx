@@ -58,9 +58,9 @@ import { CircularProgressBadge } from "@/components/invoice/circular-progress-ba
 import { getInvoicesAction } from '@/lib/actions/index';
 import type { StoredInvoice } from '@/lib/domain/types';
 import { getStatusBadgeClass, getDisplayStatus } from '@/lib/utils/status-utils';
-import { 
-  getOverallConfidence, 
-  getFieldsExtractedCount, 
+import {
+  getOverallConfidence,
+  getFieldsExtractedCount,
   formatTotalAmount,
   filterInvoices,
   sortInvoices,
@@ -70,18 +70,30 @@ import {
 } from '@/lib/utils/invoice-utils';
 import { exportInvoicesToCSVFile } from "@/lib/utils/export-utils";
 import { encodeId } from "@/lib/utils/id-utils";
-import { getDocumentTypeBadgeClass } from "@/lib/utils/document-type-utils";
+import { DocumentTypeCell } from "@/components/invoice/document-type-cell";
 import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { useAuthStore } from "@/hooks/use-auth-store";
+import { 
+  useStateFilter, 
+  STATE_OPTIONS, 
+  type StateFilterValue,
+  getEffectiveStateFilter,
+  shouldShowStateFilter,
+  getStateOptionsForUser,
+  getStateDisplayName
+} from "@/hooks/use-state-filter";
 
 export default function InvoicesPage() {
   const { user } = useAuthStore();
+  const { selectedState, setSelectedState } = useStateFilter();
+  const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
+  const showStateFilter = shouldShowStateFilter(user);
+  const stateOptions = getStateOptionsForUser(user);
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
   const [vendorFilter, setVendorFilter] = useState<string>('all');
-  const [stateFilter, setStateFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -121,22 +133,23 @@ export default function InvoicesPage() {
     return getUniqueVendors(invoices);
   }, [invoices]);
 
-  // Filter invoices
+  // Filter invoices by effective state filter
+  const stateFilteredInvoices = useMemo(() => {
+    if (effectiveStateFilter === 'all') {
+      return invoices;
+    }
+    return invoices.filter(inv => inv.state === effectiveStateFilter);
+  }, [invoices, effectiveStateFilter]);
+
+  // Filter invoices by other filters
   const filteredInvoices = useMemo(() => {
-    let filtered = filterInvoices(invoices, {
+    return filterInvoices(stateFilteredInvoices, {
       searchTerm,
       statusFilter,
       documentTypeFilter,
       vendorFilter,
     });
-    
-    // Apply state filter if not 'all'
-    if (stateFilter !== 'all') {
-      filtered = filtered.filter(inv => inv.state === stateFilter);
-    }
-    
-    return filtered;
-  }, [invoices, searchTerm, statusFilter, documentTypeFilter, vendorFilter, stateFilter]);
+  }, [stateFilteredInvoices, searchTerm, statusFilter, documentTypeFilter, vendorFilter]);
 
   // Sort invoices
   const sortedInvoices = useMemo(() => {
@@ -151,42 +164,46 @@ export default function InvoicesPage() {
 
   const totalPages = Math.ceil(sortedInvoices.length / rowsPerPage);
 
-  // Stats
+  // Stats - calculated from state-filtered invoices
   const stats = useMemo(() => {
-    const totalProcessed = invoices.length;
-    const needsReview = invoices.filter(inv => inv.status === 'Review').length;
-    const avgFields = invoices.length > 0 
-      ? (invoices.reduce((acc, inv) => acc + getFieldsExtractedCount(inv), 0) / invoices.length).toFixed(1)
+    const totalProcessed = stateFilteredInvoices.length;
+    const needsReview = stateFilteredInvoices.filter(inv => inv.status === 'Review').length;
+    const avgFields = stateFilteredInvoices.length > 0
+      ? (stateFilteredInvoices.reduce((acc, inv) => acc + getFieldsExtractedCount(inv), 0) / stateFilteredInvoices.length).toFixed(1)
       : '0';
-    const highConfidence = invoices.filter(inv => getOverallConfidence(inv) >= 0.95).length;
+    const highConfidence = stateFilteredInvoices.filter(inv => getOverallConfidence(inv) >= 0.95).length;
+
+    // Footer shows count within filtered state only
+    const stateLabel = effectiveStateFilter === 'all' ? '' : ` (${effectiveStateFilter})`;
+    const reviewInView = filteredInvoices.filter(inv => inv.status === 'Review').length;
 
     return [
     {
       title: "Total Processed",
         value: totalProcessed.toString(),
       icon: CheckCircle2,
-        footerText: `${invoices.length} processed invoices`,
+        footerText: `${totalProcessed} processed invoices${stateLabel}`,
     },
     {
       title: "Needs Review",
         value: needsReview.toString(),
       icon: FileClock,
-        footerText: `${filteredInvoices.filter(inv => inv.status === 'Review').length} in current view`,
+        footerText: `${reviewInView} in current view`,
     },
     {
       title: "Avg. Fields Extracted",
         value: avgFields,
       icon: ClipboardList,
-        footerText: "Per invoice",
+        footerText: `Per invoice${stateLabel}`,
     },
     {
       title: "High Confidence",
         value: highConfidence.toString(),
       icon: Sparkles,
-        footerText: "Above 95% confidence score",
+        footerText: `Above 95% confidence${stateLabel}`,
       },
     ];
-  }, [invoices, filteredInvoices]);
+  }, [stateFilteredInvoices, filteredInvoices, effectiveStateFilter]);
 
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
@@ -248,11 +265,18 @@ export default function InvoicesPage() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">All Processed Invoices</h2>
-          <p className="text-muted-foreground mt-1">
-            View and manage all invoices that have been processed (excluding drafts)
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">All Processed Invoices</h2>
+            <p className="text-muted-foreground mt-1">
+              View and manage all invoices that have been processed (excluding drafts)
+            </p>
+          </div>
+          {!showStateFilter && effectiveStateFilter !== 'all' && (
+            <Badge variant="outline" className="text-sm">
+              {getStateDisplayName(effectiveStateFilter)}
+            </Badge>
+          )}
         </div>
         <Button onClick={handleExport} size="sm" className="gap-1">
           <FileDown className="h-4 w-4" />
@@ -332,19 +356,23 @@ export default function InvoicesPage() {
                 ))}
               </SelectContent>
             </Select>
-            <Select value={stateFilter} onValueChange={(value) => {
-              setStateFilter(value);
-              setCurrentPage(1);
-            }}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="State" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All States</SelectItem>
-                <SelectItem value="CA">California</SelectItem>
-                <SelectItem value="NY">New York</SelectItem>
-              </SelectContent>
-            </Select>
+            {showStateFilter && (
+              <Select value={selectedState} onValueChange={(value) => {
+                setSelectedState(value as StateFilterValue);
+                setCurrentPage(1);
+              }}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="State" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stateOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={rowsPerPage.toString()} onValueChange={(value) => {
               setRowsPerPage(Number(value));
               setCurrentPage(1);
@@ -476,16 +504,11 @@ export default function InvoicesPage() {
                         />
                       </TableCell>
                       <TableCell>
-                        {invoice.documentType ? (
-                          <Badge 
-                            variant="outline" 
-                            className={cn(getDocumentTypeBadgeClass(invoice.documentType))}
-                          >
-                            {invoice.documentType}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">-</span>
-                        )}
+                        <DocumentTypeCell 
+                          documentType={invoice.documentType}
+                          state={invoice.state}
+                          user={user}
+                        />
                       </TableCell>
                     <TableCell className="font-medium">
                       <Link
