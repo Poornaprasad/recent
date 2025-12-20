@@ -7,10 +7,12 @@ import 'server-only';
 
 import * as userRepository from '../repositories/user.repository';
 import type { User } from '../db/schema';
+import bcrypt from 'bcryptjs';
 
 export interface CreateUserInput {
   name: string;
   email: string;
+  password?: string;
   role: 'admin' | 'director' | 'manager' | 'senior_accountant' | 'ny_accountant' | 'ca_accountant';
   status: 'Active' | 'Inactive' | 'Invited';
   assignedStates?: string;
@@ -54,8 +56,20 @@ export async function createUser(input: CreateUserInput): Promise<User> {
     throw new Error('Invalid email format');
   }
 
-  // Create user
-  return await userRepository.createUser(input);
+  // Hash password if provided
+  let hashedPassword: string | undefined;
+  if (input.password) {
+    if (input.password.length < 6) {
+      throw new Error('Password must be at least 6 characters long');
+    }
+    hashedPassword = await bcrypt.hash(input.password, 10);
+  }
+
+  // Create user with hashed password
+  return await userRepository.createUser({
+    ...input,
+    password: hashedPassword,
+  });
 }
 
 /**

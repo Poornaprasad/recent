@@ -45,6 +45,7 @@ export async function getUserByIdAction(id: string): Promise<ActionResult<User>>
 export async function createUserAction(input: {
   name: string;
   email: string;
+  password?: string;
   role: 'admin' | 'director' | 'manager' | 'senior_accountant' | 'ny_accountant' | 'ca_accountant';
   status: 'Active' | 'Inactive' | 'Invited';
   assignedStates?: string;
