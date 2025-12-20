@@ -66,6 +66,7 @@ export function DisbursementFormModal({
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [plaintiffId, setPlaintiffId] = useState<number | null>(null);
+  const [plaintiffName, setPlaintiffName] = useState<string>('');
   const [shareAcrossClients, setShareAcrossClients] = useState(false);
   const [recoverable, setRecoverable] = useState(true);
   const [waived, setWaived] = useState(false);
@@ -197,11 +198,13 @@ export function DisbursementFormModal({
         // Reset states before loading
         setCaseID(null);
         setPlaintiffId(null);
+        setPlaintiffName('');
         loadCaseInfo(caseNum.trim());
       } else {
         console.warn('No case number found in invoice:', invoice);
         setCaseID(null);
         setPlaintiffId(null);
+        setPlaintiffName('');
       }
 
       // Search for vendor contact
@@ -210,6 +213,26 @@ export function DisbursementFormModal({
       }
     }
   }, [isOpen, invoice]);
+
+  // Auto-populate comments with invoice number/plaintiff name/case number
+  useEffect(() => {
+    if (isOpen) {
+      const invNum = invoiceNumber || invoice.invoiceNumber?.value || '';
+      const caseNum = invoice.caseNumber || '';
+      const plaintiff = plaintiffName || '';
+      
+      // Build comment string with available values
+      const parts: string[] = [];
+      if (invNum) parts.push(invNum);
+      if (plaintiff) parts.push(plaintiff);
+      if (caseNum) parts.push(caseNum);
+      
+      if (parts.length > 0) {
+        const commentValue = parts.join('/');
+        setComments(commentValue);
+      }
+    }
+  }, [isOpen, invoiceNumber, invoice.invoiceNumber?.value, invoice.caseNumber, plaintiffName]);
 
   // Load case info to get caseID and plaintiff ID
   const loadCaseInfo = async (caseNumber: string) => {
@@ -222,6 +245,7 @@ export function DisbursementFormModal({
     setIsLoadingCaseInfo(true);
     setCaseID(null); // Reset case ID
     setPlaintiffId(null); // Reset plaintiff ID
+    setPlaintiffName(''); // Reset plaintiff name
     
     try {
       const result = await getCaseInfoAction(caseNumber.trim());
@@ -231,12 +255,18 @@ export function DisbursementFormModal({
         console.log('Case data received, caseID:', result.data.caseID);
         setCaseID(result.data.caseID);
         
-        // Get primary plaintiff ID
+        // Get primary plaintiff ID and name
         if (result.data.plaintiffs && result.data.plaintiffs.length > 0) {
           const primaryPlaintiff = result.data.plaintiffs.find(p => p.primary) || result.data.plaintiffs[0];
-          if (primaryPlaintiff && primaryPlaintiff.id) {
-            console.log('Plaintiff ID found:', primaryPlaintiff.id);
-            setPlaintiffId(primaryPlaintiff.id);
+          if (primaryPlaintiff) {
+            if (primaryPlaintiff.id) {
+              console.log('Plaintiff ID found:', primaryPlaintiff.id);
+              setPlaintiffId(primaryPlaintiff.id);
+            }
+            if (primaryPlaintiff.name) {
+              console.log('Plaintiff name found:', primaryPlaintiff.name);
+              setPlaintiffName(primaryPlaintiff.name);
+            }
           } else {
             console.warn('No plaintiff ID found in case data');
           }
