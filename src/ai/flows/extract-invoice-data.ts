@@ -92,13 +92,15 @@ export async function retryPlaintiffNameExtraction(
       prompt: `
 You are an expert document data extractor. Your task is SIMPLE: search the ENTIRE document for the plaintiff name.
 
+**IMPORTANT**: The document may contain multiple pages. If you see multiple pages in the image (pages stacked vertically), make sure to read through ALL pages from top to bottom. Search ALL pages, not just the first page.
+
 ## The Name You're Looking For
 The plaintiff name from the case is: "${caseName}" (format: Last, First)
 - Last name: "${lastName}"
 - First name: "${firstName}"
 
 ## Your Task
-1. Read through the ENTIRE document from top to bottom
+1. Read through the ENTIRE document from top to bottom (including ALL pages if multi-page)
 2. Look for BOTH "${lastName}" AND "${firstName}" anywhere in the document
 3. Check ALL text in the document, including:
 
@@ -354,6 +356,8 @@ const extractInvoiceDataPrompt = ai.definePrompt({
   },
   prompt: `
 You are an expert document data extractor. You will be given a single document (image/PDF). The document may be an **Invoice**, **Receipt**, **Reimbursement**, or **Office Credit Card Bill**.
+
+**IMPORTANT**: The document may contain multiple pages. If you see multiple pages in the image (pages stacked vertically), make sure to read through ALL pages from top to bottom. Extract information from ALL pages, not just the first page.
 
 ---
 

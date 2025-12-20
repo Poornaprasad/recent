@@ -4,6 +4,8 @@ import { useRef, useEffect, useState } from 'react';
 import Image from 'next/image';
 import dynamic from 'next/dynamic';
 import { normalizeBoundingBox, type BoundingBox } from '@/lib/utils/bbox-utils';
+import { ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 const PDFViewer = dynamic(() => import('@/components/invoice/pdf-viewer').then(mod => mod.PDFViewer), {
   ssr: false,
@@ -36,7 +38,29 @@ export function InvoiceViewer({
 }: InvoiceViewerProps) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number; left: number; top: number } | null>(null);
+  const [scale, setScale] = useState(1.0);
+
+  const MIN_SCALE = 0.5;
+  const MAX_SCALE = 3.0;
+  const SCALE_STEP = 0.25;
+
+  function zoomIn() {
+    setScale(prev => Math.min(prev + SCALE_STEP, MAX_SCALE));
+  }
+
+  function zoomOut() {
+    setScale(prev => Math.max(prev - SCALE_STEP, MIN_SCALE));
+  }
+
+  function resetZoom() {
+    setScale(1.0);
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = 0;
+      scrollContainerRef.current.scrollLeft = 0;
+    }
+  }
 
   // Update image dimensions when window resizes or highlight box changes
   useEffect(() => {
@@ -164,41 +188,96 @@ export function InvoiceViewer({
   };
 
   return (
-    <div className="w-1/2 border-r p-4 flex items-center justify-center bg-muted/40 relative" ref={containerRef}>
+    <div className="w-1/2 border-r flex flex-col bg-muted/40 relative overflow-hidden" ref={containerRef}>
       {isPdf ? (
-        <div className="relative w-full h-full">
+        <div className="relative w-full h-full flex flex-col min-h-0">
           <PDFViewer file={invoiceDataUri} />
         </div>
       ) : (
-        <div className="relative w-full h-full">
-          <Image
-            src={invoiceDataUri || 'https://placehold.co/595x842.png'}
-            alt={`Invoice ${invoiceId}`}
-            data-ai-hint="invoice document"
-            width={0}
-            height={0}
-            sizes="100vw"
-            className="w-full h-full object-contain"
-            onLoad={(e) => {
-              const img = e.currentTarget;
-              imageRef.current = img;
-              if (containerRef.current) {
-                const rect = img.getBoundingClientRect();
-                const containerRect = containerRef.current.getBoundingClientRect();
-                const dimensions = {
-                  width: rect.width,
-                  height: rect.height,
-                  left: rect.left - containerRect.left,
-                  top: rect.top - containerRect.top,
-                };
-                setImageDimensions(dimensions);
-                if (onImageLoad) {
-                  onImageLoad(dimensions);
-                }
-              }
-            }}
-          />
-        </div>
+        <>
+          {/* Zoom Controls Bar for Images */}
+          <div className="flex items-center justify-between p-2 bg-background border-b gap-2 flex-shrink-0 z-10">
+            <span className="text-sm font-medium text-muted-foreground">Document Viewer</span>
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 gap-1.5 flex items-center justify-center"
+                onClick={zoomOut}
+                disabled={scale <= MIN_SCALE}
+                title="Zoom out (Ctrl/Cmd + -)"
+              >
+                <ZoomOut className="h-4 w-4 flex-shrink-0 stroke-current" />
+                <span className="text-sm font-semibold">-</span>
+              </Button>
+              <span className="text-sm font-medium text-foreground min-w-[55px] text-center px-1">
+                {Math.round(scale * 100)}%
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 gap-1.5 flex items-center justify-center"
+                onClick={zoomIn}
+                disabled={scale >= MAX_SCALE}
+                title="Zoom in (Ctrl/Cmd + +)"
+              >
+                <ZoomIn className="h-4 w-4 flex-shrink-0 stroke-current" />
+                <span className="text-sm font-semibold">+</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 flex items-center justify-center"
+                onClick={resetZoom}
+                disabled={scale === 1.0}
+                title="Reset zoom (Ctrl/Cmd + 0)"
+              >
+                <RotateCcw className="h-4 w-4 stroke-current" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Scrollable Image Container */}
+          <div 
+            ref={scrollContainerRef}
+            className="flex-1 overflow-auto bg-muted/20 flex items-start justify-center p-4"
+            style={{ minHeight: 0 }}
+          >
+            <div className="relative" style={{ transform: `scale(${scale})`, transformOrigin: 'top center' }}>
+              <Image
+                src={invoiceDataUri || 'https://placehold.co/595x842.png'}
+                alt={`Invoice ${invoiceId}`}
+                data-ai-hint="invoice document"
+                width={0}
+                height={0}
+                sizes="100vw"
+                className="w-auto h-auto max-w-none object-contain"
+                style={{ 
+                  width: scale === 1.0 ? '100%' : 'auto',
+                  height: scale === 1.0 ? 'auto' : 'auto',
+                }}
+                onLoad={(e) => {
+                  const img = e.currentTarget;
+                  imageRef.current = img;
+                  if (containerRef.current) {
+                    const rect = img.getBoundingClientRect();
+                    const containerRect = containerRef.current.getBoundingClientRect();
+                    const dimensions = {
+                      width: rect.width / scale,
+                      height: rect.height / scale,
+                      left: rect.left - containerRect.left,
+                      top: rect.top - containerRect.top,
+                    };
+                    setImageDimensions(dimensions);
+                    if (onImageLoad) {
+                      onImageLoad(dimensions);
+                    }
+                  }
+                }}
+              />
+            </div>
+          </div>
+        </>
       )}
       {renderHighlightBox()}
     </div>

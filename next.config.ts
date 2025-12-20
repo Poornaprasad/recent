@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
     ],
   },
   output: 'standalone',
+  // Increase server action body size limit to handle large multi-page PDF images
+  serverActions: {
+    bodySizeLimit: '50mb', // Increased from default 1mb to handle combined multi-page images
+  },
   // Configure webpack to handle canvas properly (server-side only)
   webpack: (config, { isServer }) => {
     if (!isServer) {
