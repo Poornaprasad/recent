@@ -2,7 +2,7 @@
 
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Download, MessageSquare, Flag, Check, X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react';
+import { ArrowLeft, Download, MessageSquare, Flag, Check, X, ChevronLeft, ChevronRight, Loader2, Layers, CheckCircle2, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -27,6 +27,7 @@ import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
 import { formatTotalAmount, formatCurrency } from '@/lib/utils/invoice-utils';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import { useAuthStore } from '@/hooks/use-auth-store';
+import { hasDisbursementBeenSent, canPushToCrm } from '@/lib/utils/status-utils';
 
 export default function InvoiceDetailPage() {
   const params = useParams();
@@ -548,6 +549,20 @@ export default function InvoiceDetailPage() {
                   ({navigationInfo.position})
                 </span>
               )}
+              {/* CRM Status Indicator */}
+              {invoiceData.status === 'Pending' || invoiceData.approvalStatus === 'Approved' ? (
+                hasDisbursementBeenSent(invoiceData) ? (
+                  <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 border-green-300 text-green-700 dark:text-green-400">
+                    <CheckCircle2 className="h-3 w-3 mr-1" />
+                    Sent to CRM
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs bg-yellow-50 dark:bg-yellow-900/30 border-yellow-300 text-yellow-700 dark:text-yellow-400">
+                    <Clock className="h-3 w-3 mr-1" />
+                    Pending CRM
+                  </Badge>
+                )
+              ) : null}
             </div>
           </div>
           
@@ -1096,6 +1111,22 @@ export default function InvoiceDetailPage() {
                   </>
                 ) : (
                   <>
+                    {canPushToCrm(invoiceData) && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => {
+                          setIsDisbursementModalOpen(true);
+                          toast({
+                            title: 'Opening Disbursement Form',
+                            description: 'Preparing form to push to CRM...',
+                          });
+                        }}
+                      >
+                        <Layers className="mr-2 h-4 w-4" />
+                        Push to CRM
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -1142,10 +1173,16 @@ export default function InvoiceDetailPage() {
       {invoiceData && (
         <DisbursementFormModal
           isOpen={isDisbursementModalOpen}
-          onOpenChange={(open) => {
+          onOpenChange={async (open) => {
             console.log('Disbursement modal onOpenChange called with:', open);
             setIsDisbursementModalOpen(open);
             if (!open && invoiceData) {
+              // Reload invoice data to get updated disbursement status
+              const updatedResult = await getInvoiceByIdAction(invoiceData.id);
+              if (updatedResult.data) {
+                setInvoiceData(updatedResult.data);
+              }
+              
               // Reload invoice list to get updated data
               const reloadData = async () => {
                 const userPermissions = user ? {

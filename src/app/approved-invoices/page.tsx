@@ -16,6 +16,8 @@ import {
   Layers,
   DollarSign,
   Calendar,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 import {
   Table,
@@ -42,7 +44,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { cn } from '@/lib/utils/utils';
-import { getStatusBadgeClass, getDisplayStatus } from '@/lib/utils/status-utils';
+import { getStatusBadgeClass, getDisplayStatus, hasDisbursementBeenSent, canPushToCrm } from '@/lib/utils/status-utils';
 import { getOverallConfidence, formatTotalAmount, parseInvoiceAmount } from '@/lib/utils/invoice-utils';
 import Link from "next/link";
 import { CircularProgressBadge } from "@/components/invoice/circular-progress-badge";
@@ -422,6 +424,7 @@ export default function ApprovedInvoicesPage() {
                               <TableHead className="text-right">Amount</TableHead>
                               <TableHead className="text-center">Accuracy</TableHead>
                               <TableHead>Status</TableHead>
+                              <TableHead>CRM Status</TableHead>
                               <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                           </TableHeader>
@@ -467,6 +470,21 @@ export default function ApprovedInvoicesPage() {
                                     >
                                       {getDisplayStatus(invoice)}
                                     </Badge>
+                                  </TableCell>
+                                  <TableCell>
+                                    {hasDisbursementBeenSent(invoice) ? (
+                                      <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 border-green-300 text-green-700 dark:text-green-400">
+                                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                                        Sent to CRM
+                                      </Badge>
+                                    ) : canPushToCrm(invoice) ? (
+                                      <Badge variant="outline" className="text-xs bg-yellow-50 dark:bg-yellow-900/30 border-yellow-300 text-yellow-700 dark:text-yellow-400">
+                                        <Clock className="h-3 w-3 mr-1" />
+                                        Pending
+                                      </Badge>
+                                    ) : (
+                                      <span className="text-muted-foreground text-xs">-</span>
+                                    )}
                                   </TableCell>
                                   <TableCell className="text-right">
                                     <Button asChild variant="outline" size="sm">

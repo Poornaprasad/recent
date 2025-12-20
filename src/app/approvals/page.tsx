@@ -57,7 +57,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from '@/lib/utils/utils';
-import { getStatusBadgeClass } from '@/lib/utils/status-utils';
+import { getStatusBadgeClass, hasDisbursementBeenSent, canPushToCrm } from '@/lib/utils/status-utils';
 import { getOverallConfidence, formatTotalAmount, filterInvoices, sortInvoices, getUniqueVendors, type SortField, type SortDirection, parseInvoiceAmount } from '@/lib/utils/invoice-utils';
 import Link from "next/link";
 import { CircularProgressBadge } from "@/components/invoice/circular-progress-badge";
@@ -664,6 +664,7 @@ export default function ApprovalsPage() {
                     </TableHead>
                     <TableHead>State</TableHead>
                     <TableHead>Flags</TableHead>
+                    <TableHead>CRM Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -742,8 +743,43 @@ export default function ApprovalsPage() {
                             )}
                           </div>
                         </TableCell>
+                        <TableCell>
+                          {hasDisbursementBeenSent(invoice) ? (
+                            <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 border-green-300 text-green-700 dark:text-green-400">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Sent to CRM
+                            </Badge>
+                          ) : canPushToCrm(invoice) ? (
+                            <Badge variant="outline" className="text-xs bg-yellow-50 dark:bg-yellow-900/30 border-yellow-300 text-yellow-700 dark:text-yellow-400">
+                              <Clock className="h-3 w-3 mr-1" />
+                              Pending
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">-</span>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
-                          <ApprovalActions 
+                          <div className="flex items-center justify-end gap-2">
+                            {canPushToCrm(invoice) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (invoice && invoice.id) {
+                                    setSelectedInvoiceForDisbursement(invoice);
+                                    setIsDisbursementModalOpen(true);
+                                    toast({
+                                      title: 'Opening Disbursement Form',
+                                      description: `Preparing form for invoice ${invoice.invoiceNumber?.value || invoice.id}`,
+                                    });
+                                  }
+                                }}
+                              >
+                                <Layers className="h-4 w-4 mr-2" />
+                                Push to CRM
+                              </Button>
+                            )}
+                            <ApprovalActions 
                             invoiceId={invoice.id} 
                             onApprovalChange={loadInvoices}
                             isSameCaseDuplicate={isSameCaseDuplicate}
@@ -782,6 +818,7 @@ export default function ApprovalsPage() {
                               }
                             }}
                           />
+                          </div>
                         </TableCell>
                       </TableRow>
                     );

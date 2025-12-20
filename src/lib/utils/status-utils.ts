@@ -45,6 +45,48 @@ export function getDisplayStatus(invoice: StoredInvoice): string {
   return invoice.status || 'Draft';
 }
 
+/**
+ * Check if disbursement has been sent to CRM
+ * Returns true if disbursementResponse exists and is not empty
+ */
+export function hasDisbursementBeenSent(invoice: StoredInvoice): boolean {
+  if (!invoice.disbursementResponse) {
+    return false;
+  }
+  
+  // Check if it's a string (JSON stringified)
+  if (typeof invoice.disbursementResponse === 'string') {
+    try {
+      const parsed = JSON.parse(invoice.disbursementResponse);
+      return parsed && Object.keys(parsed).length > 0;
+    } catch {
+      // If parsing fails, check if it's a non-empty string
+      return invoice.disbursementResponse.trim().length > 0;
+    }
+  }
+  
+  // Check if it's an object
+  if (typeof invoice.disbursementResponse === 'object') {
+    return Object.keys(invoice.disbursementResponse).length > 0;
+  }
+  
+  return false;
+}
+
+/**
+ * Check if invoice can be pushed to CRM
+ * Returns true if invoice is approved (status = 'Pending') but disbursement hasn't been sent
+ */
+export function canPushToCrm(invoice: StoredInvoice): boolean {
+  // Invoice must be approved (status = 'Pending')
+  const isApproved = invoice.status === 'Pending' || invoice.approvalStatus === 'Approved';
+  
+  // Disbursement must not have been sent yet
+  const notSent = !hasDisbursementBeenSent(invoice);
+  
+  return isApproved && notSent;
+}
+
 
 
 
