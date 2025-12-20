@@ -139,7 +139,7 @@ export default function UsersPage() {
           email: userData.email,
           role: userData.role,
           status: userData.status,
-          assignedStates: userData.assignedStates,
+          assignedStates: userData.assignedStates || undefined,
         });
 
         if (result.error) {
@@ -160,9 +160,10 @@ export default function UsersPage() {
         const result = await createUserAction({
           name: userData.name,
           email: userData.email,
+          password: (userData as any).password || undefined,
           role: userData.role,
           status: userData.status,
-          assignedStates: userData.assignedStates,
+          assignedStates: userData.assignedStates || undefined,
         });
 
         if (result.error) {

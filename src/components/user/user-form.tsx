@@ -33,33 +33,46 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import type { User } from '@/lib/db/schema';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { UserRole } from '@/lib/core/auth/rbac.types';
+import { Eye, EyeOff } from 'lucide-react';
 
-const userFormSchema = z.object({
+// Base schema - password is optional
+const baseUserFormSchema = z.object({
   name: z.string().min(2, { message: 'Name must be at least 2 characters.' }),
   email: z.string().email({ message: 'Please enter a valid email.' }),
+  password: z.string().min(6, { message: 'Password must be at least 6 characters.' }).optional(),
   role: z.enum(['admin', 'director', 'manager', 'senior_accountant', 'ny_accountant', 'ca_accountant']),
   status: z.enum(['Active', 'Inactive', 'Invited']),
   assignedStates: z.array(z.string()).optional(),
 });
+
+// Schema for new users - password is required
+const newUserFormSchema = baseUserFormSchema.extend({
+  password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
+});
+
+// Use base schema (password optional) - we'll validate password requirement in component
+const userFormSchema = baseUserFormSchema;
 
 type UserFormData = z.infer<typeof userFormSchema>;
 
 interface UserFormProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
-  onSubmit: (data: UserFormData | Omit<User, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onSubmit: (data: Omit<User, 'id' | 'createdAt' | 'updatedAt' | 'password'> & { id?: string; password?: string | null }) => void;
   user: User | null;
   isSubmitting?: boolean;
 }
 
 export function UserForm({ isOpen, onOpenChange, onSubmit, user, isSubmitting = false }: UserFormProps) {
+  const [showPassword, setShowPassword] = useState(false);
   const form = useForm<UserFormData>({
     resolver: zodResolver(userFormSchema),
     defaultValues: {
       name: '',
       email: '',
+      password: '',
       role: 'ca_accountant',
       status: 'Invited',
       assignedStates: [],
@@ -84,6 +97,7 @@ export function UserForm({ isOpen, onOpenChange, onSubmit, user, isSubmitting = 
       form.reset({
         name: user.name,
         email: user.email,
+        password: '', // Don't show password when editing
         role: user.role as any,
         status: user.status as any,
         assignedStates: assignedStates,
@@ -92,26 +106,46 @@ export function UserForm({ isOpen, onOpenChange, onSubmit, user, isSubmitting = 
       form.reset({
         name: '',
         email: '',
+        password: '',
         role: 'ca_accountant',
         status: 'Invited',
         assignedStates: [],
       });
     }
+    setShowPassword(false);
   }, [user, form, isOpen]);
 
   const handleFormSubmit = (data: UserFormData) => {
+    // Validate password is required for new users
+    if (!user && (!data.password || (typeof data.password === 'string' && data.password.trim() === ''))) {
+      form.setError('password', {
+        type: 'manual',
+        message: 'Password is required for new users.',
+      });
+      return;
+    }
+
     // Convert assignedStates array to JSON string for storage
-    const submitData = {
-      ...data,
+    const passwordValue = data.password && typeof data.password === 'string' && data.password.trim() !== '' 
+      ? data.password 
+      : null;
+    
+    const submitData: Omit<User, 'id' | 'createdAt' | 'updatedAt' | 'password'> & { id?: string; password?: string | null } = {
+      name: data.name,
+      email: data.email,
+      role: data.role,
+      status: data.status,
       assignedStates: data.assignedStates && data.assignedStates.length > 0 
         ? JSON.stringify(data.assignedStates) 
-        : undefined,
+        : null,
+      // Only include password if it's provided (for new users)
+      ...(passwordValue ? { password: passwordValue } : {}),
     };
     
     if (user) {
         onSubmit({ ...user, ...submitData });
     } else {
-        onSubmit(submitData as any);
+        onSubmit(submitData);
     }
   };
 
@@ -152,6 +186,41 @@ export function UserForm({ isOpen, onOpenChange, onSubmit, user, isSubmitting = 
                 </FormItem>
               )}
             />
+            {!user && (
+              <FormField
+                control={form.control}
+                name="password"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Password <span className="text-destructive">*</span></FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input
+                          type={showPassword ? "text" : "password"}
+                          placeholder="•••••••••••"
+                          {...field}
+                          autoComplete="new-password"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2 text-muted-foreground"
+                          onClick={() => setShowPassword(!showPassword)}
+                          aria-label={showPassword ? "Hide password" : "Show password"}
+                        >
+                          {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </Button>
+                      </div>
+                    </FormControl>
+                    <FormDescription>
+                      Password must be at least 6 characters long.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
             <FormField
                 control={form.control}
                 name="role"
