@@ -26,6 +26,8 @@ import {
   getCaseInfoAction,
   getPreviousDisbursementTypeForVendorAction,
   updateInvoiceDisbursementResponseAction,
+  checkCaseForDuplicatesAction,
+  type DuplicateCheckResult,
 } from '@/lib/actions/index';
 import type { DisbursementOption, ContactLookupResult } from '@/lib/crm/smartadvocate/types';
 import { formatCurrency } from '@/lib/utils/invoice-utils';
@@ -46,6 +48,8 @@ export function DisbursementFormModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCaseInfo, setIsLoadingCaseInfo] = useState(false);
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
+  const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
+  const [duplicateCheckResult, setDuplicateCheckResult] = useState<DuplicateCheckResult | null>(null);
 
   // Debug: Log when modal opens
   useEffect(() => {
@@ -393,6 +397,68 @@ export function DisbursementFormModal({
     }
   };
 
+  // Check for duplicates in case
+  const handleCheckDuplicates = async () => {
+    if (!caseID) {
+      toast({
+        variant: 'destructive',
+        title: 'Case ID Required',
+        description: 'Please ensure the case number is valid and case information is loaded.',
+      });
+      return;
+    }
+
+    if (!payeeName || !invoiceNumber || !invoiceDate) {
+      toast({
+        variant: 'destructive',
+        title: 'Missing Information',
+        description: 'Please provide vendor name, invoice number, and invoice date to check for duplicates.',
+      });
+      return;
+    }
+
+    setIsCheckingDuplicates(true);
+    setDuplicateCheckResult(null);
+
+    try {
+      const result = await checkCaseForDuplicatesAction(
+        caseID,
+        payeeName,
+        invoiceNumber,
+        invoiceDate
+      );
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      if (result.data) {
+        setDuplicateCheckResult(result.data);
+        
+        if (result.data.isDuplicate) {
+          toast({
+            variant: 'destructive',
+            title: 'Duplicates Found',
+            description: result.data.message || `Found ${result.data.duplicates.length} potential duplicate(s)`,
+          });
+        } else {
+          toast({
+            title: 'No Duplicates',
+            description: result.data.message || 'No duplicates found in this case.',
+          });
+        }
+      }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to Check Duplicates',
+        description: error instanceof Error ? error.message : 'An error occurred while checking for duplicates.',
+      });
+    } finally {
+      setIsCheckingDuplicates(false);
+    }
+  };
+
   // Handle form submission
   const handleSubmit = async () => {
     if (!caseID) {
@@ -683,6 +749,55 @@ export function DisbursementFormModal({
                 emptyText="No status found."
               />
             </div>
+          </div>
+
+          {/* Check Case for Duplicates Button */}
+          <div>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleCheckDuplicates}
+              disabled={isCheckingDuplicates || !caseID || !payeeName || !invoiceNumber || !invoiceDate}
+              className="w-full"
+            >
+              {isCheckingDuplicates ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Checking for Duplicates...
+                </>
+              ) : (
+                'Check Case for Duplicates'
+              )}
+            </Button>
+            {duplicateCheckResult && (
+              <div className={`mt-2 p-3 rounded border ${
+                duplicateCheckResult.isDuplicate 
+                  ? 'bg-destructive/10 border-destructive/50' 
+                  : 'bg-green-50 dark:bg-green-900/20 border-green-300'
+              }`}>
+                <div className="text-sm font-medium mb-2">
+                  {duplicateCheckResult.isDuplicate ? '⚠️ Duplicates Found' : '✓ No Duplicates'}
+                </div>
+                <div className="text-xs text-muted-foreground mb-2">
+                  {duplicateCheckResult.message}
+                </div>
+                {duplicateCheckResult.duplicates.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-medium">Matching Disbursements:</div>
+                    {duplicateCheckResult.duplicates.map((dup, index) => (
+                      <div key={index} className="text-xs bg-background p-2 rounded border">
+                        <div><strong>ID:</strong> {dup.disbursementID || 'N/A'}</div>
+                        <div><strong>Invoice #:</strong> {dup.invoiceNumber || 'N/A'}</div>
+                        <div><strong>Date:</strong> {dup.invoiceDate || 'N/A'}</div>
+                        <div><strong>Vendor:</strong> {dup.payeeName || 'N/A'}</div>
+                        {dup.amount && <div><strong>Amount:</strong> {formatCurrency(dup.amount)}</div>}
+                        {dup.checkNumber && <div><strong>Check #:</strong> {dup.checkNumber}</div>}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Payee - Searchable with CRM Lookup */}

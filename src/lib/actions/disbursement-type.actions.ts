@@ -9,7 +9,9 @@ import {
   getDisbursementTypes,
   getDisbursementStatuses,
   createDisbursement,
+  getDisbursements,
   type CreateDisbursementRequest,
+  type Disbursement,
 } from '../crm/smartadvocate/disbursement';
 import {
   getPreviousDisbursementType,
@@ -109,5 +111,120 @@ export async function createDisbursementAction(
     () => createDisbursement(caseID, disbursementData),
     'Failed to create disbursement in CRM'
   );
+}
+
+/**
+ * Check for duplicate disbursements in a case
+ * Compares vendor, invoice number, and date
+ */
+export interface DuplicateCheckResult {
+  isDuplicate: boolean;
+  duplicates: Array<{
+    disbursementID?: number;
+    invoiceNumber?: string;
+    invoiceDate?: string;
+    payeeName?: string;
+    amount?: number;
+    checkNumber?: string;
+  }>;
+  message?: string;
+}
+
+export async function checkCaseForDuplicatesAction(
+  caseID: number,
+  vendorName: string,
+  invoiceNumber: string,
+  invoiceDate: string
+): Promise<ActionResult<DuplicateCheckResult>> {
+  return withActionHandler(async () => {
+    if (!caseID) {
+      return {
+        isDuplicate: false,
+        duplicates: [],
+        message: 'Case ID is required',
+      };
+    }
+
+    if (!vendorName || !invoiceNumber || !invoiceDate) {
+      return {
+        isDuplicate: false,
+        duplicates: [],
+        message: 'Vendor name, invoice number, and invoice date are required',
+      };
+    }
+
+    // Fetch all disbursements for the case
+    const disbursements = await getDisbursements(caseID, 0, 200);
+
+    // Normalize input values for comparison
+    const normalizedVendorName = vendorName.trim().toLowerCase();
+    const normalizedInvoiceNumber = invoiceNumber.trim().toLowerCase();
+    
+    // Normalize date - handle different formats
+    let normalizedInvoiceDate: string | null = null;
+    try {
+      const dateObj = new Date(invoiceDate);
+      if (!isNaN(dateObj.getTime())) {
+        // Format as YYYY-MM-DD for comparison
+        normalizedInvoiceDate = dateObj.toISOString().split('T')[0];
+      }
+    } catch (e) {
+      // If date parsing fails, use original string
+      normalizedInvoiceDate = invoiceDate.trim();
+    }
+
+    // Find potential duplicates
+    const duplicates: DuplicateCheckResult['duplicates'] = [];
+
+    for (const disbursement of disbursements) {
+      // Get payee name
+      const payeeName = disbursement.payee?.name || '';
+      const normalizedPayeeName = payeeName.trim().toLowerCase();
+
+      // Get invoice number
+      const dispInvoiceNumber = disbursement.invoiceNumber || '';
+      const normalizedDispInvoiceNumber = dispInvoiceNumber.trim().toLowerCase();
+
+      // Get invoice date
+      let normalizedDispInvoiceDate: string | null = null;
+      if (disbursement.invoiceDate) {
+        try {
+          const dateObj = new Date(disbursement.invoiceDate);
+          if (!isNaN(dateObj.getTime())) {
+            normalizedDispInvoiceDate = dateObj.toISOString().split('T')[0];
+          }
+        } catch (e) {
+          normalizedDispInvoiceDate = String(disbursement.invoiceDate).trim();
+        }
+      }
+
+      // Check if vendor, invoice number, and date match
+      const vendorMatches = normalizedPayeeName === normalizedVendorName;
+      const invoiceNumberMatches = normalizedDispInvoiceNumber === normalizedInvoiceNumber;
+      const dateMatches = normalizedDispInvoiceDate && normalizedInvoiceDate
+        ? normalizedDispInvoiceDate === normalizedInvoiceDate
+        : false;
+
+      // Consider it a duplicate if all three match
+      if (vendorMatches && invoiceNumberMatches && dateMatches) {
+        duplicates.push({
+          disbursementID: disbursement.disbursementID,
+          invoiceNumber: disbursement.invoiceNumber,
+          invoiceDate: disbursement.invoiceDate,
+          payeeName: payeeName,
+          amount: disbursement.amount,
+          checkNumber: disbursement.checkNumber,
+        });
+      }
+    }
+
+    return {
+      isDuplicate: duplicates.length > 0,
+      duplicates,
+      message: duplicates.length > 0
+        ? `Found ${duplicates.length} potential duplicate(s)`
+        : 'No duplicates found',
+    };
+  }, 'Failed to check for duplicates');
 }
 

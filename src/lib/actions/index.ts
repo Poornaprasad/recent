@@ -69,6 +69,8 @@ export {
   saveDisbursementTypeMappingAction,
   getDisbursementTypesForVendorAction,
   createDisbursementAction,
+  checkCaseForDuplicatesAction,
+  type DuplicateCheckResult,
 } from './disbursement-type.actions';
 
 export {

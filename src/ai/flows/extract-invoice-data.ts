@@ -75,14 +75,20 @@ export async function retryPlaintiffNameExtraction(
 ): Promise<{ clientName?: { value: string | null; confidence: number; reasoning: string; bbox: any }; found: boolean; error?: string }> {
   try {
     // Extract name parts for better matching
-    // Case name from CRM is in "Last, First" format
+    // Case name from CRM is in "Last, First" or "Last, First Middle" format
     const nameParts = caseName.split(',').map(p => p.trim()).filter(p => p);
     const lastName = nameParts[0] || '';
-    const firstName = nameParts[1]?.split(/\s+/)[0] || '';
+    const firstPart = nameParts[1] || '';
+    // Extract first name (first word) and handle middle initial/name
+    const firstName = firstPart.split(/\s+/)[0] || '';
+    // Get the full first part (including middle initial) for matching
+    const firstWithMiddle = firstPart.trim();
     
     // Create both format variations
-    const lastFirstFormat = `${lastName}, ${firstName}`; // "Ceparano, Joseph"
-    const firstLastFormat = `${firstName} ${lastName}`;   // "Joseph Ceparano"
+    const lastFirstFormat = `${lastName}, ${firstName}`; // "Spanos, Theodore"
+    const lastFirstMiddleFormat = `${lastName}, ${firstWithMiddle}`; // "Spanos, Theodore W."
+    const firstLastFormat = `${firstName} ${lastName}`;   // "Theodore Spanos"
+    const firstMiddleLastFormat = `${firstWithMiddle} ${lastName}`; // "Theodore W. Spanos"
     
     // Create prompt dynamically with the case name
     const retryPlaintiffNamePrompt = ai.definePrompt({
@@ -131,26 +137,38 @@ The name might appear in different formats - search for ALL of these:
 - As part of longer string: "${lastFirstFormat} V. SOMETHING" or "${lastFirstFormat} vs. SOMETHING"
 
 **Format 2: First Last (common in documents)**
-- "${firstLastFormat}" (e.g., "Joseph Ceparano")
-- "${firstLastFormat.toUpperCase()}" (e.g., "JOSEPH CEPARANO")
-- "${firstLastFormat.toLowerCase()}" (e.g., "joseph ceparano")
+- "${firstLastFormat}" (e.g., "Theodore Spanos")
+- "${firstLastFormat.toUpperCase()}" (e.g., "THEODORE SPANOS")
+- "${firstLastFormat.toLowerCase()}" (e.g., "theodore spanos")
 - As part of longer string: "${firstLastFormat} V. SOMETHING" or "${firstLastFormat} vs. SOMETHING"
 
-**Format 3: Just the parts**
+**Format 3: First Middle Last (with middle initial/name)**
+- "${firstMiddleLastFormat}" (e.g., "Theodore W. Spanos")
+- "${firstMiddleLastFormat.toUpperCase()}" (e.g., "THEODORE W. SPANOS")
+- "${firstMiddleLastFormat.toLowerCase()}" (e.g., "theodore w. spanos")
+- As part of longer string: "${firstMiddleLastFormat} V. SOMETHING" or "${firstMiddleLastFormat} vs. SOMETHING"
+- Note: Middle initials/names are common - "Theodore W. Spanos" matches "Spanos, Theodore W."
+
+**Format 4: Just the parts**
 - "${lastName}" and "${firstName}" appearing separately (even in different locations)
 - "${lastName}" and "${firstName}" as part of longer text
+- "${lastName}" and "${firstWithMiddle}" appearing together (e.g., "Theodore W. Spanos" contains both "Spanos" and "Theodore")
 
 ## Simple Rule
 If you see "${lastName}" (like "Ceparano") AND "${firstName}" (like "Joseph") anywhere in the document - in ANY format, in ANY location, even as part of longer text - the name EXISTS in the document.
 
 ## What to Return
 1. **clientName**:
+   - If you find "${lastFirstMiddleFormat}" or "${firstMiddleLastFormat}" anywhere (e.g., "Spanos, Theodore W." or "Theodore W. Spanos"):
+     - Extract the name in "Last, First Middle" format: "${lastFirstMiddleFormat}"
+     - Set confidence to 0.95 (high confidence - you found it!)
+     - Include bounding box if you can locate where you saw it
    - If you find "${lastFirstFormat}" or "${firstLastFormat}" anywhere:
      - Extract the name in "Last, First" format: "${lastFirstFormat}"
      - Set confidence to 0.95 (high confidence - you found it!)
      - Include bounding box if you can locate where you saw it
-   - If you find "${lastName}" and "${firstName}" in different order or as part of longer text:
-     - Extract in "Last, First" format: "${lastFirstFormat}"
+   - If you find "${lastName}" and "${firstName}" (or "${firstWithMiddle}") in different order or as part of longer text:
+     - Extract in "Last, First Middle" format: "${lastFirstMiddleFormat}" (if middle initial found) or "${lastFirstFormat}" (if no middle)
      - Set confidence to 0.9
      - Include bounding box
    - If you CANNOT find both "${lastName}" AND "${firstName}" anywhere:
@@ -159,7 +177,8 @@ If you see "${lastName}" (like "Ceparano") AND "${firstName}" (like "Joseph") an
      - Set found = false
 
 2. **found**:
-   - TRUE if you see "${lastName}" AND "${firstName}" anywhere in the document (in any format, even as part of longer text)
+   - TRUE if you see "${lastName}" AND "${firstName}" anywhere in the document (in any format, even as part of longer text like "Theodore W. Spanos v. Village of Mineola")
+   - TRUE if you see "${lastName}" and "${firstWithMiddle}" together (e.g., "Theodore W. Spanos" contains both "Spanos" and "Theodore")
    - FALSE only if you cannot find both "${lastName}" and "${firstName}" anywhere
 
 ## Critical Instructions

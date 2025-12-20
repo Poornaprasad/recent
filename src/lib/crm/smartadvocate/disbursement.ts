@@ -319,3 +319,119 @@ export async function createDisbursement(
   return data;
 }
 
+/**
+ * Disbursement from SmartAdvocate API
+ */
+export interface Disbursement {
+  disbursementID?: number;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  payee?: {
+    contactId?: number;
+    name?: string;
+  };
+  amount?: number;
+  checkNumber?: string;
+  description?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Get disbursements for a case from SmartAdvocate API
+ * 
+ * @param caseID The case ID (not case number)
+ * @param currentPage Page number (0-indexed)
+ * @param pageSize Number of items per page
+ * @returns Array of disbursements
+ */
+export async function getDisbursements(
+  caseID: number,
+  currentPage: number = 0,
+  pageSize: number = 200
+): Promise<Disbursement[]> {
+  if (!hasCredentials()) {
+    console.warn('[SmartAdvocate] API credentials not configured');
+    throw new Error('SmartAdvocate API credentials not configured');
+  }
+
+  const config = getConfig();
+
+  // Normalize base URL - handle both with and without trailing slash
+  let baseUrl = config.SA_API_BASE_URL.trim();
+  if (baseUrl.endsWith('/')) {
+    baseUrl = baseUrl.slice(0, -1);
+  }
+
+  // Build API URL following the case-info structure
+  const apiPath = baseUrl.includes('/CaseSyncAPI')
+    ? `/case/${caseID}/Disbursement`
+    : `/CaseSyncAPI/case/${caseID}/Disbursement`;
+
+  const url = new URL(`${baseUrl}${apiPath}`);
+  url.searchParams.append('currentPage', String(currentPage));
+  url.searchParams.append('pageSize', String(pageSize));
+
+  const headers = await getHeaders();
+
+  const response = await retryWithBackoff(async () => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const res = await fetch(url.toString(), {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text().catch(() => res.statusText);
+        throw createHttpError(res.status, errorText || res.statusText);
+      }
+
+      return res;
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error('Request timeout after 30000ms');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  });
+
+  // Parse response
+  let data: Disbursement[] | unknown;
+  try {
+    const text = await response.text();
+    if (!text || text.trim() === '') {
+      console.error('[SmartAdvocate] Empty response from get disbursements API');
+      return [];
+    }
+
+    data = JSON.parse(text);
+  } catch (parseError) {
+    console.error('[SmartAdvocate] Failed to parse get disbursements API response:', parseError);
+    throw new Error('Failed to parse SmartAdvocate API response');
+  }
+
+  // Handle response format: could be array or object with array property
+  if (Array.isArray(data)) {
+    return data;
+  }
+
+  // If it's an object, try to find an array property
+  if (typeof data === 'object' && data !== null) {
+    const dataObj = data as Record<string, unknown>;
+    // Common property names for paginated responses
+    const possibleArrayProps = ['data', 'items', 'disbursements', 'results'];
+    for (const prop of possibleArrayProps) {
+      if (Array.isArray(dataObj[prop])) {
+        return dataObj[prop] as Disbursement[];
+      }
+    }
+  }
+
+  return [];
+}
+
