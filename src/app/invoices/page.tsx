@@ -25,6 +25,8 @@ import {
   MoreVertical,
   CheckSquare,
   Square,
+  RefreshCw,
+  MapPin,
 } from "lucide-react";
 import {
   Table,
@@ -82,7 +84,11 @@ import {
   getEffectiveStateFilter,
   shouldShowStateFilter,
   getStateOptionsForUser,
-  getStateDisplayName
+  getStateDisplayName,
+  getUserPrimaryState,
+  getUserSecondaryState,
+  hasPrimaryAndSecondaryStates,
+  getOppositeState
 } from "@/hooks/use-state-filter";
 
 export default function InvoicesPage() {
@@ -91,6 +97,10 @@ export default function InvoicesPage() {
   const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
   const showStateFilter = shouldShowStateFilter(user);
   const stateOptions = getStateOptionsForUser(user);
+  const hasBothStates = hasPrimaryAndSecondaryStates(user);
+  const primaryState = getUserPrimaryState(user);
+  const secondaryState = getUserSecondaryState(user);
+  const oppositeState = getOppositeState(user, effectiveStateFilter);
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -279,10 +289,34 @@ export default function InvoicesPage() {
             </Badge>
           )}
         </div>
-        <Button onClick={handleExport} size="sm" className="gap-1">
-          <FileDown className="h-4 w-4" />
-          Export {selectedInvoices.size > 0 ? `(${selectedInvoices.size})` : 'All'}
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* State Switcher Button - Show when user has both primary and secondary states */}
+          {hasBothStates && oppositeState && (
+            <Button
+              onClick={() => {
+                setSelectedState(oppositeState);
+                setCurrentPage(1);
+              }}
+              variant={effectiveStateFilter === primaryState ? "default" : "outline"}
+              size="sm"
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span className="hidden sm:inline">
+                {effectiveStateFilter === primaryState 
+                  ? `Load ${secondaryState} First` 
+                  : `Load ${primaryState} First`}
+              </span>
+              <span className="sm:hidden">
+                {effectiveStateFilter === primaryState ? secondaryState : primaryState}
+              </span>
+            </Button>
+          )}
+          <Button onClick={handleExport} size="sm" className="gap-1">
+            <FileDown className="h-4 w-4" />
+            Export {selectedInvoices.size > 0 ? `(${selectedInvoices.size})` : 'All'}
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

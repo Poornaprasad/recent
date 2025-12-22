@@ -40,6 +40,9 @@ const DEFAULT_ROLE_PERMISSIONS: RolePermissions = {
     Permission.EXPORT_DATA,
     Permission.VIEW_DASHBOARD,
     Permission.VIEW_ALL_DASHBOARDS,
+    Permission.MANAGE_W9_STATUS,
+    Permission.VIEW_VENDORS,
+    Permission.EDIT_VENDORS,
   ],
   [UserRole.DIRECTOR]: [
     Permission.VIEW_INVOICES,

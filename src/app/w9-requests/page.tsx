@@ -44,11 +44,13 @@ import {
 import { useState, useEffect, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { Permission, UserRole } from "@/lib/core/auth/rbac.types";
 import { 
   getVendorInvoicesFor1099Action, 
   updateVendor1099StatusAction,
   saveVendorAction,
 } from "@/lib/actions/index";
+import { useAuthStore } from "@/hooks/use-auth-store";
 import { VendorSetupDialog } from "@/components/dialogs/vendor-setup-dialog";
 import Link from "next/link";
 import { encodeId } from "@/lib/utils/id-utils";
@@ -99,6 +101,7 @@ type SortDirection = 'asc' | 'desc';
 export default function W9RequestsPage() {
   const { toast } = useToast();
   const router = useRouter();
+  const { user } = useAuthStore();
   const [vendorGroups, setVendorGroups] = useState<VendorInvoiceGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set());
@@ -121,6 +124,11 @@ export default function W9RequestsPage() {
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [showW9Received, setShowW9Received] = useState(false); // Hide W9 received vendors by default
+
+  // Check if user can manage W9 status
+  // Admin has all permissions by default
+  const canManageW9Status = user?.role === UserRole.ADMIN || 
+    (user?.role && [UserRole.DIRECTOR, UserRole.MANAGER].includes(user.role as UserRole));
 
   useEffect(() => {
     loadVendorInvoices();
@@ -330,7 +338,12 @@ export default function W9RequestsPage() {
         w9Status: status as 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired',
       };
 
-      const result = await updateVendor1099StatusAction(vendorId, updateData);
+      const result = await updateVendor1099StatusAction(
+        vendorId, 
+        updateData,
+        user?.role,
+        user?.id
+      );
       if (result.success) {
         toast({
           title: 'Status Updated',
@@ -694,24 +707,31 @@ export default function W9RequestsPage() {
                           W9 Status
                         </label>
                         {group.vendor?.id ? (
-                          <Select
-                            value={group.w9Status || 'Not Required'}
-                            onValueChange={(value) => 
-                              handleUpdateW9Status(group.vendor!.id, value)
-                            }
-                            disabled={updatingStatus.has(group.vendor.id)}
-                          >
-                            <SelectTrigger className="w-[180px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Not Required">Not Required</SelectItem>
-                              <SelectItem value="Required">Required</SelectItem>
-                              <SelectItem value="Pending">Pending</SelectItem>
-                              <SelectItem value="Received">Received</SelectItem>
-                              <SelectItem value="Expired">Expired</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <div className="flex flex-col gap-1">
+                            <Select
+                              value={group.w9Status || 'Not Required'}
+                              onValueChange={(value) => 
+                                handleUpdateW9Status(group.vendor!.id, value)
+                              }
+                              disabled={updatingStatus.has(group.vendor.id) || !canManageW9Status}
+                            >
+                              <SelectTrigger className="w-[180px]">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Not Required">Not Required</SelectItem>
+                                <SelectItem value="Required">Required</SelectItem>
+                                <SelectItem value="Pending">Pending</SelectItem>
+                                <SelectItem value="Received">Received</SelectItem>
+                                <SelectItem value="Expired">Expired</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            {!canManageW9Status && (
+                              <p className="text-xs text-muted-foreground">
+                                Contact administrator for W9 status updates
+                              </p>
+                            )}
+                          </div>
                         ) : (
                           <div>{getStatusBadge(group.w9Status)}</div>
                         )}

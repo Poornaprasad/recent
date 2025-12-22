@@ -248,8 +248,34 @@ export default function UsersPage() {
                           {user.status}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {user.assignedStates || '-'}
+                      <TableCell>
+                        {user.assignedStates ? (
+                          <div className="flex flex-wrap gap-1">
+                            {(() => {
+                              try {
+                                const states = typeof user.assignedStates === 'string' 
+                                  ? JSON.parse(user.assignedStates) 
+                                  : user.assignedStates;
+                                if (Array.isArray(states) && states.length > 0) {
+                                  return states.map((state: string, index: number) => (
+                                    <Badge 
+                                      key={state} 
+                                      variant={index === 0 ? "default" : "secondary"}
+                                      className="text-xs"
+                                    >
+                                      {state} {index === 0 ? '(Primary)' : '(Secondary)'}
+                                    </Badge>
+                                  ));
+                                }
+                                return <span className="text-muted-foreground text-sm">-</span>;
+                              } catch {
+                                return <span className="text-muted-foreground text-sm">{user.assignedStates}</span>;
+                              }
+                            })()}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">-</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>

@@ -46,6 +46,7 @@ import {
 import { useState, useEffect, useMemo } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/hooks/use-auth-store";
 import { 
   getVendorInvoicesFor1099Action, 
   updateVendor1099StatusAction,
@@ -100,6 +101,7 @@ type SortDirection = 'asc' | 'desc';
 export default function PendingVendorsPage() {
   const { toast } = useToast();
   const router = useRouter();
+  const { user } = useAuthStore();
   const [vendorGroups, setVendorGroups] = useState<VendorInvoiceGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedVendors, setExpandedVendors] = useState<Set<string>>(new Set());
@@ -327,7 +329,12 @@ export default function PendingVendorsPage() {
         updateData.w9Status = status as 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
       }
 
-      const result = await updateVendor1099StatusAction(vendorId, updateData);
+      const result = await updateVendor1099StatusAction(
+        vendorId, 
+        updateData,
+        user?.role,
+        user?.id
+      );
       if (result.success) {
         toast({
           title: 'Status Updated',

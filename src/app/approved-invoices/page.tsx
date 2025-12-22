@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   Clock,
   AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import {
   Table,
@@ -65,7 +66,11 @@ import {
   shouldShowStateFilter,
   getStateOptionsForUser,
   getStateDisplayName,
-  getUserAccessibleStates
+  getUserAccessibleStates,
+  getUserPrimaryState,
+  getUserSecondaryState,
+  hasPrimaryAndSecondaryStates,
+  getOppositeState
 } from "@/hooks/use-state-filter";
 
 interface CaseGroup {
@@ -83,6 +88,10 @@ export default function ApprovedInvoicesPage() {
   const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
   const showStateFilter = shouldShowStateFilter(user);
   const stateOptions = getStateOptionsForUser(user);
+  const hasBothStates = hasPrimaryAndSecondaryStates(user);
+  const primaryState = getUserPrimaryState(user);
+  const secondaryState = getUserSecondaryState(user);
+  const oppositeState = getOppositeState(user, effectiveStateFilter);
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [caseFilter, setCaseFilter] = useState<string>('all');
@@ -271,6 +280,25 @@ export default function ApprovedInvoicesPage() {
             </Badge>
           )}
         </div>
+        {/* State Switcher Button - Show when user has both primary and secondary states */}
+        {hasBothStates && oppositeState && (
+          <Button
+            onClick={() => setSelectedState(oppositeState)}
+            variant={effectiveStateFilter === primaryState ? "default" : "outline"}
+            size="sm"
+            className="gap-2"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span className="hidden sm:inline">
+              {effectiveStateFilter === primaryState 
+                ? `Load ${secondaryState} First` 
+                : `Load ${primaryState} First`}
+            </span>
+            <span className="sm:hidden">
+              {effectiveStateFilter === primaryState ? secondaryState : primaryState}
+            </span>
+          </Button>
+        )}
       </div>
 
       {/* Summary Cards */}

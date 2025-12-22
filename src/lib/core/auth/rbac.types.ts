@@ -37,4 +37,9 @@ export enum Permission {
   // Dashboard
   VIEW_DASHBOARD = 'view_dashboard',
   VIEW_ALL_DASHBOARDS = 'view_all_dashboards',
+  
+  // Vendor & W9 Management
+  MANAGE_W9_STATUS = 'manage_w9_status',
+  VIEW_VENDORS = 'view_vendors',
+  EDIT_VENDORS = 'edit_vendors',
 }

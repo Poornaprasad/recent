@@ -26,6 +26,7 @@ import {
   AlertTriangle,
   FileText,
   Layers,
+  RefreshCw,
 } from "lucide-react";
 import {
   Table,
@@ -78,7 +79,11 @@ import {
   getEffectiveStateFilter,
   shouldShowStateFilter,
   getStateOptionsForUser,
-  getStateDisplayName
+  getStateDisplayName,
+  getUserPrimaryState,
+  getUserSecondaryState,
+  hasPrimaryAndSecondaryStates,
+  getOppositeState
 } from "@/hooks/use-state-filter";
 
 export default function ApprovalsPage() {
@@ -88,6 +93,10 @@ export default function ApprovalsPage() {
   const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
   const showStateFilter = shouldShowStateFilter(user);
   const stateOptions = getStateOptionsForUser(user);
+  const hasBothStates = hasPrimaryAndSecondaryStates(user);
+  const primaryState = getUserPrimaryState(user);
+  const secondaryState = getUserSecondaryState(user);
+  const oppositeState = getOppositeState(user, effectiveStateFilter);
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [vendorFilter, setVendorFilter] = useState<string>('all');
@@ -444,8 +453,28 @@ export default function ApprovalsPage() {
             </Badge>
           )}
         </div>
-        {selectedInvoices.size > 0 && (
-          <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {/* State Switcher Button - Show when user has both primary and secondary states */}
+          {hasBothStates && oppositeState && (
+            <Button
+              onClick={() => setSelectedState(oppositeState)}
+              variant={effectiveStateFilter === primaryState ? "default" : "outline"}
+              size="sm"
+              className="gap-2"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span className="hidden sm:inline">
+                {effectiveStateFilter === primaryState 
+                  ? `Load ${secondaryState} First` 
+                  : `Load ${primaryState} First`}
+              </span>
+              <span className="sm:hidden">
+                {effectiveStateFilter === primaryState ? secondaryState : primaryState}
+              </span>
+            </Button>
+          )}
+          {selectedInvoices.size > 0 && (
+            <div className="flex gap-2">
             <Button 
               variant="default" 
               size="sm"
@@ -462,8 +491,9 @@ export default function ApprovalsPage() {
               <Square className="mr-2 h-4 w-4" />
               Reject Selected ({selectedInvoices.size})
             </Button>
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

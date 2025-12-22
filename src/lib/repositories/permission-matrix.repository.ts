@@ -114,6 +114,9 @@ export async function initializeDefaultPermissions(): Promise<void> {
     { role: 'admin', permission: 'export_data', isGranted: true },
     { role: 'admin', permission: 'view_dashboard', isGranted: true },
     { role: 'admin', permission: 'view_all_dashboards', isGranted: true },
+    { role: 'admin', permission: 'manage_w9_status', isGranted: true },
+    { role: 'admin', permission: 'view_vendors', isGranted: true },
+    { role: 'admin', permission: 'edit_vendors', isGranted: true },
     
     // Director
     { role: 'director', permission: 'view_invoices', isGranted: true },

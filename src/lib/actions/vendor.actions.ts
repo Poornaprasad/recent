@@ -231,6 +231,7 @@ export async function getVendorInvoicesFor1099Action(): Promise<ActionResult<Arr
 
 /**
  * Update vendor 1099/W9 status
+ * Requires MANAGE_W9_STATUS permission (Admin has this by default)
  */
 export async function updateVendor1099StatusAction(
   vendorId: string,
@@ -239,8 +240,33 @@ export async function updateVendor1099StatusAction(
     w9Status?: 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
   },
   performedByUserId?: string
+  },
+  currentUserRole?: string,
+  currentUserId?: string
 ): Promise<{ success: boolean; error?: string }> {
   return withActionHandler(async () => {
+    // Check permission if W9 status is being updated
+    if (status.w9Status !== undefined) {
+      const { rbacService, Permission, UserRole } = await import('../core/auth/rbac.service');
+
+      // Require user role for permission check
+      if (!currentUserRole) {
+        throw new Error('Authentication required to update W9 status.');
+      }
+
+      const userRole = currentUserRole as UserRole;
+
+      // Admin has all permissions by default
+      if (userRole !== UserRole.ADMIN) {
+        const userPermissions = rbacService.getUserPermissionsSync(userRole);
+
+        // Check if user has MANAGE_W9_STATUS permission
+        if (!rbacService.hasPermission(userPermissions, Permission.MANAGE_W9_STATUS)) {
+          throw new Error('You do not have permission to update W9 status. Please contact an administrator.');
+        }
+      }
+    }
+
     const vendor = await vendorService.getVendorById(vendorId);
     if (!vendor) {
       throw new Error('Vendor not found');
@@ -291,6 +317,7 @@ export async function updateVendor1099StatusAction(
 
     revalidatePath('/w9-requests');
     revalidatePath('/vendors');
+    revalidatePath('/1099-requests');
     return { success: true };
   }, 'Failed to update vendor 1099 status');
 }

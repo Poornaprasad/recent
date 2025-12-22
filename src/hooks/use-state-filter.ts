@@ -83,6 +83,7 @@ export const useStateFilter = create<StateFilterState>()(
 
 /**
  * Get states accessible to the user based on their role and assigned states
+ * Returns primary and secondary states in order
  */
 export function getUserAccessibleStates(user: User | null): string[] {
   if (!user) return ['CA', 'NY'];
@@ -94,22 +95,64 @@ export function getUserAccessibleStates(user: User | null): string[] {
   
   // State accountants can see their state + assigned states
   const states: string[] = [];
-  if (user.role === 'ny_accountant') {
-    states.push('NY');
-  } else if (user.role === 'ca_accountant') {
-    states.push('CA');
+  
+  // Parse assignedStates - first is primary, second is secondary
+  let primaryState: string | null = null;
+  let secondaryState: string | null = null;
+  
+  if (user.assignedStates) {
+    try {
+      const parsed = typeof user.assignedStates === 'string' 
+        ? JSON.parse(user.assignedStates) 
+        : user.assignedStates;
+      
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        primaryState = parsed[0];
+        if (parsed.length > 1) {
+          secondaryState = parsed[1];
+        }
+      }
+    } catch {
+      // If parsing fails, treat as single state or use role default
+    }
   }
   
-  // Add assigned states
-  if (user.assignedStates) {
-    user.assignedStates.forEach(state => {
-      if (!states.includes(state)) {
-        states.push(state);
-      }
-    });
+  // For NY/CA accountants, use assigned states or role default
+  if (user.role === 'ny_accountant') {
+    if (primaryState) {
+      states.push(primaryState);
+      if (secondaryState) states.push(secondaryState);
+    } else {
+      // Default: NY is primary
+      states.push('NY');
+    }
+  } else if (user.role === 'ca_accountant') {
+    if (primaryState) {
+      states.push(primaryState);
+      if (secondaryState) states.push(secondaryState);
+    } else {
+      // Default: CA is primary
+      states.push('CA');
+    }
   }
   
   return states;
+}
+
+/**
+ * Get primary state for a user
+ */
+export function getUserPrimaryState(user: User | null): string | null {
+  const states = getUserAccessibleStates(user);
+  return states.length > 0 ? states[0] : null;
+}
+
+/**
+ * Get secondary state for a user
+ */
+export function getUserSecondaryState(user: User | null): string | null {
+  const states = getUserAccessibleStates(user);
+  return states.length > 1 ? states[1] : null;
 }
 
 /**
@@ -144,6 +187,27 @@ export function getStateOptionsForUser(user: User | null): StateOption[] {
 }
 
 /**
+ * Check if user has both primary and secondary states
+ */
+export function hasPrimaryAndSecondaryStates(user: User | null): boolean {
+  const states = getUserAccessibleStates(user);
+  return states.length === 2;
+}
+
+/**
+ * Get the opposite state for switching (if user has access to both)
+ */
+export function getOppositeState(user: User | null, currentState: StateFilterValue): StateFilterValue | null {
+  if (!user || currentState === 'all') return null;
+  
+  const accessibleStates = getUserAccessibleStates(user);
+  if (accessibleStates.length !== 2) return null;
+  
+  const opposite = accessibleStates.find(state => state !== currentState);
+  return opposite ? (opposite as StateFilterValue) : null;
+}
+
+/**
  * Get display name for a state code
  */
 export function getStateDisplayName(state: string): string {
@@ -160,7 +224,7 @@ export function getStateDisplayName(state: string): string {
 /**
  * Get effective state filter for a user
  * For single-state users, returns their only accessible state
- * For multi-state users, returns the selected state
+ * For multi-state users, returns the selected state (or 'all' if not set)
  */
 export function getEffectiveStateFilter(user: User | null, selectedState: StateFilterValue): StateFilterValue {
   const accessibleStates = getUserAccessibleStates(user);
@@ -170,7 +234,16 @@ export function getEffectiveStateFilter(user: User | null, selectedState: StateF
     return accessibleStates[0] as StateFilterValue;
   }
   
-  // For multi-state users, return the selected state
+  // For multi-state users, validate selected state is accessible
+  if (selectedState !== 'all' && accessibleStates.includes(selectedState)) {
+    return selectedState;
+  }
+  
+  // Default to primary state if selected state is not accessible
+  if (accessibleStates.length > 0) {
+    return accessibleStates[0] as StateFilterValue;
+  }
+  
   return selectedState;
 }
 
