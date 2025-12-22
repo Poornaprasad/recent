@@ -73,6 +73,8 @@ import {
   useStateFilter, 
   STATE_OPTIONS, 
   type StateFilterValue,
+  type DocumentTypeFilterValue,
+  DOCUMENT_TYPE_OPTIONS,
   getEffectiveStateFilter,
   shouldShowStateFilter,
   getStateOptionsForUser,
@@ -82,13 +84,12 @@ import {
 export default function ApprovalsPage() {
   const { user } = useAuthStore();
   const { toast } = useToast();
-  const { selectedState, setSelectedState } = useStateFilter();
+  const { selectedState, setSelectedState, documentType, setDocumentType } = useStateFilter();
   const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
   const showStateFilter = shouldShowStateFilter(user);
   const stateOptions = getStateOptionsForUser(user);
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
   const [vendorFilter, setVendorFilter] = useState<string>('all');
   const [caseFilter, setCaseFilter] = useState<string>('all');
   const [duplicateFilter, setDuplicateFilter] = useState<string>('all'); // 'all', 'duplicates', 'same-case'
@@ -211,7 +212,7 @@ export default function ApprovalsPage() {
     let filtered = filterInvoices(stateFilteredInvoices, {
       searchTerm,
       statusFilter: 'all', // Show all statuses (Review, Pending, Draft) - already filtered in loadInvoices
-      documentTypeFilter,
+      documentTypeFilter: documentType,
       vendorFilter,
     });
 
@@ -228,7 +229,7 @@ export default function ApprovalsPage() {
     }
 
     return filtered;
-  }, [stateFilteredInvoices, searchTerm, documentTypeFilter, vendorFilter, caseFilter, duplicateFilter, sameCaseDuplicates]);
+  }, [stateFilteredInvoices, searchTerm, documentType, vendorFilter, caseFilter, duplicateFilter, sameCaseDuplicates]);
 
   // Sort invoices
   const sortedInvoices = useMemo(() => {
@@ -496,8 +497,26 @@ export default function ApprovalsPage() {
                 className="pl-9"
               />
             </div>
-            <Select value={documentTypeFilter} onValueChange={(value) => {
-              setDocumentTypeFilter(value);
+            {showStateFilter && (
+              <Select value={selectedState} onValueChange={(value) => {
+                setSelectedState(value as StateFilterValue);
+                setCurrentPage(1);
+              }}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="State" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stateOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Select value={documentType} onValueChange={(value) => {
+              // Store accepts any string, so we can store any document type
+              setDocumentType(value as DocumentTypeFilterValue);
               setCurrentPage(1);
             }}>
               <SelectTrigger className="w-[150px]">
@@ -527,23 +546,6 @@ export default function ApprovalsPage() {
                 ))}
               </SelectContent>
             </Select>
-            {showStateFilter && (
-              <Select value={selectedState} onValueChange={(value) => {
-                setSelectedState(value as StateFilterValue);
-                setCurrentPage(1);
-              }}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="State" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stateOptions.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
             {uniqueCases.length > 0 && (
               <Select value={caseFilter} onValueChange={(value) => {
                 setCaseFilter(value);

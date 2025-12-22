@@ -49,15 +49,29 @@ import type { StoredInvoice } from '@/lib/domain/types';
 import { encodeId } from "@/lib/utils/id-utils";
 import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { useAuthStore } from "@/hooks/use-auth-store";
-import { getUserAccessibleStates } from "@/hooks/use-state-filter";
+import {
+  useStateFilter,
+  type StateFilterValue,
+  type DocumentTypeFilterValue,
+  DOCUMENT_TYPE_OPTIONS,
+  getEffectiveStateFilter,
+  shouldShowStateFilter,
+  getStateOptionsForUser,
+  getStateDisplayName,
+  getUserAccessibleStates
+} from "@/hooks/use-state-filter";
+import { MapPin } from "lucide-react";
 import { parseInvoiceAmount } from '@/lib/utils/invoice-utils';
 
 export default function EscalationsPage() {
   const { user } = useAuthStore();
+  const { selectedState, setSelectedState, documentType, setDocumentType } = useStateFilter();
+  const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
+  const showStateFilter = shouldShowStateFilter(user);
+  const stateOptions = getStateOptionsForUser(user);
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [escalationLevelFilter, setEscalationLevelFilter] = useState<string>('all');
-  const [stateFilter, setStateFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('amount');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -94,14 +108,22 @@ export default function EscalationsPage() {
     loadInvoices();
   }, [loadInvoices]);
 
+  // Filter invoices by effective state filter first
+  const stateFilteredInvoices = useMemo(() => {
+    if (effectiveStateFilter === 'all') {
+      return invoices;
+    }
+    return invoices.filter(inv => inv.state === effectiveStateFilter);
+  }, [invoices, effectiveStateFilter]);
+
   // Filter invoices
   const filteredInvoices = useMemo(() => {
-    let filtered = invoices;
+    let filtered = stateFilteredInvoices;
 
     // Search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
-      filtered = filtered.filter(inv => 
+      filtered = filtered.filter(inv =>
         (inv.invoiceNumber?.value || '').toLowerCase().includes(searchLower) ||
         (inv.vendorName?.value || '').toLowerCase().includes(searchLower) ||
         (inv.caseNumber || '').toLowerCase().includes(searchLower)
@@ -113,13 +135,13 @@ export default function EscalationsPage() {
       filtered = filtered.filter(inv => inv.escalationLevel === escalationLevelFilter);
     }
 
-    // State filter
-    if (stateFilter !== 'all') {
-      filtered = filtered.filter(inv => inv.state === stateFilter);
+    // Document type filter
+    if (documentType !== 'all') {
+      filtered = filtered.filter(inv => inv.documentType === documentType);
     }
 
     return filtered;
-  }, [invoices, searchTerm, escalationLevelFilter, stateFilter]);
+  }, [stateFilteredInvoices, searchTerm, escalationLevelFilter, documentType]);
 
   // Sort invoices
   const sortedInvoices = useMemo(() => {
@@ -134,45 +156,46 @@ export default function EscalationsPage() {
 
   const totalPages = Math.ceil(sortedInvoices.length / rowsPerPage);
 
-  // Stats
+  // Stats - calculated from state-filtered invoices
   const stats = useMemo(() => {
-    const totalEscalated = invoices.length;
-    const critical = invoices.filter(inv => inv.escalationLevel === 'critical').length;
-    const high = invoices.filter(inv => inv.escalationLevel === 'high').length;
-    const standard = invoices.filter(inv => inv.escalationLevel === 'standard').length;
-    
-    const totalAmount = invoices.reduce((sum, inv) => {
+    const totalEscalated = stateFilteredInvoices.length;
+    const critical = stateFilteredInvoices.filter(inv => inv.escalationLevel === 'critical').length;
+    const high = stateFilteredInvoices.filter(inv => inv.escalationLevel === 'high').length;
+
+    const totalAmount = stateFilteredInvoices.reduce((sum, inv) => {
       const amount = parseInvoiceAmount(inv.totalAmount?.value || inv.amount?.value);
       return sum + (amount || 0);
     }, 0);
+
+    const stateLabel = effectiveStateFilter === 'all' ? '' : ` (${effectiveStateFilter})`;
 
     return [
       {
         title: "Total Escalated",
         value: totalEscalated.toString(),
         icon: AlertTriangle,
-        footerText: `${critical} critical, ${high} high`,
+        footerText: `${critical} critical, ${high} high${stateLabel}`,
       },
       {
         title: "Critical",
         value: critical.toString(),
         icon: TrendingUp,
-        footerText: "Requires executive approval",
+        footerText: `Requires executive approval${stateLabel}`,
       },
       {
         title: "High Priority",
         value: high.toString(),
         icon: Clock,
-        footerText: "Requires manager approval",
+        footerText: `Requires manager approval${stateLabel}`,
       },
       {
         title: "Total Amount",
         value: `$${(totalAmount / 1000).toFixed(0)}K`,
         icon: DollarSign,
-        footerText: `Across all escalated`,
+        footerText: `Across escalated${stateLabel}`,
       },
     ];
-  }, [invoices]);
+  }, [stateFilteredInvoices, effectiveStateFilter]);
 
   const handleSort = useCallback((field: SortField) => {
     if (sortField === field) {
@@ -192,11 +215,6 @@ export default function EscalationsPage() {
       : <ArrowDown className="ml-1 h-3 w-3" />;
   });
   SortIcon.displayName = 'SortIcon';
-
-  // Get available states based on user permissions
-  const availableStates = useMemo(() => {
-    return getUserAccessibleStates(user);
-  }, [user]);
 
   const getEscalationBadgeClass = (level?: string) => {
     switch (level) {
@@ -224,11 +242,18 @@ export default function EscalationsPage() {
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
       <div className="flex items-center justify-between space-y-2">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Escalations</h2>
-          <p className="text-muted-foreground mt-1">
-            Invoices that require elevated approval based on amount thresholds
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h2 className="text-3xl font-bold tracking-tight">Escalations</h2>
+            <p className="text-muted-foreground mt-1">
+              Invoices that require elevated approval based on amount thresholds
+            </p>
+          </div>
+          {!showStateFilter && effectiveStateFilter !== 'all' && (
+            <Badge variant="outline" className="text-sm">
+              {getStateDisplayName(effectiveStateFilter)}
+            </Badge>
+          )}
         </div>
       </div>
 
@@ -262,6 +287,38 @@ export default function EscalationsPage() {
                 className="pl-9"
               />
             </div>
+            {showStateFilter && (
+              <Select value={selectedState} onValueChange={(value) => {
+                setSelectedState(value as StateFilterValue);
+                setCurrentPage(1);
+              }}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="State" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stateOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Select value={documentType} onValueChange={(value) => {
+              setDocumentType(value as DocumentTypeFilterValue);
+              setCurrentPage(1);
+            }}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                {DOCUMENT_TYPE_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={escalationLevelFilter} onValueChange={(value) => {
               setEscalationLevelFilter(value);
               setCurrentPage(1);
@@ -276,24 +333,6 @@ export default function EscalationsPage() {
                 <SelectItem value="standard">Standard</SelectItem>
               </SelectContent>
             </Select>
-            {availableStates.length > 0 && (
-              <Select value={stateFilter} onValueChange={(value) => {
-                setStateFilter(value);
-                setCurrentPage(1);
-              }}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="State" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All States</SelectItem>
-                  {availableStates.map(state => (
-                    <SelectItem key={state} value={state}>
-                      {state === 'CA' ? 'California' : state === 'NY' ? 'New York' : state}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
             <Select value={rowsPerPage.toString()} onValueChange={(value) => {
               setRowsPerPage(Number(value));
               setCurrentPage(1);

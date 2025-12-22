@@ -31,10 +31,12 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Eye, AlertTriangle, AlertCircle, Copy, MapPin } from "lucide-react";
 import { getInvoicesAction } from '@/lib/actions/index';
-import { 
-  useStateFilter, 
-  STATE_OPTIONS, 
+import {
+  useStateFilter,
+  STATE_OPTIONS,
   type StateFilterValue,
+  type DocumentTypeFilterValue,
+  DOCUMENT_TYPE_OPTIONS,
   getEffectiveStateFilter,
   shouldShowStateFilter,
   getStateOptionsForUser,
@@ -56,7 +58,7 @@ interface DuplicateWithConflict extends StoredInvoice {
 
 export default function DuplicatesPage() {
   const { user } = useAuthStore();
-  const { selectedState, setSelectedState } = useStateFilter();
+  const { selectedState, setSelectedState, documentType, setDocumentType } = useStateFilter();
   const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
   const showStateFilter = shouldShowStateFilter(user);
   const stateOptions = getStateOptionsForUser(user);
@@ -99,13 +101,22 @@ export default function DuplicatesPage() {
     return null;
   };
 
-  // Filter invoices by effective state filter
+  // Filter invoices by effective state filter and document type
   const filteredInvoices = useMemo(() => {
-    if (effectiveStateFilter === 'all') {
-      return allInvoices;
+    let filtered = allInvoices;
+
+    // State filter
+    if (effectiveStateFilter !== 'all') {
+      filtered = filtered.filter(inv => inv.state === effectiveStateFilter);
     }
-    return allInvoices.filter(inv => inv.state === effectiveStateFilter);
-  }, [allInvoices, effectiveStateFilter]);
+
+    // Document type filter
+    if (documentType !== 'all') {
+      filtered = filtered.filter(inv => inv.documentType === documentType);
+    }
+
+    return filtered;
+  }, [allInvoices, effectiveStateFilter, documentType]);
 
   // Get duplicate invoices with conflict info
   const duplicatesWithConflicts = useMemo(() => {
@@ -227,23 +238,37 @@ export default function DuplicatesPage() {
             </Badge>
           )}
         </div>
-        {showStateFilter && (
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <Select value={selectedState} onValueChange={handleStateChange}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Select State" />
-              </SelectTrigger>
-              <SelectContent>
-                {stateOptions.map(option => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {showStateFilter && (
+            <>
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedState} onValueChange={handleStateChange}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Select State" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stateOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </>
+          )}
+          <Select value={documentType} onValueChange={(value) => setDocumentType(value as DocumentTypeFilterValue)}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              {DOCUMENT_TYPE_OPTIONS.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

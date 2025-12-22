@@ -55,9 +55,11 @@ import { encodeId } from "@/lib/utils/id-utils";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { DocumentTypeCell } from "@/components/invoice/document-type-cell";
-import { 
-  useStateFilter, 
-  type StateFilterValue, 
+import {
+  useStateFilter,
+  type StateFilterValue,
+  type DocumentTypeFilterValue,
+  DOCUMENT_TYPE_OPTIONS,
   filterByState,
   getEffectiveStateFilter,
   shouldShowStateFilter,
@@ -77,7 +79,7 @@ interface CaseGroup {
 
 export default function ApprovedInvoicesPage() {
   const { user } = useAuthStore();
-  const { selectedState, setSelectedState } = useStateFilter();
+  const { selectedState, setSelectedState, documentType, setDocumentType } = useStateFilter();
   const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
   const showStateFilter = shouldShowStateFilter(user);
   const stateOptions = getStateOptionsForUser(user);
@@ -191,6 +193,14 @@ export default function ApprovedInvoicesPage() {
       filtered = filtered.filter(group => group.caseNumber === caseFilter);
     }
 
+    // Document type filter - filter invoices within each group
+    if (documentType !== 'all') {
+      filtered = filtered.map(group => ({
+        ...group,
+        invoices: group.invoices.filter(inv => inv.documentType === documentType),
+      })).filter(group => group.invoices.length > 0);
+    }
+
     // Search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
@@ -208,7 +218,7 @@ export default function ApprovedInvoicesPage() {
     }
 
     return filtered;
-  }, [stateFilteredCaseGroups, caseFilter, searchTerm]);
+  }, [stateFilteredCaseGroups, caseFilter, documentType, searchTerm]);
 
   // Get unique case numbers for filter
   const uniqueCases = useMemo(() => {
@@ -339,6 +349,18 @@ export default function ApprovedInvoicesPage() {
                 </SelectContent>
               </Select>
             )}
+            <Select value={documentType} onValueChange={(value) => setDocumentType(value as DocumentTypeFilterValue)}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                {DOCUMENT_TYPE_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {uniqueCases.length > 0 && (
               <Select value={caseFilter} onValueChange={setCaseFilter}>
                 <SelectTrigger className="w-[180px]">
