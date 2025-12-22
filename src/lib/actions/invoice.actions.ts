@@ -358,6 +358,7 @@ export async function updateInvoiceFieldAction(
 
 /**
  * Update invoice with disbursement response
+ * If vendor's cumulative total is below $600, automatically marks invoice as "Paid"
  */
 export async function updateInvoiceDisbursementResponseAction(
   invoiceId: string,
@@ -367,12 +368,92 @@ export async function updateInvoiceDisbursementResponseAction(
     await initDb();
     const db = getDb();
 
+    // Get the invoice to check vendor and calculate cumulative total
+    const invoice = await findInvoiceById(invoiceId);
+    if (!invoice) {
+      throw new Error('Invoice not found');
+    }
+
     const updateData: Record<string, any> = {
       disbursementResponse: typeof disbursementResponse === 'string' 
         ? disbursementResponse 
         : JSON.stringify(disbursementResponse),
       updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
     };
+
+    // Check if vendor's cumulative total is below $600
+    // If so, mark invoice as "Paid" when pushed to CRM
+    const vendorName = invoice.vendorName?.value;
+    if (vendorName) {
+      const { parseInvoiceAmount } = await import('../utils/invoice-utils');
+      const { findInvoicesByVendorName } = await import('../repositories/invoice.repository');
+      
+      // Get all invoices for this vendor
+      const vendorInvoices = await findInvoicesByVendorName(vendorName);
+      
+      // Helper function to get financial year (calendar year) from invoice date
+      const getFinancialYear = (invoiceDate: string | null | undefined): number | null => {
+        if (!invoiceDate) return null;
+        try {
+          const date = new Date(invoiceDate);
+          if (isNaN(date.getTime())) return null;
+          return date.getFullYear();
+        } catch {
+          return null;
+        }
+      };
+      
+      // Get the current invoice's financial year
+      const currentInvoiceDate = typeof invoice.invoiceDate === 'object' && invoice.invoiceDate?.value 
+        ? invoice.invoiceDate.value 
+        : invoice.invoiceDate;
+      const currentFinancialYear = getFinancialYear(currentInvoiceDate);
+      
+      if (currentFinancialYear !== null) {
+        // Calculate cumulative total for this vendor in the same financial year
+        // Only count invoices that have been pushed to CRM (have disbursementResponse)
+        // This represents the cumulative amount that has been paid to the vendor
+        let cumulativeTotal = 0;
+        for (const inv of vendorInvoices) {
+          // Skip receipts - only track invoices for cumulative calculation
+          if (inv.documentType === 'Receipt') {
+            continue;
+          }
+          
+          // Only process invoices with documentType === 'Invoice' or undefined/null (legacy invoices)
+          if (inv.documentType && inv.documentType !== 'Invoice') {
+            continue;
+          }
+          
+          // Only count invoices that have been pushed to CRM (have disbursementResponse)
+          // This ensures we only count invoices that have actually been paid
+          if (!inv.disbursementResponse) {
+            continue;
+          }
+          
+          // Get invoice date and financial year
+          const invDate = typeof inv.invoiceDate === 'object' && inv.invoiceDate?.value 
+            ? inv.invoiceDate.value 
+            : inv.invoiceDate;
+          const invFinancialYear = getFinancialYear(invDate);
+          
+          // Only count invoices in the same financial year
+          if (invFinancialYear === currentFinancialYear) {
+            const amount = parseInvoiceAmount(inv.totalAmount?.value || inv.amount?.value);
+            cumulativeTotal += amount || 0;
+          }
+        }
+        
+        // Add the current invoice amount to the cumulative total
+        const currentInvoiceAmount = parseInvoiceAmount(invoice.totalAmount?.value || invoice.amount?.value);
+        const totalWithCurrent = cumulativeTotal + currentInvoiceAmount;
+        
+        // If cumulative total (including current invoice) is below $600, mark invoice as "Paid"
+        if (totalWithCurrent < 600) {
+          updateData.status = 'Paid';
+        }
+      }
+    }
 
     await db
       .update(invoices)
@@ -382,6 +463,7 @@ export async function updateInvoiceDisbursementResponseAction(
     revalidatePath(`/invoices/${invoiceId}`);
     revalidatePath('/approvals');
     revalidatePath('/invoices');
+    revalidatePath('/w9-requests');
     return { success: true };
   }, 'Failed to update disbursement response');
 }
