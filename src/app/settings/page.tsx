@@ -153,7 +153,7 @@ export default function SettingsPage() {
         Manage your account settings and preferences.
       </p>
 
-      <Tabs defaultValue="profile" className="w-full max-w-3xl" aria-label="Settings sections">
+      <Tabs defaultValue="profile" className="w-full max-w-3xl mx-auto" aria-label="Settings sections">
         <TabsList className="grid w-full grid-cols-3 mb-6" aria-label="Settings tabs">
           <TabsTrigger value="profile" aria-controls="profile-tab">
             <User className="mr-1.5 h-4 w-4 hidden sm:inline-block" aria-hidden="true" />

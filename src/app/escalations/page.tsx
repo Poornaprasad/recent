@@ -287,20 +287,6 @@ export default function EscalationsPage() {
                 className="pl-9"
               />
             </div>
-            <Select value={escalationLevelFilter} onValueChange={(value) => {
-              setEscalationLevelFilter(value);
-              setCurrentPage(1);
-            }}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Level" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Levels</SelectItem>
-                <SelectItem value="critical">Critical</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="standard">Standard</SelectItem>
-              </SelectContent>
-            </Select>
             {showStateFilter && (
               <Select value={selectedState} onValueChange={(value) => {
                 setSelectedState(value as StateFilterValue);
@@ -331,6 +317,20 @@ export default function EscalationsPage() {
                     {option.label}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <Select value={escalationLevelFilter} onValueChange={(value) => {
+              setEscalationLevelFilter(value);
+              setCurrentPage(1);
+            }}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Level" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Levels</SelectItem>
+                <SelectItem value="critical">Critical</SelectItem>
+                <SelectItem value="high">High</SelectItem>
+                <SelectItem value="standard">Standard</SelectItem>
               </SelectContent>
             </Select>
             <Select value={rowsPerPage.toString()} onValueChange={(value) => {

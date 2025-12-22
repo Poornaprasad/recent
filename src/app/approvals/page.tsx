@@ -496,6 +496,23 @@ export default function ApprovalsPage() {
                 className="pl-9"
               />
             </div>
+            {showStateFilter && (
+              <Select value={selectedState} onValueChange={(value) => {
+                setSelectedState(value as StateFilterValue);
+                setCurrentPage(1);
+              }}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="State" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stateOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={documentTypeFilter} onValueChange={(value) => {
               setDocumentTypeFilter(value);
               setCurrentPage(1);
@@ -527,23 +544,6 @@ export default function ApprovalsPage() {
                 ))}
               </SelectContent>
             </Select>
-            {showStateFilter && (
-              <Select value={selectedState} onValueChange={(value) => {
-                setSelectedState(value as StateFilterValue);
-                setCurrentPage(1);
-              }}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="State" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stateOptions.map(option => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
             {uniqueCases.length > 0 && (
               <Select value={caseFilter} onValueChange={(value) => {
                 setCaseFilter(value);

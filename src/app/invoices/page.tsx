@@ -315,47 +315,6 @@ export default function InvoicesPage() {
                 className="pl-9"
               />
             </div>
-            <Select value={statusFilter} onValueChange={(value) => {
-              setStatusFilter(value);
-              setCurrentPage(1);
-            }}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="Paid">Paid</SelectItem>
-                <SelectItem value="Pending">Pending</SelectItem>
-                <SelectItem value="Review">Review</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={documentTypeFilter} onValueChange={(value) => {
-              setDocumentTypeFilter(value);
-              setCurrentPage(1);
-            }}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="Invoice">Invoice</SelectItem>
-                <SelectItem value="Receipt">Receipt</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={vendorFilter} onValueChange={(value) => {
-              setVendorFilter(value);
-              setCurrentPage(1);
-            }}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Vendor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Vendors</SelectItem>
-                {uniqueVendors.map(vendor => (
-                  <SelectItem key={vendor} value={vendor}>{vendor}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             {showStateFilter && (
               <Select value={selectedState} onValueChange={(value) => {
                 setSelectedState(value as StateFilterValue);
@@ -373,6 +332,47 @@ export default function InvoicesPage() {
                 </SelectContent>
               </Select>
             )}
+            <Select value={documentTypeFilter} onValueChange={(value) => {
+              setDocumentTypeFilter(value);
+              setCurrentPage(1);
+            }}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="Invoice">Invoice</SelectItem>
+                <SelectItem value="Receipt">Receipt</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={(value) => {
+              setStatusFilter(value);
+              setCurrentPage(1);
+            }}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="Paid">Paid</SelectItem>
+                <SelectItem value="Pending">Pending</SelectItem>
+                <SelectItem value="Review">Review</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={vendorFilter} onValueChange={(value) => {
+              setVendorFilter(value);
+              setCurrentPage(1);
+            }}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Vendor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Vendors</SelectItem>
+                {uniqueVendors.map(vendor => (
+                  <SelectItem key={vendor} value={vendor}>{vendor}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Select value={rowsPerPage.toString()} onValueChange={(value) => {
               setRowsPerPage(Number(value));
               setCurrentPage(1);
