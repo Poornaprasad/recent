@@ -17,7 +17,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useRouter } from "next/navigation";
-import { User, LogIn, LogOut } from "lucide-react";
+import { User, LogIn, LogOut, Settings } from "lucide-react";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { useEffect, useState } from "react";
 
@@ -104,6 +104,11 @@ export function UserNav() {
         <DropdownMenuSeparator />
         {authenticated ? (
           <DropdownMenuGroup>
+            <DropdownMenuItem onClick={() => router.push('/settings')}>
+              <Settings className="mr-2 h-4 w-4" />
+              <span>Settings</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>
               <LogOut className="mr-2 h-4 w-4" />
               <span>Log out</span>
