@@ -69,7 +69,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Progress } from "@/components/ui/progress";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
 import type { StoredInvoice } from "@/lib/domain/types";
 import type { Vendor } from "@/lib/domain/types";
@@ -119,6 +120,7 @@ export default function W9RequestsPage() {
   const [thresholdFilter, setThresholdFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('name');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+  const [showW9Received, setShowW9Received] = useState(false); // Hide W9 received vendors by default
 
   useEffect(() => {
     loadVendorInvoices();
@@ -176,6 +178,15 @@ export default function W9RequestsPage() {
   // Filter and sort vendors
   const filteredAndSortedVendors = useMemo(() => {
     let filtered = vendorGroups.filter(group => {
+      // W9 Received filter - exclude vendors with W9 received or tax ID unless showW9Received is true
+      if (!showW9Received) {
+        const hasW9Received = group.w9Status === 'Received';
+        const hasTaxId = group.vendor?.taxId && group.vendor.taxId.trim() !== '';
+        if (hasW9Received || hasTaxId) {
+          return false;
+        }
+      }
+      
       // Search filter
       const matchesSearch = !searchTerm || 
         group.vendorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -223,7 +234,7 @@ export default function W9RequestsPage() {
     });
 
     return filtered;
-  }, [vendorGroups, searchTerm, statusFilter, thresholdFilter, sortField, sortDirection]);
+  }, [vendorGroups, searchTerm, statusFilter, thresholdFilter, sortField, sortDirection, showW9Received]);
 
   const toggleVendor = (vendorName: string) => {
     const newExpanded = new Set(expandedVendors);
@@ -390,7 +401,7 @@ export default function W9RequestsPage() {
           <div>
             <h2 className="text-3xl font-bold tracking-tight">W9 Requests</h2>
             <p className="text-muted-foreground mt-1">
-            Monitor vendors requiring W9 forms. Track total amounts and ensure forms are received before processing invoices.
+            Track and manage W9 forms for vendors.
             </p>
           </div>
         <div className="flex gap-2">
@@ -493,6 +504,21 @@ export default function W9RequestsPage() {
                     <SelectItem value="above">Above $600</SelectItem>
                   </SelectContent>
                 </Select>
+
+                {/* Show W9 Received Toggle */}
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="show-w9-received"
+                    checked={showW9Received}
+                    onCheckedChange={(checked) => setShowW9Received(checked === true)}
+                  />
+                  <Label
+                    htmlFor="show-w9-received"
+                    className="text-sm font-normal cursor-pointer whitespace-nowrap"
+                  >
+                    Show W9 Received
+                  </Label>
+                </div>
 
                 {/* Sort */}
                 <DropdownMenu>
@@ -660,54 +686,12 @@ export default function W9RequestsPage() {
                   </CardHeader>
                   
                   <CardContent>
-                    <div className="space-y-4">
-                      {/* Vendor Not in List Alert - Top Most */}
-                      {!group.vendor && (
-                        <Alert variant="destructive" className="border-l-4 border-l-red-500 py-2">
-                          <AlertTriangle className="h-3 w-3" />
-                          <AlertTitle className="text-sm">Vendor Not in Vendor List</AlertTitle>
-                          <AlertDescription className="text-xs">
-                            This vendor needs to be added to the vendor list before you can track W9 forms.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      {/* Progress Bar for $600 Threshold */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Progress to $600 threshold</span>
-                          <span className={cn(
-                            "font-medium",
-                            group.totalAmount >= 600 ? "text-green-600" : "text-orange-600"
-                          )}>
-                            {((group.totalAmount / 600) * 100).toFixed(1)}%
-                          </span>
-                        </div>
-                        <Progress 
-                          value={Math.min((group.totalAmount / 600) * 100, 100)} 
-                          className={cn(
-                            "h-2",
-                            group.totalAmount >= 600 ? "bg-green-500" : ""
-                          )}
-                        />
-                      </div>
-
-                      {/* $600 Threshold Warning */}
-                      {group.isBelowThreshold && (
-                        <Alert variant="destructive" className="border-orange-500 py-2">
-                          <AlertTriangle className="h-3 w-3" />
-                          <AlertTitle className="text-sm">Below $600 Threshold</AlertTitle>
-                          <AlertDescription className="text-xs">
-                            Total amount for this vendor is ${(600 - group.totalAmount).toFixed(2)} below the $600 threshold. Monitor before processing payments.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      {/* W9 Status */}
-                      <div className="space-y-2">
+                    <div className="space-y-3">
+                      {/* W9 Status - Simplified */}
+                      <div className="flex items-center justify-between">
                         <label className="text-sm font-medium flex items-center gap-2">
                           <FileText className="h-4 w-4" />
-                          W9 Form Status
+                          W9 Status
                         </label>
                         {group.vendor?.id ? (
                           <Select
@@ -717,7 +701,7 @@ export default function W9RequestsPage() {
                             }
                             disabled={updatingStatus.has(group.vendor.id)}
                           >
-                            <SelectTrigger className="w-full">
+                            <SelectTrigger className="w-[180px]">
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
@@ -733,25 +717,23 @@ export default function W9RequestsPage() {
                         )}
                       </div>
 
-                      {/* Processing Status */}
-                      {group.vendor && !group.canProcessInvoices && (
-                        <Alert className="border-l-4 border-l-yellow-500 py-2">
-                          <AlertTriangle className="h-3 w-3" />
-                          <AlertTitle className="text-sm">W9 Form Required</AlertTitle>
-                          <AlertDescription className="text-xs">
-                            Cannot process approved invoices until W9 form is marked as Received.
-                          </AlertDescription>
-                        </Alert>
+                      {/* Simplified Status Info */}
+                      {!group.vendor && (
+                        <div className="text-sm text-muted-foreground">
+                          Add vendor to track W9 status
+                        </div>
+                      )}
+                      
+                      {group.isBelowThreshold && group.vendor && (
+                        <div className="text-sm text-orange-600 dark:text-orange-400">
+                          Below $600 threshold (${group.totalAmount.toFixed(2)} / $600.00)
+                        </div>
                       )}
 
-                      {group.vendor && group.canProcessInvoices && (
-                        <Alert className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800 border-l-4 border-l-green-500 py-2">
-                          <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
-                          <AlertTitle className="text-sm text-green-800 dark:text-green-200">Ready to Process</AlertTitle>
-                          <AlertDescription className="text-xs text-green-700 dark:text-green-300">
-                            W9 form is received. Approved invoices can be processed.
-                          </AlertDescription>
-                        </Alert>
+                      {group.vendor && !group.canProcessInvoices && (
+                        <div className="text-sm text-yellow-600 dark:text-yellow-400">
+                          W9 form required to process invoices
+                        </div>
                       )}
 
                       {/* Invoices List */}

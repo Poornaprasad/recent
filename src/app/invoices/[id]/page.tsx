@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { type StoredInvoice, type DocumentType } from '@/lib/domain/types';
 import { cn } from '@/lib/utils/utils';
-import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, completeVendorSetupAction, getInvoicesAction, checkCaseForDuplicatesAction, type DuplicateCheckResult } from '@/lib/actions/index';
+import { updateInvoiceStatusAction, getInvoiceByIdAction, getInvoiceDataUriAction, flagInvoiceForReviewAction, addInvoiceCommentAction, completeVendorSetupAction, getInvoicesAction, checkCaseForDuplicatesAction, canApproveInvoiceAction, type DuplicateCheckResult } from '@/lib/actions/index';
 import { getCaseInfoAction } from '@/lib/actions/case.actions';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +65,8 @@ export default function InvoiceDetailPage() {
   const [missingFields, setMissingFields] = useState<string[]>([]);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [duplicateCheckResult, setDuplicateCheckResult] = useState<DuplicateCheckResult | null>(null);
+  const [canApprove, setCanApprove] = useState(true);
+  const [approvalError, setApprovalError] = useState<string | null>(null);
 
   // Debug: Log modal state changes
   useEffect(() => {
@@ -160,6 +162,16 @@ export default function InvoiceDetailPage() {
             setInvoiceDataUri(uriResult.dataUri);
           } else {
             setInvoiceDataUri(result.data.invoiceDataUri);
+          }
+          
+          // Check if invoice can be approved (W9/tax ID check)
+          if (result.data.status === 'Review') {
+            const approvalCheck = await canApproveInvoiceAction(id);
+            setCanApprove(approvalCheck.canApprove || false);
+            setApprovalError(approvalCheck.error || null);
+          } else {
+            setCanApprove(true);
+            setApprovalError(null);
           }
         }
       }
@@ -657,10 +669,43 @@ export default function InvoiceDetailPage() {
             {/* Alerts Section - Compact */}
             <div className="space-y-2 mb-4">
               {invoiceData.isDuplicate && invoiceData.duplicateReason && (
-                <div className="p-2 rounded-md border border-destructive/50 bg-destructive/10 flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <div className="p-3 rounded-md border border-destructive/50 bg-destructive/10">
+                  <div className="flex items-center gap-2 mb-2">
                     <Badge variant="destructive" className="text-xs">Duplicate</Badge>
-                    <span className="text-xs text-destructive/80">{invoiceData.duplicateReason}</span>
+                    <span className="text-xs text-destructive/80 font-semibold">Duplicate Invoice Detected</span>
+                  </div>
+                  <div className="space-y-2">
+                    {(() => {
+                      const isOriginalApproved = invoiceData.duplicateReason.includes('Original invoice has been approved and pushed to CRM');
+                      const isOriginalNotApproved = invoiceData.duplicateReason.includes('Original invoice is not yet approved/pushed to CRM');
+                      const mainMessage = invoiceData.duplicateReason.split('. Original invoice')[0];
+                      
+                      return (
+                        <>
+                          <p className="text-xs text-destructive/80">{mainMessage}</p>
+                          {isOriginalApproved && (
+                            <div className="mt-2 p-2 rounded-md bg-yellow-500/20 border border-yellow-500/50">
+                              <p className="text-xs font-semibold text-yellow-700 dark:text-yellow-300">
+                                ⚠️ Original invoice has been approved and pushed to CRM
+                              </p>
+                              <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                                This is a duplicate of an invoice that has already been processed and sent to the CRM system.
+                              </p>
+                            </div>
+                          )}
+                          {isOriginalNotApproved && (
+                            <div className="mt-2 p-2 rounded-md bg-blue-500/20 border border-blue-500/50">
+                              <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                                ℹ️ Original invoice is not yet approved/pushed to CRM
+                              </p>
+                              <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                                The original invoice exists but has not been fully processed yet.
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
@@ -1125,9 +1170,11 @@ export default function InvoiceDetailPage() {
                     </Button>
                     <Button 
                       onClick={() => handleStatusUpdate('Pending')} 
-                      disabled={isUpdating || invoiceData.vendorRequires1099 || !isFormValid} 
+                      disabled={isUpdating || invoiceData.vendorRequires1099 || !isFormValid || !canApprove} 
                       title={
-                        invoiceData.vendorRequires1099 
+                        !canApprove && approvalError
+                          ? approvalError
+                          : invoiceData.vendorRequires1099 
                           ? 'Vendor must be set up before approving' 
                           : !isFormValid && missingFields.length > 0
                           ? `Please fill in required fields: ${missingFields.join(', ')}`
@@ -1137,7 +1184,12 @@ export default function InvoiceDetailPage() {
                       <Check className="mr-2 h-4 w-4" />
                       Approve
                     </Button>
-                    {invoiceData.vendorRequires1099 && (
+                    {!canApprove && approvalError && (
+                      <p className="text-xs text-destructive self-center max-w-md">
+                        {approvalError}
+                      </p>
+                    )}
+                    {invoiceData.vendorRequires1099 && canApprove && (
                       <p className="text-xs text-muted-foreground self-center">
                         Complete vendor setup to approve
                       </p>

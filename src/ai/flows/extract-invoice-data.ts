@@ -228,6 +228,7 @@ Document: {{media url=invoiceDataUri}}
 
 
 import { checkForDuplicateInvoice } from '@/lib/repositories/invoice.repository';
+import { isApprovedAndPushedToCrm } from '@/lib/utils/status-utils';
 
 const checkForDuplicatesTool = ai.defineTool(
     {
@@ -278,9 +279,27 @@ const checkForDuplicatesTool = ai.defineTool(
             reasonParts.push(`date ${duplicateInvoiceDate}`);
         }
         
-        const reason = reasonParts.length > 0 
+        // Check if the original duplicate invoice has been approved and pushed to CRM
+        const originalIsApprovedAndPushed = isApprovedAndPushedToCrm(duplicate);
+        
+        // Check if the duplicate has a case number (to determine if this is a cross-case or same-case duplicate)
+        const duplicateHasCaseNumber = duplicate.caseNumber && duplicate.caseNumber.trim().length > 0;
+        
+        let reason = reasonParts.length > 0 
             ? `Duplicate found: matching ${reasonParts.join(', ')}`
             : 'Duplicate invoice found';
+        
+        // Add note about case number if duplicate doesn't have one (meaning we're checking among unassigned invoices)
+        if (!duplicateHasCaseNumber) {
+            reason += ` (among invoices without case number)`;
+        }
+        
+        // Add information about the original invoice status
+        if (originalIsApprovedAndPushed) {
+            reason += `. Original invoice has been approved and pushed to CRM`;
+        } else {
+            reason += `. Original invoice is not yet approved/pushed to CRM`;
+        }
         
         return { 
             isDuplicate: true,

@@ -4,14 +4,15 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import type { StoredInvoice } from '@/lib/domain/types';
-import { processInvoiceAction, getPendingVendorByInvoiceIdAction, completeVendorSetupAction, getVendorTypesAction } from '@/lib/actions/index';
+import { processInvoiceAction, getPendingVendorByInvoiceIdAction, completeVendorSetupAction, getVendorTypesAction, lookupContactsAction } from '@/lib/actions/index';
 import { useToast } from "@/hooks/use-toast";
 import { UploadView } from "@/components/invoice/upload-view";
 import { ReviewView } from "@/components/invoice/review-view";
 import { LoadingView } from "@/components/invoice/loading-view";
 import { BulkProcessingView } from "@/components/invoice/bulk-processing-view";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Search, Loader2 } from "lucide-react";
+import type { ContactLookupResult } from '@/lib/crm/smartadvocate/types';
 import { convertPdfToImageClient } from "@/lib/pdf-to-image-client";
 import {
   Dialog,
@@ -58,6 +59,11 @@ export default function InvoiceProcessorPage() {
   const [requires1099, setRequires1099] = useState(true);
   const [isProcessingVendor, setIsProcessingVendor] = useState(false);
   const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  const [isLookupOpen, setIsLookupOpen] = useState(false);
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
+  const [contactSearchResults, setContactSearchResults] = useState<ContactLookupResult[]>([]);
+  const [isSearchingContacts, setIsSearchingContacts] = useState(false);
+  const [contactSearchError, setContactSearchError] = useState<string>('');
   const [bulkFiles, setBulkFiles] = useState<File[]>([]);
   const [bulkProgress, setBulkProgress] = useState<FileProgress[]>([]);
   const [currentProcessingIndex, setCurrentProcessingIndex] = useState(0);
@@ -294,15 +300,48 @@ export default function InvoiceProcessorPage() {
     router.push('/invoices');
   };
 
-  const DuplicateAlert = ({reason}: {reason: string}) => (
-    <div className="container py-4">
-        <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>Potential Duplicate Detected</AlertTitle>
-            <AlertDescription>{reason}</AlertDescription>
-        </Alert>
-    </div>
-  )
+  const DuplicateAlert = ({reason}: {reason: string}) => {
+    // Parse the reason to extract status information
+    const isOriginalApproved = reason.includes('Original invoice has been approved and pushed to CRM');
+    const isOriginalNotApproved = reason.includes('Original invoice is not yet approved/pushed to CRM');
+    
+    // Extract the main duplicate message (before the status info)
+    const mainMessage = reason.split('. Original invoice')[0];
+    
+    return (
+      <div className="container py-4">
+          <Alert variant="destructive">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Potential Duplicate Detected</AlertTitle>
+              <AlertDescription>
+                <div className="space-y-2">
+                  <p>{mainMessage}</p>
+                  {isOriginalApproved && (
+                    <div className="mt-2 p-2 rounded-md bg-yellow-500/20 border border-yellow-500/50">
+                      <p className="text-sm font-semibold text-yellow-700 dark:text-yellow-300">
+                        ⚠️ Original invoice has been approved and pushed to CRM
+                      </p>
+                      <p className="text-xs text-yellow-600 dark:text-yellow-400 mt-1">
+                        This is a duplicate of an invoice that has already been processed and sent to the CRM system.
+                      </p>
+                    </div>
+                  )}
+                  {isOriginalNotApproved && (
+                    <div className="mt-2 p-2 rounded-md bg-blue-500/20 border border-blue-500/50">
+                      <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">
+                        ℹ️ Original invoice is not yet approved/pushed to CRM
+                      </p>
+                      <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                        The original invoice exists but has not been fully processed yet.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </AlertDescription>
+          </Alert>
+      </div>
+    )
+  }
 
   const Vendor1099Alert = ({vendorName}: {vendorName?: string}) => (
     <div className="container py-4">
@@ -317,6 +356,113 @@ export default function InvoiceProcessorPage() {
         </Alert>
     </div>
   )
+
+  // Search for vendor contact using CRM lookup API
+  const searchContacts = async (searchQuery: string) => {
+    if (!searchQuery || !searchQuery.trim()) {
+      setContactSearchResults([]);
+      return;
+    }
+
+    setIsSearchingContacts(true);
+    setContactSearchError('');
+    
+    try {
+      const trimmedName = searchQuery.trim();
+      let params: { name?: string; firstName?: string; lastName?: string } = {};
+
+      // Check if it looks like a company name (contains LLC, Inc, Corp, etc. or has a comma)
+      const isCompanyName = /(LLC|Inc|Corp|Ltd|Company|Co\.|,)/i.test(trimmedName);
+      
+      if (isCompanyName) {
+        params.name = trimmedName;
+      } else {
+        const nameParts = trimmedName.split(/\s+/);
+        if (nameParts.length === 1) {
+          params.name = nameParts[0];
+        } else if (nameParts.length >= 2) {
+          params.firstName = nameParts[0];
+          params.lastName = nameParts.slice(1).join(' ');
+        }
+      }
+
+      // First, try the full search
+      let result = await lookupContactsAction({
+        ...params,
+        rowLimit: 50,
+      });
+
+      let results: ContactLookupResult[] = [];
+      let searchError = '';
+
+      if (result.error) {
+        searchError = result.error;
+      } else if (result.data) {
+        results = result.data;
+      }
+
+      // If no results and it's a company name, try without company suffix for partial matching
+      if (results.length === 0 && isCompanyName) {
+        // Remove common company suffixes and try again
+        const nameWithoutSuffix = trimmedName
+          .replace(/,\s*(Inc|LLC|Corp|Ltd|Company|Co\.?|Incorporated|Corporation)\s*\.?$/i, '')
+          .replace(/\s+(Inc|LLC|Corp|Ltd|Company|Co\.?|Incorporated|Corporation)\s*\.?$/i, '')
+          .trim();
+
+        if (nameWithoutSuffix && nameWithoutSuffix !== trimmedName) {
+          console.log('Trying fallback search with:', nameWithoutSuffix);
+          // Try searching with the name without suffix
+          const fallbackResult = await lookupContactsAction({
+            name: nameWithoutSuffix,
+            rowLimit: 50,
+          });
+
+          if (fallbackResult.error) {
+            // If fallback also has error, use original error or generic message
+            if (!searchError) {
+              searchError = fallbackResult.error;
+            }
+          } else if (fallbackResult.data && fallbackResult.data.length > 0) {
+            results = fallbackResult.data;
+            searchError = ''; // Clear error if we found results
+            console.log('Fallback search found', results.length, 'results');
+          } else if (!searchError) {
+            searchError = 'No contacts found matching this name.';
+          }
+        } else if (!searchError) {
+          searchError = 'No contacts found matching this name.';
+        }
+      } else if (results.length === 0 && !searchError) {
+        searchError = 'No contacts found matching this name.';
+      }
+
+      setContactSearchResults(results);
+      setContactSearchError(searchError);
+    } catch (error) {
+      console.error('Error searching contacts:', error);
+      setContactSearchError('Failed to search contacts. Please try again.');
+      setContactSearchResults([]);
+    } finally {
+      setIsSearchingContacts(false);
+    }
+  };
+
+  const handleSelectContact = (contact: ContactLookupResult) => {
+    if (contact.email) {
+      setEmail(contact.email);
+    }
+    if (contact.phone) {
+      setPhone(contact.phone);
+    }
+    if (contact.address) {
+      setAddress(contact.address);
+    }
+    setIsLookupOpen(false);
+    toast({
+      title: 'Contact Selected',
+      description: 'Vendor information has been auto-filled from CRM.',
+    });
+  };
 
   const handleCompleteVendorSetup = async () => {
     if (!pendingVendor || !vendorType) {
@@ -409,6 +555,26 @@ export default function InvoiceProcessorPage() {
                 Vendor "{pendingVendor?.name}" needs to be added to your vendor list before this invoice can be processed.
               </DialogDescription>
             </DialogHeader>
+            
+            {/* Lookup Vendor Button */}
+            <div className="flex justify-center items-center py-3 px-4 bg-muted/50 rounded-md border border-dashed">
+              <Button
+                variant="default"
+                size="default"
+                onClick={() => {
+                  setIsLookupOpen(true);
+                  if (pendingVendor?.name) {
+                    setContactSearchQuery(pendingVendor.name);
+                    searchContacts(pendingVendor.name);
+                  }
+                }}
+                className="w-full"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Lookup Vendor in CRM
+              </Button>
+            </div>
+            
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label>Contact Type *</Label>
@@ -477,6 +643,102 @@ export default function InvoiceProcessorPage() {
               </Button>
               <Button onClick={handleCompleteVendorSetup} disabled={!vendorType || isProcessingVendor}>
                 {isProcessingVendor ? 'Processing...' : 'Complete Setup'}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Vendor Lookup Dialog */}
+        <Dialog open={isLookupOpen} onOpenChange={setIsLookupOpen}>
+          <DialogContent className="sm:max-w-[600px]">
+            <DialogHeader>
+              <DialogTitle>Lookup Vendor in CRM</DialogTitle>
+              <DialogDescription>
+                Search for vendor contacts in SmartAdvocate CRM to auto-fill vendor information.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {/* Search Input */}
+              <div className="flex gap-2">
+                <Input
+                  value={contactSearchQuery}
+                  onChange={(e) => setContactSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      searchContacts(contactSearchQuery);
+                    }
+                  }}
+                  placeholder="Search by name, first name, or last name..."
+                  className="flex-1"
+                />
+                <Button
+                  onClick={() => searchContacts(contactSearchQuery)}
+                  disabled={isSearchingContacts || !contactSearchQuery.trim()}
+                >
+                  {isSearchingContacts ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+
+              {/* Error Message */}
+              {contactSearchError && (
+                <div className="flex items-start gap-2 p-2 rounded bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                  <p className="text-sm">{contactSearchError}</p>
+                </div>
+              )}
+
+              {/* Search Results */}
+              {contactSearchResults.length > 0 && (
+                <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                  <Label className="text-sm font-medium">Select a contact:</Label>
+                  <div className="space-y-1">
+                    {contactSearchResults.map((contact, index) => {
+                      const contactName = contact.name || (contact.firstName && contact.lastName 
+                        ? `${contact.firstName} ${contact.lastName}`.trim() 
+                        : contact.firstName || contact.lastName || 'Unknown');
+                      
+                      const uniqueKey = `contact-${contact.contactId || 'unknown'}-${index}-${contactName}`;
+                      
+                      return (
+                        <div
+                          key={uniqueKey}
+                          className="p-3 rounded-md border hover:bg-muted/50 cursor-pointer transition-colors"
+                          onClick={() => handleSelectContact(contact)}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{contactName}</div>
+                              <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                {contact.contactType && (
+                                  <div>Type: {contact.contactType}</div>
+                                )}
+                                {contact.email && (
+                                  <div>Email: {contact.email}</div>
+                                )}
+                                {contact.phone && (
+                                  <div>Phone: {contact.phone}</div>
+                                )}
+                                {contact.address && (
+                                  <div>Address: {contact.address}</div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsLookupOpen(false)}>
+                Close
               </Button>
             </DialogFooter>
           </DialogContent>

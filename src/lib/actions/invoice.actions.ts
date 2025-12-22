@@ -58,6 +58,135 @@ export async function getInvoiceDataUriAction(uri: string): Promise<{ dataUri?: 
 }
 
 /**
+ * Check if invoice can be approved (checks W9/tax ID requirements)
+ */
+export async function canApproveInvoiceAction(
+  id: string
+): Promise<{ canApprove: boolean; error?: string }> {
+  return withActionHandler(async () => {
+    const invoice = await invoiceService.getInvoiceById(id);
+    if (!invoice) {
+      return { canApprove: false, error: 'Invoice not found' };
+    }
+
+    // Skip W9 check for receipts - only applies to invoices
+    if (invoice.documentType === 'Receipt') {
+      return { canApprove: true };
+    }
+
+    // Only check W9 requirements for Invoice document types
+    if (invoice.documentType && invoice.documentType !== 'Invoice') {
+      return { canApprove: true };
+    }
+
+    const vendorName = invoice.vendorName?.value;
+    if (!vendorName) {
+      return { canApprove: true }; // No vendor name, allow approval
+    }
+
+    // Check if vendor requires 1099/W9
+    const { findVendorByName } = await import('../repositories/vendor.repository');
+    const vendor = await findVendorByName(vendorName);
+    
+    // Check if W9 is received or tax ID exists
+    const hasW9Received = vendor?.w9Status === 'Received';
+    const hasTaxId = vendor?.taxId && vendor.taxId.trim() !== '';
+    const noNeedToTrack = hasW9Received || hasTaxId;
+    
+    // Check threshold for ALL vendors (in list or not) if they don't have W9/tax ID
+    if (!noNeedToTrack) {
+      // Get financial year from invoice date
+      const invoiceDate = typeof invoice.invoiceDate === 'object' && invoice.invoiceDate?.value 
+        ? invoice.invoiceDate.value 
+        : invoice.invoiceDate;
+      
+      let financialYear: number | null = null;
+      if (invoiceDate) {
+        try {
+          const date = new Date(invoiceDate);
+          if (!isNaN(date.getTime())) {
+            financialYear = date.getFullYear();
+          }
+        } catch {
+          // Invalid date, continue without financial year check
+        }
+      }
+      
+      // If we have a financial year, check cumulative total
+      if (financialYear !== null) {
+        const { findInvoicesByVendorName } = await import('../repositories/invoice.repository');
+        const { parseInvoiceAmount } = await import('../utils/invoice-utils');
+        
+        // Get all invoices for this vendor in the same financial year (only Invoice document types)
+        const vendorInvoices = await findInvoicesByVendorName(vendorName);
+        const invoicesInSameYear = vendorInvoices.filter(inv => {
+          // Only count Invoice document types (exclude receipts)
+          if (inv.documentType === 'Receipt') return false;
+          if (inv.documentType && inv.documentType !== 'Invoice') return false;
+          
+          // Get financial year from invoice date
+          const invDate = typeof inv.invoiceDate === 'object' && inv.invoiceDate?.value 
+            ? inv.invoiceDate.value 
+            : inv.invoiceDate;
+          
+          if (!invDate) return false;
+          
+          try {
+            const date = new Date(invDate);
+            if (isNaN(date.getTime())) return false;
+            return date.getFullYear() === financialYear;
+          } catch {
+            return false;
+          }
+        });
+        
+        // Calculate cumulative total including current invoice
+        const currentInvoiceAmount = parseInvoiceAmount(
+          invoice.totalAmount?.value || invoice.amount?.value
+        );
+        
+        const cumulativeTotal = invoicesInSameYear.reduce((sum, inv) => {
+          // Don't double-count the current invoice if it's already in the list
+          if (inv.id === invoice.id) {
+            return sum;
+          }
+          const amount = parseInvoiceAmount(inv.totalAmount?.value || inv.amount?.value);
+          return sum + (amount || 0);
+        }, 0) + currentInvoiceAmount;
+        
+        // If cumulative total crosses $600, block approval
+        if (cumulativeTotal >= 600) {
+          return {
+            canApprove: false,
+            error: `Cannot approve invoice. Vendor "${vendorName}" has cumulative invoices totaling $${cumulativeTotal.toFixed(2)} in ${financialYear}, which exceeds the $600 threshold. Please ensure W9 form is received or tax ID is added before approving invoices.`
+          };
+        }
+      }
+      
+      // Also check if 1099/W9 is received or tracked (legacy check for cases without financial year)
+      if (vendor) {
+        const form1099Status = vendor.form1099Status;
+        const w9Status = vendor.w9Status;
+        
+        const canProcess = 
+          form1099Status === 'Received' || 
+          form1099Status === 'Tracked' ||
+          w9Status === 'Received';
+        
+        if (!canProcess && !financialYear) {
+          return {
+            canApprove: false,
+            error: `Cannot approve invoice. Vendor "${vendorName}" requires 1099/W9 forms. Please mark the forms as Received or Tracked in the W9 Requests page before approving invoices.`
+          };
+        }
+      }
+    }
+
+    return { canApprove: true };
+  }, 'Failed to check approval eligibility');
+}
+
+/**
  * Update invoice status
  */
 export async function updateInvoiceStatusAction(

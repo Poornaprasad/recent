@@ -16,6 +16,7 @@ export {
   updateInvoiceDisbursementResponseAction,
   updateInvoiceCrmStatusAction,
   retryPlaintiffNameAction,
+  canApproveInvoiceAction,
 } from './invoice.actions';
 
 export {

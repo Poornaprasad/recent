@@ -12,9 +12,11 @@ import {
   fetchDisbursementTypesAction,
   getPreviousDisbursementTypeForVendorAction,
   saveDisbursementTypeMappingAction,
+  lookupContactsAction,
 } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, Search, AlertTriangle } from 'lucide-react';
+import type { ContactLookupResult } from '@/lib/crm/smartadvocate/types';
 
 interface VendorSetupDialogProps {
   open: boolean;
@@ -49,6 +51,11 @@ export function VendorSetupDialog({
   const [requires1099, setRequires1099] = useState(false);
   const [disbursementTypes, setDisbursementTypes] = useState<string[]>([]);
   const [isLoadingTypes, setIsLoadingTypes] = useState(false);
+  const [isLookupOpen, setIsLookupOpen] = useState(false);
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
+  const [contactSearchResults, setContactSearchResults] = useState<ContactLookupResult[]>([]);
+  const [isSearchingContacts, setIsSearchingContacts] = useState(false);
+  const [contactSearchError, setContactSearchError] = useState<string>('');
 
   // Load disbursement types when dialog opens
   useEffect(() => {
@@ -104,9 +111,122 @@ export function VendorSetupDialog({
       setPhone(vendor.phone || '');
       setAddress(vendor.address || '');
       setRequires1099(vendor.requires1099 || false);
+      // Pre-fill search query with vendor name
+      setContactSearchQuery(vendor.name || '');
       // Don't reset vendorType here - let loadPreviousType handle it
     }
   }, [vendor, open]);
+
+  // Search for vendor contact using CRM lookup API
+  const searchContacts = async (searchQuery: string) => {
+    if (!searchQuery || !searchQuery.trim()) {
+      setContactSearchResults([]);
+      return;
+    }
+
+    setIsSearchingContacts(true);
+    setContactSearchError('');
+    
+    try {
+      const trimmedName = searchQuery.trim();
+      let params: { name?: string; firstName?: string; lastName?: string } = {};
+
+      // Check if it looks like a company name (contains LLC, Inc, Corp, etc. or has a comma)
+      const isCompanyName = /(LLC|Inc|Corp|Ltd|Company|Co\.|,)/i.test(trimmedName);
+      
+      if (isCompanyName) {
+        // For company names, use the name parameter directly
+        params.name = trimmedName;
+      } else {
+        // For person names, try to split into first/last
+        const nameParts = trimmedName.split(/\s+/);
+        if (nameParts.length === 1) {
+          params.name = nameParts[0];
+        } else if (nameParts.length >= 2) {
+          params.firstName = nameParts[0];
+          params.lastName = nameParts.slice(1).join(' ');
+        }
+      }
+
+      // First, try the full search
+      let result = await lookupContactsAction({
+        ...params,
+        rowLimit: 50,
+      });
+
+      let results: ContactLookupResult[] = [];
+      let searchError = '';
+
+      if (result.error) {
+        searchError = result.error;
+      } else if (result.data) {
+        results = result.data;
+      }
+
+      // If no results and it's a company name, try without company suffix for partial matching
+      if (results.length === 0 && isCompanyName) {
+        // Remove common company suffixes and try again
+        const nameWithoutSuffix = trimmedName
+          .replace(/,\s*(Inc|LLC|Corp|Ltd|Company|Co\.?|Incorporated|Corporation)\s*\.?$/i, '')
+          .replace(/\s+(Inc|LLC|Corp|Ltd|Company|Co\.?|Incorporated|Corporation)\s*\.?$/i, '')
+          .trim();
+
+        if (nameWithoutSuffix && nameWithoutSuffix !== trimmedName) {
+          console.log('Trying fallback search with:', nameWithoutSuffix);
+          // Try searching with the name without suffix
+          const fallbackResult = await lookupContactsAction({
+            name: nameWithoutSuffix,
+            rowLimit: 50,
+          });
+
+          if (fallbackResult.error) {
+            // If fallback also has error, use original error or generic message
+            if (!searchError) {
+              searchError = fallbackResult.error;
+            }
+          } else if (fallbackResult.data && fallbackResult.data.length > 0) {
+            results = fallbackResult.data;
+            searchError = ''; // Clear error if we found results
+            console.log('Fallback search found', results.length, 'results');
+          } else if (!searchError) {
+            searchError = 'No contacts found matching this name.';
+          }
+        } else if (!searchError) {
+          searchError = 'No contacts found matching this name.';
+        }
+      } else if (results.length === 0 && !searchError) {
+        searchError = 'No contacts found matching this name.';
+      }
+
+      setContactSearchResults(results);
+      setContactSearchError(searchError);
+    } catch (error) {
+      console.error('Error searching contacts:', error);
+      setContactSearchError('Failed to search contacts. Please try again.');
+      setContactSearchResults([]);
+    } finally {
+      setIsSearchingContacts(false);
+    }
+  };
+
+  const handleSelectContact = (contact: ContactLookupResult) => {
+    // Auto-fill form fields from selected contact
+    if (contact.email) {
+      setEmail(contact.email);
+    }
+    if (contact.phone) {
+      setPhone(contact.phone);
+    }
+    if (contact.address) {
+      setAddress(contact.address);
+    }
+    // Close lookup dialog
+    setIsLookupOpen(false);
+    toast({
+      title: 'Contact Selected',
+      description: 'Vendor information has been auto-filled from CRM.',
+    });
+  };
 
   const handleSubmit = async () => {
     // Disbursement type is optional for new vendors
@@ -147,10 +267,30 @@ export function VendorSetupDialog({
         <DialogHeader>
           <DialogTitle>Complete Vendor Setup</DialogTitle>
           <DialogDescription>
-            Add vendor type and complete information to add "{vendor?.name}" to your vendor list.
+            Vendor "{vendor?.name}" needs to be added to your vendor list before this invoice can be processed.
           </DialogDescription>
         </DialogHeader>
+        
+        {/* Lookup Vendor Button - Very visible */}
+        <div className="flex justify-center items-center py-3 px-4 bg-muted/50 rounded-md border border-dashed">
+          <Button
+            variant="default"
+            size="default"
+            onClick={() => {
+              setIsLookupOpen(true);
+              if (vendor?.name) {
+                searchContacts(vendor.name);
+              }
+            }}
+            className="w-full"
+          >
+            <Search className="h-4 w-4 mr-2" />
+            Lookup Vendor in CRM
+          </Button>
+        </div>
+        
         <div className="space-y-4 py-4">
+          
           <div className="space-y-2">
             <Label htmlFor="vendor-type">Contact Type</Label>
             <p className="text-xs text-muted-foreground mb-2">
@@ -252,6 +392,102 @@ export function VendorSetupDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Vendor Lookup Dialog */}
+      <Dialog open={isLookupOpen} onOpenChange={setIsLookupOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Lookup Vendor in CRM</DialogTitle>
+            <DialogDescription>
+              Search for vendor contacts in SmartAdvocate CRM to auto-fill vendor information.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            {/* Search Input */}
+            <div className="flex gap-2">
+              <Input
+                value={contactSearchQuery}
+                onChange={(e) => setContactSearchQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    searchContacts(contactSearchQuery);
+                  }
+                }}
+                placeholder="Search by name, first name, or last name..."
+                className="flex-1"
+              />
+              <Button
+                onClick={() => searchContacts(contactSearchQuery)}
+                disabled={isSearchingContacts || !contactSearchQuery.trim()}
+              >
+                {isSearchingContacts ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+
+            {/* Error Message */}
+            {contactSearchError && (
+              <div className="flex items-start gap-2 p-2 rounded bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200">
+                <AlertTriangle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                <p className="text-sm">{contactSearchError}</p>
+              </div>
+            )}
+
+            {/* Search Results */}
+            {contactSearchResults.length > 0 && (
+              <div className="space-y-2 max-h-[400px] overflow-y-auto">
+                <Label className="text-sm font-medium">Select a contact:</Label>
+                <div className="space-y-1">
+                  {contactSearchResults.map((contact, index) => {
+                    const contactName = contact.name || (contact.firstName && contact.lastName 
+                      ? `${contact.firstName} ${contact.lastName}`.trim() 
+                      : contact.firstName || contact.lastName || 'Unknown');
+                    
+                    const uniqueKey = `contact-${contact.contactId || 'unknown'}-${index}-${contactName}`;
+                    
+                    return (
+                      <div
+                        key={uniqueKey}
+                        className="p-3 rounded-md border hover:bg-muted/50 cursor-pointer transition-colors"
+                        onClick={() => handleSelectContact(contact)}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{contactName}</div>
+                            <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                              {contact.contactType && (
+                                <div>Type: {contact.contactType}</div>
+                              )}
+                              {contact.email && (
+                                <div>Email: {contact.email}</div>
+                              )}
+                              {contact.phone && (
+                                <div>Phone: {contact.phone}</div>
+                              )}
+                              {contact.address && (
+                                <div>Address: {contact.address}</div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsLookupOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

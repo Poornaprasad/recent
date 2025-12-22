@@ -304,10 +304,37 @@ export default function DuplicatesPage() {
                         </TableCell>
                         <TableCell>{invoice.invoiceDate?.value || 'N/A'}</TableCell>
                         <TableCell>
-                            <Badge variant="destructive" className="whitespace-nowrap">
-                                <AlertTriangle className="mr-2 h-4 w-4" />
-                                {invoice.duplicateReason}
-                            </Badge>
+                            <div className="space-y-1">
+                                <Badge variant="destructive" className="whitespace-nowrap">
+                                    <AlertTriangle className="mr-2 h-4 w-4" />
+                                    Duplicate
+                                </Badge>
+                                {invoice.duplicateReason && (
+                                    <div className="text-xs text-muted-foreground mt-1">
+                                        {(() => {
+                                            const isOriginalApproved = invoice.duplicateReason.includes('Original invoice has been approved and pushed to CRM');
+                                            const isOriginalNotApproved = invoice.duplicateReason.includes('Original invoice is not yet approved/pushed to CRM');
+                                            const mainMessage = invoice.duplicateReason.split('. Original invoice')[0];
+                                            
+                                            return (
+                                                <>
+                                                    <p className="mb-1">{mainMessage}</p>
+                                                    {isOriginalApproved && (
+                                                        <p className="text-yellow-600 dark:text-yellow-400 font-semibold">
+                                                            ⚠️ Original approved & pushed to CRM
+                                                        </p>
+                                                    )}
+                                                    {isOriginalNotApproved && (
+                                                        <p className="text-blue-600 dark:text-blue-400 font-semibold">
+                                                            ℹ️ Original not yet approved/pushed
+                                                        </p>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
+                                    </div>
+                                )}
+                            </div>
                         </TableCell>
                         <TableCell>
                           {invoice.conflictInfo?.hasConflict ? (

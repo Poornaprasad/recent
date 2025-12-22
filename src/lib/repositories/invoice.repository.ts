@@ -5,7 +5,7 @@
 
 import 'server-only';
 
-import { eq, desc, and, sql } from 'drizzle-orm';
+import { eq, desc, and, sql, isNull } from 'drizzle-orm';
 import { getDatabase } from '../db/context';
 import { invoices, type Invoice } from '../db/schema';
 import { sanitizeId } from '../utils/id-utils';
@@ -119,6 +119,7 @@ export async function updateInvoiceStatus(
 /**
  * Check for duplicate invoices based on invoice number, vendor name, and date
  * If caseNumber is provided, only checks for duplicates within that case
+ * If caseNumber is NOT provided, only checks for duplicates among invoices that also don't have a case number
  */
 export async function checkForDuplicateInvoice(
   invoiceNumber: string | null | undefined,
@@ -151,6 +152,10 @@ export async function checkForDuplicateInvoice(
   // If caseNumber is provided, only check duplicates within that case
   if (caseNumber) {
     conditions.push(eq(invoices.caseNumber, caseNumber));
+  } else {
+    // If no caseNumber is provided, only check for duplicates among invoices that also don't have a case number
+    // This prevents false positives where the same invoice number exists in different cases
+    conditions.push(isNull(invoices.caseNumber));
   }
 
   let query = db

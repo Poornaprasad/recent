@@ -20,6 +20,7 @@ import { vendorService } from './vendor.service';
 import { createPendingVendor, findPendingVendorByInvoiceId } from '../repositories/pending-vendor.repository';
 import type { StoredInvoice } from '../domain/types';
 import { stateDetectionService } from '../core/state/state-detection.service';
+import { isApprovedAndPushedToCrm } from '../utils/status-utils';
 
 export class InvoiceService {
   /**
@@ -305,8 +306,9 @@ export class InvoiceService {
         const hasTaxId = vendor?.taxId && vendor.taxId.trim() !== '';
         const noNeedToTrack = hasW9Received || hasTaxId;
         
-        // If vendor requires 1099/W9 and W9 is not received/tax ID doesn't exist, check threshold
-        if (vendor && vendor.requires1099 && !noNeedToTrack) {
+        // Check threshold for ALL vendors (in list or not) if they don't have W9/tax ID
+        // Only skip check if vendor has W9 received or tax ID
+        if (!noNeedToTrack) {
           // Get financial year from invoice date
           const invoiceDate = typeof invoice.invoiceDate === 'object' && invoice.invoiceDate?.value 
             ? invoice.invoiceDate.value 
@@ -374,8 +376,8 @@ export class InvoiceService {
           }
           
           // Also check if 1099/W9 is received or tracked (legacy check for cases without financial year)
-          // Only apply this check if we didn't already check the threshold
-          if (cumulativeTotal === null) {
+          // Only apply this check if vendor is in list and we didn't already check the threshold
+          if (vendor && cumulativeTotal === null) {
             const form1099Status = vendor.form1099Status;
             const w9Status = vendor.w9Status;
             
@@ -500,11 +502,28 @@ export class InvoiceService {
             reasonParts.push(`date ${duplicateInvoiceDate}`);
           }
 
+          // Check if the original duplicate invoice has been approved and pushed to CRM
+          const originalIsApprovedAndPushed = isApprovedAndPushedToCrm(duplicate);
+          
+          let duplicateReason = reasonParts.length > 0
+            ? `Duplicate found: matching ${reasonParts.join(', ')}`
+            : `Duplicate invoice found`;
+          
+          // Add case number if available
+          if (normalizedCaseNumber) {
+            duplicateReason += ` (within case ${normalizedCaseNumber})`;
+          }
+          
+          // Add information about the original invoice status
+          if (originalIsApprovedAndPushed) {
+            duplicateReason += `. Original invoice has been approved and pushed to CRM`;
+          } else {
+            duplicateReason += `. Original invoice is not yet approved/pushed to CRM`;
+          }
+
           duplicateCheckResult = {
             isDuplicate: true,
-            duplicateReason: reasonParts.length > 0
-              ? `Duplicate found: matching ${reasonParts.join(', ')} (within case ${normalizedCaseNumber})`
-              : `Duplicate invoice found (within case ${normalizedCaseNumber})`
+            duplicateReason
           };
         } else {
           // No duplicate found within the case

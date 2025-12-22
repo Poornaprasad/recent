@@ -91,6 +91,23 @@ export function canPushToCrm(invoice: StoredInvoice): boolean {
   return isApproved && notSent && notDuplicate;
 }
 
+/**
+ * Check if invoice has been approved and pushed to CRM
+ * Returns true if invoice is approved AND has been sent to CRM (has disbursementResponse)
+ */
+export function isApprovedAndPushedToCrm(invoice: StoredInvoice): boolean {
+  // Invoice must be approved
+  const isApproved = invoice.approvalStatus === 'Approved' || invoice.status === 'Pending';
+  
+  // Disbursement must have been sent to CRM
+  const hasBeenSent = hasDisbursementBeenSent(invoice);
+  
+  // Or CRM status is 'Associated' (found in CRM)
+  const isAssociated = invoice.crmStatus === 'Associated';
+  
+  return isApproved && (hasBeenSent || isAssociated);
+}
+
 
 
 

@@ -212,6 +212,9 @@ export class VendorService {
       form1099Status?: 'Not Required' | 'Required' | 'Received' | 'Tracked' | 'Pending';
       w9Status?: 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
       canProcessInvoices: boolean;
+      vendorAddress?: string;
+      vendorEmail?: string;
+      vendorPhone?: string;
     }> = [];
     
     for (const [vendorNameLower, invoices] of vendorInvoiceMap.entries()) {
@@ -270,7 +273,7 @@ export class VendorService {
         !hasYearAboveThreshold || // Below $600 threshold - can process
         (form1099Status === 'Received' || 
          form1099Status === 'Tracked' ||
-         w9Status === 'Received') // Legacy: W9/1099 received - can process
+         hasW9Received) // Legacy: W9/1099 received - can process
       ) : false; // Cannot process if vendor not in list
       
       // Build invoice details with case numbers

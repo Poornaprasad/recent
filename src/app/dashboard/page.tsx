@@ -185,15 +185,34 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-3">
-                      {duplicateAlerts.map((alert, index) => (
-                        <div key={alert.invoiceId} className="bg-destructive/10 border border-destructive/20 p-4 rounded-lg">
-                          <div className="flex items-center gap-2 font-bold text-destructive mb-2">
-                            <AlertTriangle className="w-5 h-5" />
-                            <span>Potential Duplicate #{index + 1}</span>
-                          </div>
-                          {alert.duplicateReason && (
-                            <p className="text-sm text-destructive/80 mb-3">{alert.duplicateReason}</p>
-                          )}
+                      {duplicateAlerts.map((alert, index) => {
+                        const isOriginalApproved = alert.duplicateReason?.includes('Original invoice has been approved and pushed to CRM');
+                        const isOriginalNotApproved = alert.duplicateReason?.includes('Original invoice is not yet approved/pushed to CRM');
+                        const mainMessage = alert.duplicateReason?.split('. Original invoice')[0];
+                        
+                        return (
+                          <div key={alert.invoiceId} className="bg-destructive/10 border border-destructive/20 p-4 rounded-lg">
+                            <div className="flex items-center gap-2 font-bold text-destructive mb-2">
+                              <AlertTriangle className="w-5 h-5" />
+                              <span>Potential Duplicate #{index + 1}</span>
+                            </div>
+                            {mainMessage && (
+                              <p className="text-sm text-destructive/80 mb-2">{mainMessage}</p>
+                            )}
+                            {isOriginalApproved && (
+                              <div className="mb-3 p-2 rounded-md bg-yellow-500/20 border border-yellow-500/50">
+                                <p className="text-xs font-semibold text-yellow-700 dark:text-yellow-300">
+                                  ⚠️ Original invoice has been approved and pushed to CRM
+                                </p>
+                              </div>
+                            )}
+                            {isOriginalNotApproved && (
+                              <div className="mb-3 p-2 rounded-md bg-blue-500/20 border border-blue-500/50">
+                                <p className="text-xs font-semibold text-blue-700 dark:text-blue-300">
+                                  ℹ️ Original invoice is not yet approved/pushed to CRM
+                                </p>
+                              </div>
+                            )}
                           <div className="bg-background/50 p-3 rounded-md">
                             <div className="flex justify-between items-center mb-2">
                               <div>
@@ -209,7 +228,8 @@ export default function DashboardPage() {
                             </p>
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                 </CardContent>
                 <CardFooter>
