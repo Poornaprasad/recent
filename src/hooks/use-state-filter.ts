@@ -5,9 +5,15 @@ import { persist } from "zustand/middleware";
 import type { User } from '@/lib/domain/types';
 
 export type StateFilterValue = 'all' | 'CA' | 'NY';
+export type DocumentTypeFilterValue = 'all' | 'Invoice' | 'Receipt';
 
 export interface StateOption {
   value: StateFilterValue;
+  label: string;
+}
+
+export interface DocumentTypeOption {
+  value: DocumentTypeFilterValue;
   label: string;
 }
 
@@ -17,10 +23,19 @@ export const STATE_OPTIONS: StateOption[] = [
   { value: 'NY', label: 'New York' },
 ];
 
+export const DOCUMENT_TYPE_OPTIONS: DocumentTypeOption[] = [
+  { value: 'all', label: 'All Types' },
+  { value: 'Invoice', label: 'Invoice' },
+  { value: 'Receipt', label: 'Receipt' },
+];
+
 interface StateFilterState {
   selectedState: StateFilterValue;
   setSelectedState: (state: StateFilterValue) => void;
   getStateLabel: () => string;
+  documentType: DocumentTypeFilterValue;
+  setDocumentType: (type: DocumentTypeFilterValue) => void;
+  getDocumentTypeLabel: () => string;
 }
 
 export const useStateFilter = create<StateFilterState>()(
@@ -32,6 +47,13 @@ export const useStateFilter = create<StateFilterState>()(
         const state = get();
         const option = STATE_OPTIONS.find(opt => opt.value === state.selectedState);
         return option?.label || 'All States';
+      },
+      documentType: 'all',
+      setDocumentType: (documentType) => set({ documentType }),
+      getDocumentTypeLabel: () => {
+        const state = get();
+        const option = DOCUMENT_TYPE_OPTIONS.find(opt => opt.value === state.documentType);
+        return option?.label || 'All Types';
       },
     }),
     {

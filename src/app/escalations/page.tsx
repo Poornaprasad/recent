@@ -52,6 +52,8 @@ import { useAuthStore } from "@/hooks/use-auth-store";
 import {
   useStateFilter,
   type StateFilterValue,
+  type DocumentTypeFilterValue,
+  DOCUMENT_TYPE_OPTIONS,
   getEffectiveStateFilter,
   shouldShowStateFilter,
   getStateOptionsForUser,
@@ -63,14 +65,13 @@ import { parseInvoiceAmount } from '@/lib/utils/invoice-utils';
 
 export default function EscalationsPage() {
   const { user } = useAuthStore();
-  const { selectedState, setSelectedState } = useStateFilter();
+  const { selectedState, setSelectedState, documentType, setDocumentType } = useStateFilter();
   const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
   const showStateFilter = shouldShowStateFilter(user);
   const stateOptions = getStateOptionsForUser(user);
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [escalationLevelFilter, setEscalationLevelFilter] = useState<string>('all');
-  const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
   const [sortField, setSortField] = useState<SortField>('amount');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [currentPage, setCurrentPage] = useState(1);
@@ -135,12 +136,12 @@ export default function EscalationsPage() {
     }
 
     // Document type filter
-    if (documentTypeFilter !== 'all') {
-      filtered = filtered.filter(inv => inv.documentType === documentTypeFilter);
+    if (documentType !== 'all') {
+      filtered = filtered.filter(inv => inv.documentType === documentType);
     }
 
     return filtered;
-  }, [stateFilteredInvoices, searchTerm, escalationLevelFilter, documentTypeFilter]);
+  }, [stateFilteredInvoices, searchTerm, escalationLevelFilter, documentType]);
 
   // Sort invoices
   const sortedInvoices = useMemo(() => {
@@ -317,17 +318,19 @@ export default function EscalationsPage() {
                 </SelectContent>
               </Select>
             )}
-            <Select value={documentTypeFilter} onValueChange={(value) => {
-              setDocumentTypeFilter(value);
+            <Select value={documentType} onValueChange={(value) => {
+              setDocumentType(value as DocumentTypeFilterValue);
               setCurrentPage(1);
             }}>
               <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="Type" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="Invoice">Invoice</SelectItem>
-                <SelectItem value="Receipt">Receipt</SelectItem>
+                {DOCUMENT_TYPE_OPTIONS.map(option => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Select value={rowsPerPage.toString()} onValueChange={(value) => {

@@ -31,10 +31,12 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Eye, AlertTriangle, AlertCircle, Copy, MapPin } from "lucide-react";
 import { getInvoicesAction } from '@/lib/actions/index';
-import { 
-  useStateFilter, 
-  STATE_OPTIONS, 
+import {
+  useStateFilter,
+  STATE_OPTIONS,
   type StateFilterValue,
+  type DocumentTypeFilterValue,
+  DOCUMENT_TYPE_OPTIONS,
   getEffectiveStateFilter,
   shouldShowStateFilter,
   getStateOptionsForUser,
@@ -56,12 +58,11 @@ interface DuplicateWithConflict extends StoredInvoice {
 
 export default function DuplicatesPage() {
   const { user } = useAuthStore();
-  const { selectedState, setSelectedState } = useStateFilter();
+  const { selectedState, setSelectedState, documentType, setDocumentType } = useStateFilter();
   const effectiveStateFilter = getEffectiveStateFilter(user, selectedState);
   const showStateFilter = shouldShowStateFilter(user);
   const stateOptions = getStateOptionsForUser(user);
   const [allInvoices, setAllInvoices] = useState<StoredInvoice[]>([]);
-  const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
 
   const loadInvoices = useCallback(async () => {
@@ -110,12 +111,12 @@ export default function DuplicatesPage() {
     }
 
     // Document type filter
-    if (documentTypeFilter !== 'all') {
-      filtered = filtered.filter(inv => inv.documentType === documentTypeFilter);
+    if (documentType !== 'all') {
+      filtered = filtered.filter(inv => inv.documentType === documentType);
     }
 
     return filtered;
-  }, [allInvoices, effectiveStateFilter, documentTypeFilter]);
+  }, [allInvoices, effectiveStateFilter, documentType]);
 
   // Get duplicate invoices with conflict info
   const duplicatesWithConflicts = useMemo(() => {
@@ -255,14 +256,16 @@ export default function DuplicatesPage() {
               </Select>
             </>
           )}
-          <Select value={documentTypeFilter} onValueChange={setDocumentTypeFilter}>
+          <Select value={documentType} onValueChange={(value) => setDocumentType(value as DocumentTypeFilterValue)}>
             <SelectTrigger className="w-[150px]">
               <SelectValue placeholder="Type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Types</SelectItem>
-              <SelectItem value="Invoice">Invoice</SelectItem>
-              <SelectItem value="Receipt">Receipt</SelectItem>
+              {DOCUMENT_TYPE_OPTIONS.map(option => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
