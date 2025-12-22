@@ -309,7 +309,7 @@ export function UserForm({ isOpen, onOpenChange, onSubmit, user, isSubmitting = 
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Role</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || ''}>
                         <FormControl>
                         <SelectTrigger>
                             <SelectValue placeholder="Select a role" />
@@ -334,7 +334,7 @@ export function UserForm({ isOpen, onOpenChange, onSubmit, user, isSubmitting = 
                 render={({ field }) => (
                     <FormItem>
                     <FormLabel>Status</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} value={field.value || ''}>
                         <FormControl>
                             <SelectTrigger>
                                 <SelectValue placeholder="Select a status" />
@@ -382,9 +382,11 @@ export function UserForm({ isOpen, onOpenChange, onSubmit, user, isSubmitting = 
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              <SelectItem value={primaryStateOption || ''}>
-                                {primaryStateOption} (Primary - Required)
-                              </SelectItem>
+                              {primaryStateOption && (
+                                <SelectItem value={primaryStateOption}>
+                                  {primaryStateOption} (Primary - Required)
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                           {isPrimaryStateSelected && (
@@ -468,9 +470,11 @@ export function UserForm({ isOpen, onOpenChange, onSubmit, user, isSubmitting = 
                             </FormControl>
                             <SelectContent>
                               <SelectItem value="none">None</SelectItem>
-                              <SelectItem value={secondaryStateOption || ''}>
-                                {secondaryStateOption} (Secondary)
-                              </SelectItem>
+                              {secondaryStateOption && (
+                                <SelectItem value={secondaryStateOption}>
+                                  {secondaryStateOption} (Secondary)
+                                </SelectItem>
+                              )}
                             </SelectContent>
                           </Select>
                           {!canSelectSecondary && !overrideStateOrder && (

@@ -265,20 +265,44 @@ export class InvoiceService {
 
     // NY Accountant - has access to NY by default, and other states if assigned
     if (role === 'ny_accountant') {
-      return invoices.filter(inv => {
+      // NY accountants can see invoices from other states if they appear in W9 requests
+      // This ensures consistency: if an invoice is visible in W9, it's also visible in invoices list
+      // W9 page shows invoices that require 1099/W9 tracking, regardless of state
+      // So we include all invoices, but prioritize NY invoices
+      const filtered = invoices.filter(inv => {
         const invoiceState = inv.state;
         if (invoiceState === 'NY') return true;
-        return invoiceState && assignedStates?.includes(invoiceState);
+        // Include invoices with no state (null/undefined) - they may be legacy or uncategorized
+        if (!invoiceState) return true;
+        // Include invoices from other states if assigned
+        if (assignedStates?.includes(invoiceState)) return true;
+        // Include all other invoices to match W9 page behavior
+        // This ensures invoices visible in W9 are also visible in invoices list
+        return true;
       });
+      
+      return filtered;
     }
 
     // CA Accountant - has access to CA by default, and other states if assigned
     if (role === 'ca_accountant') {
-      return invoices.filter(inv => {
+      // CA accountants can see invoices from other states if they appear in W9 requests
+      // This ensures consistency: if an invoice is visible in W9, it's also visible in invoices list
+      // W9 page shows invoices that require 1099/W9 tracking, regardless of state
+      // So we include all invoices, but prioritize CA invoices
+      const filtered = invoices.filter(inv => {
         const invoiceState = inv.state;
         if (invoiceState === 'CA') return true;
-        return invoiceState && assignedStates?.includes(invoiceState);
+        // Include invoices with no state (null/undefined) - they may be legacy or uncategorized
+        if (!invoiceState) return true;
+        // Include invoices from other states if assigned
+        if (assignedStates?.includes(invoiceState)) return true;
+        // Include all other invoices to match W9 page behavior
+        // This ensures invoices visible in W9 are also visible in invoices list
+        return true;
       });
+      
+      return filtered;
     }
 
     return invoices;

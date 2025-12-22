@@ -103,13 +103,15 @@ export default function InvoiceDetailPage() {
               inv.approvalStatus === 'Approved' || (inv.status === 'Pending' && inv.approvalStatus !== 'Rejected')
             );
           } else {
-            // For invoices page, filter out drafts
-            filtered = filtered.filter(inv => inv.status !== 'Draft');
+            // For invoices page, include all invoices (including Drafts) for navigation consistency
+            // Draft invoices may be accessible from other pages like W9, so they should be navigable
           }
           
           // Apply effective state filter
           if (effectiveStateFilter !== 'all') {
-            filtered = filtered.filter(inv => inv.state === effectiveStateFilter);
+            // Include invoices that match the state OR have no state (null/undefined)
+            // This ensures invoices without a state are still visible and navigable
+            filtered = filtered.filter(inv => inv.state === effectiveStateFilter || !inv.state);
           }
           
           // Sort invoices: group by state first, then by date/id for consistent navigation

@@ -126,9 +126,19 @@ export default function InvoicesPage() {
         if (result.error) {
           setInvoices([]);
         } else if (result.data) {
-          // Filter out Draft invoices - only show processed invoices
-          const processedInvoices = result.data.filter(inv => inv.status !== 'Draft');
-          setInvoices(processedInvoices);
+          // Include all invoices (including Drafts) - they may be accessible from other pages like W9
+          setInvoices(result.data);
+          
+          // Debug: Check if invoice 2818-23 is in the results
+          const targetInvoice = result.data.find(inv => inv.id === '2818-23' || inv.invoiceNumber?.value === '2818-23');
+          if (targetInvoice) {
+            console.log('✅ Invoice 2818-23 found in getInvoicesAction results');
+          } else {
+            console.log('❌ Invoice 2818-23 NOT found in getInvoicesAction results');
+            console.log('User permissions:', userPermissions);
+            console.log('Total invoices returned:', result.data.length);
+            console.log('Invoice states:', [...new Set(result.data.map(inv => inv.state))]);
+          }
         }
       } catch (error) {
         setInvoices([]);
@@ -149,7 +159,9 @@ export default function InvoicesPage() {
     if (effectiveStateFilter === 'all') {
       return invoices;
     }
-    return invoices.filter(inv => inv.state === effectiveStateFilter);
+    // Include invoices that match the state OR have no state (null/undefined)
+    // This ensures invoices without a state are still visible
+    return invoices.filter(inv => inv.state === effectiveStateFilter || !inv.state);
   }, [invoices, effectiveStateFilter]);
 
   // Filter invoices by other filters
@@ -278,9 +290,9 @@ export default function InvoicesPage() {
       <div className="flex items-center justify-between space-y-2">
         <div className="flex items-center gap-3">
           <div>
-            <h2 className="text-3xl font-bold tracking-tight">All Processed Invoices</h2>
+            <h2 className="text-3xl font-bold tracking-tight">All Invoices</h2>
             <p className="text-muted-foreground mt-1">
-              View and manage all invoices that have been processed (excluding drafts)
+              View and manage all invoices including drafts
             </p>
           </div>
           {!showStateFilter && effectiveStateFilter !== 'all' && (
