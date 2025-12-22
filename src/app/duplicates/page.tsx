@@ -61,6 +61,7 @@ export default function DuplicatesPage() {
   const showStateFilter = shouldShowStateFilter(user);
   const stateOptions = getStateOptionsForUser(user);
   const [allInvoices, setAllInvoices] = useState<StoredInvoice[]>([]);
+  const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
 
   const loadInvoices = useCallback(async () => {
@@ -99,13 +100,22 @@ export default function DuplicatesPage() {
     return null;
   };
 
-  // Filter invoices by effective state filter
+  // Filter invoices by effective state filter and document type
   const filteredInvoices = useMemo(() => {
-    if (effectiveStateFilter === 'all') {
-      return allInvoices;
+    let filtered = allInvoices;
+
+    // State filter
+    if (effectiveStateFilter !== 'all') {
+      filtered = filtered.filter(inv => inv.state === effectiveStateFilter);
     }
-    return allInvoices.filter(inv => inv.state === effectiveStateFilter);
-  }, [allInvoices, effectiveStateFilter]);
+
+    // Document type filter
+    if (documentTypeFilter !== 'all') {
+      filtered = filtered.filter(inv => inv.documentType === documentTypeFilter);
+    }
+
+    return filtered;
+  }, [allInvoices, effectiveStateFilter, documentTypeFilter]);
 
   // Get duplicate invoices with conflict info
   const duplicatesWithConflicts = useMemo(() => {
@@ -227,23 +237,35 @@ export default function DuplicatesPage() {
             </Badge>
           )}
         </div>
-        {showStateFilter && (
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <Select value={selectedState} onValueChange={handleStateChange}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Select State" />
-              </SelectTrigger>
-              <SelectContent>
-                {stateOptions.map(option => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {showStateFilter && (
+            <>
+              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedState} onValueChange={handleStateChange}>
+                <SelectTrigger className="w-[160px]">
+                  <SelectValue placeholder="Select State" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stateOptions.map(option => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </>
+          )}
+          <Select value={documentTypeFilter} onValueChange={setDocumentTypeFilter}>
+            <SelectTrigger className="w-[150px]">
+              <SelectValue placeholder="Type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              <SelectItem value="Invoice">Invoice</SelectItem>
+              <SelectItem value="Receipt">Receipt</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">

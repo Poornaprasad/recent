@@ -84,6 +84,7 @@ export default function ApprovedInvoicesPage() {
   const [invoices, setInvoices] = useState<StoredInvoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [caseFilter, setCaseFilter] = useState<string>('all');
+  const [documentTypeFilter, setDocumentTypeFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
 
   const loadInvoices = useCallback(async () => {
@@ -191,6 +192,14 @@ export default function ApprovedInvoicesPage() {
       filtered = filtered.filter(group => group.caseNumber === caseFilter);
     }
 
+    // Document type filter - filter invoices within each group
+    if (documentTypeFilter !== 'all') {
+      filtered = filtered.map(group => ({
+        ...group,
+        invoices: group.invoices.filter(inv => inv.documentType === documentTypeFilter),
+      })).filter(group => group.invoices.length > 0);
+    }
+
     // Search filter
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase();
@@ -208,7 +217,7 @@ export default function ApprovedInvoicesPage() {
     }
 
     return filtered;
-  }, [stateFilteredCaseGroups, caseFilter, searchTerm]);
+  }, [stateFilteredCaseGroups, caseFilter, documentTypeFilter, searchTerm]);
 
   // Get unique case numbers for filter
   const uniqueCases = useMemo(() => {
@@ -339,6 +348,16 @@ export default function ApprovedInvoicesPage() {
                 </SelectContent>
               </Select>
             )}
+            <Select value={documentTypeFilter} onValueChange={setDocumentTypeFilter}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="Invoice">Invoice</SelectItem>
+                <SelectItem value="Receipt">Receipt</SelectItem>
+              </SelectContent>
+            </Select>
             {uniqueCases.length > 0 && (
               <Select value={caseFilter} onValueChange={setCaseFilter}>
                 <SelectTrigger className="w-[180px]">
