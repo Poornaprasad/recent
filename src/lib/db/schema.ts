@@ -150,16 +150,22 @@ export const pendingVendors = pgTable('pending_vendors', {
 export type PendingVendor = typeof pendingVendors.$inferSelect;
 export type NewPendingVendor = typeof pendingVendors.$inferInsert;
 
-// Audit logs table
+// Audit logs table - comprehensive audit trail for the system
 export const auditLogs = pgTable('audit_logs', {
   id: text('id').primaryKey(),
   timestamp: timestamp('timestamp').defaultNow().notNull(),
-  user: text('user').notNull(),
+  // Renamed from 'user' to 'userId' for clarity
+  userId: text('user_id').notNull(),
+  userName: text('user_name'),
+  userEmail: text('user_email'),
+  userRole: text('user_role'),
   action: text('action').notNull(),
   resource: text('resource').notNull(),
-  details: text('details'),
-  ipAddress: text('ip_address'),
-  severity: text('severity', { enum: ['INFO', 'WARNING', 'ERROR', 'CRITICAL'] }).notNull().default('INFO'),
+  resourceId: text('resource_id'),
+  category: text('category').notNull().default('system'),
+  details: text('details'), // JSON string with action-specific details
+  metadata: text('metadata'), // JSON string with request metadata (ip, user agent, etc.)
+  severity: text('severity', { enum: ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'] }).notNull().default('INFO'),
 });
 
 export type AuditLog = typeof auditLogs.$inferSelect;

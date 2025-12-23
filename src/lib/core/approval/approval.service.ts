@@ -9,7 +9,7 @@ import { getDb, initDb } from '../../db';
 import { approvalRules } from '../../db/schema';
 import { eq, and } from 'drizzle-orm';
 import { rbacService, UserRole, type UserPermissions } from '../auth/rbac.service';
-import { auditService, AuditAction, AuditResource } from '../audit/audit.service';
+import { auditService } from '../audit/audit.service';
 import { logger } from '../logging/logger.service';
 import { State } from '../state/state-detection.service';
 
@@ -133,21 +133,43 @@ class ApprovalService {
     state: State,
     userPermissions: UserPermissions,
     reason?: string,
-    ipAddress?: string
+    ipAddress?: string,
+    invoiceDetails?: { invoiceNumber?: string; vendorName?: string; userName?: string }
   ): Promise<{ success: boolean; error?: string }> {
     try {
       // Check if user can approve
       const approvalCheck = await this.canApprove(userPermissions, amount, state, invoiceId);
 
       if (!approvalCheck.canApprove) {
+        // Log access denied for audit trail
+        await auditService.logAccessDenied(userId, {
+          resource: 'invoice',
+          action: 'approve',
+          reason: approvalCheck.reason || 'Insufficient permissions',
+        }, { ipAddress });
+
         return {
           success: false,
           error: approvalCheck.reason || 'You do not have permission to approve this invoice.',
         };
       }
 
-      // Log approval
-      await auditService.logApproval(userId, invoiceId, amount, true, reason, ipAddress);
+      // Log approval with detailed information
+      await auditService.logInvoiceApproved(
+        userId,
+        invoiceDetails?.userName || userId,
+        userPermissions.role,
+        invoiceId,
+        {
+          invoiceNumber: invoiceDetails?.invoiceNumber,
+          vendorName: invoiceDetails?.vendorName,
+          amount,
+          state,
+          reason,
+          thresholdExceeded: approvalCheck.requiresElevatedApproval,
+        },
+        { ipAddress }
+      );
 
       logger.info(`Invoice approved: ${invoiceId}`, {
         userId,
@@ -175,11 +197,25 @@ class ApprovalService {
     invoiceId: string,
     amount: number,
     reason: string,
-    ipAddress?: string
+    ipAddress?: string,
+    invoiceDetails?: { invoiceNumber?: string; vendorName?: string; userName?: string; userRole?: string; state?: string }
   ): Promise<{ success: boolean; error?: string }> {
     try {
-      // Log rejection
-      await auditService.logApproval(userId, invoiceId, amount, false, reason, ipAddress);
+      // Log rejection with detailed information
+      await auditService.logInvoiceRejected(
+        userId,
+        invoiceDetails?.userName || userId,
+        invoiceDetails?.userRole || 'unknown',
+        invoiceId,
+        {
+          invoiceNumber: invoiceDetails?.invoiceNumber,
+          vendorName: invoiceDetails?.vendorName,
+          amount,
+          state: invoiceDetails?.state,
+          reason,
+        },
+        { ipAddress }
+      );
 
       logger.info(`Invoice rejected: ${invoiceId}`, {
         userId,

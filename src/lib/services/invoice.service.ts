@@ -6,7 +6,7 @@
 import 'server-only';
 
 import { extractInvoiceData, type ExtractInvoiceDataInput } from '@/ai/flows/extract-invoice-data';
-import { findAllInvoices, findInvoiceById, upsertInvoice, updateInvoiceStatus, checkForDuplicateInvoice } from '../repositories/invoice.repository';
+import { findAllInvoices, findInvoiceById, upsertInvoice, updateInvoiceStatus, checkForDuplicateInvoice, findInvoicesByVendorName } from '../repositories/invoice.repository';
 import { findVendorByName } from '../repositories/vendor.repository';
 import { saveInvoiceFile } from '../storage/file-storage';
 import { getOverallConfidence, parseInvoiceAmount } from '../utils/invoice-utils';
@@ -21,6 +21,7 @@ import { createPendingVendor, findPendingVendorByInvoiceId } from '../repositori
 import type { StoredInvoice } from '../domain/types';
 import { stateDetectionService } from '../core/state/state-detection.service';
 import { isApprovedAndPushedToCrm } from '../utils/status-utils';
+import { auditService } from '../core/audit/audit.service';
 
 export class InvoiceService {
   /**
@@ -192,6 +193,25 @@ export class InvoiceService {
 
       // Save to database
       await upsertInvoice(finalInvoice);
+
+      // Audit log: Invoice created
+      await auditService.logInvoiceCreated('system', invoiceId, {
+        invoiceNumber: data.invoiceNumber?.value,
+        vendorName: data.vendorName?.value,
+        amount: invoiceAmount,
+        state: finalInvoice.state || undefined,
+      });
+
+      // If invoice requires escalation, log it
+      if (requiresEscalation && escalationLevel) {
+        await auditService.logInvoiceEscalated('system', invoiceId, {
+          invoiceNumber: data.invoiceNumber?.value,
+          vendorName: data.vendorName?.value,
+          amount: invoiceAmount,
+          escalationLevel,
+          escalationReason: highValueReason || 'High value invoice',
+        });
+      }
 
       return { data: finalInvoice };
     } catch (error) {
