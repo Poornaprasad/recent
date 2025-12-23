@@ -393,7 +393,7 @@ export default function ApprovalsPage() {
     try {
       const status = bulkAction === 'approve' ? 'Pending' : 'Draft';
       const promises = Array.from(selectedInvoices).map(id => 
-        updateInvoiceStatusAction(id, status)
+        updateInvoiceStatusAction(id, status, user?.id)
       );
 
       await Promise.all(promises);

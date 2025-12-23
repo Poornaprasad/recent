@@ -39,6 +39,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthStore } from '@/hooks/use-auth-store';
 import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
 import { formatCurrency } from '@/lib/utils/invoice-utils';
 import { matchPlaintiffData, type MatchResult } from '@/lib/utils/name-matching';
@@ -92,6 +93,7 @@ export function ExtractedDataPanel({
   onValidationChange,
 }: ExtractedDataPanelProps) {
   const { toast } = useToast();
+  const { user } = useAuthStore();
 
   // Store original extracted field data for reset functionality (includes confidence, bbox, etc.)
   const originalFieldsRef = useRef<Record<string, any>>({});
@@ -310,7 +312,7 @@ export function ExtractedDataPanel({
 
     try {
       // First save the case number to the invoice
-      const saveResult = await updateInvoiceCaseNumberAction(invoiceData.id, caseNumber);
+      const saveResult = await updateInvoiceCaseNumberAction(invoiceData.id, caseNumber, user?.id);
 
       if (!saveResult.success) {
         throw new Error(saveResult.error || 'Failed to save case number');
@@ -432,7 +434,7 @@ export function ExtractedDataPanel({
       const originalValue = originalField?.value !== undefined ? String(originalField.value) : '';
 
       // Save to database
-      const result = await updateInvoiceFieldAction(invoiceData.id, key, fieldValue, true);
+      const result = await updateInvoiceFieldAction(invoiceData.id, key, fieldValue, true, user?.id);
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to save field');
@@ -487,7 +489,7 @@ export function ExtractedDataPanel({
     setIsSaving(true);
     try {
       // Save original value to database (mark as not user-edited)
-      const result = await updateInvoiceFieldAction(invoiceData.id, key, originalValue, false);
+      const result = await updateInvoiceFieldAction(invoiceData.id, key, originalValue, false, user?.id);
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to reset field');
@@ -687,7 +689,7 @@ export function ExtractedDataPanel({
     // Update the vendor name field with the selected contact name
     setIsSaving(true);
     try {
-      const result = await updateInvoiceFieldAction(invoiceData.id, 'vendorName', contactName, true);
+      const result = await updateInvoiceFieldAction(invoiceData.id, 'vendorName', contactName, true, user?.id);
 
       if (!result.success) {
         throw new Error(result.error || 'Failed to update vendor name');

@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
 import { useToast } from '@/hooks/use-toast';
+import { useAuthStore } from '@/hooks/use-auth-store';
 import { Loader2, Search } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { StoredInvoice } from '@/lib/domain/types';
@@ -47,6 +48,7 @@ export function DisbursementFormModal({
   invoice,
 }: DisbursementFormModalProps) {
   const { toast } = useToast();
+  const { user } = useAuthStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isLoadingCaseInfo, setIsLoadingCaseInfo] = useState(false);
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
@@ -637,7 +639,7 @@ export function DisbursementFormModal({
 
 
       // Call API
-      const result = await createDisbursementAction(caseID, disbursementData);
+      const result = await createDisbursementAction(caseID, disbursementData, user?.id);
 
       if (result.error) {
         throw new Error(result.error);
@@ -646,7 +648,7 @@ export function DisbursementFormModal({
       // Save the disbursement response to the invoice
       if (result.data) {
         try {
-          await updateInvoiceDisbursementResponseAction(invoice.id, result.data);
+          await updateInvoiceDisbursementResponseAction(invoice.id, result.data, user?.id);
         } catch (error) {
           console.error('Failed to save disbursement response:', error);
           // Don't fail the whole operation if saving response fails

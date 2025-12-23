@@ -2,6 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { useAuthStore } from "@/hooks/use-auth-store";
 import { updateInvoiceStatusAction } from '@/lib/actions/index';
 import { Check, Eye, X } from "lucide-react";
 import Link from "next/link";
@@ -39,6 +40,7 @@ export function ApprovalActions({
     const [pendingAction, setPendingAction] = useState<'approve' | 'reject' | null>(null);
     const [approvalReason, setApprovalReason] = useState('');
     const { toast } = useToast();
+    const { user } = useAuthStore();
     const router = useRouter();
 
     // Debug: Log props on mount
@@ -52,7 +54,7 @@ export function ApprovalActions({
     const handleStatusUpdate = async (status: 'Pending' | 'Draft', reason?: string) => {
         setIsUpdating(true);
         try {
-            await updateInvoiceStatusAction(invoiceId, status);
+            await updateInvoiceStatusAction(invoiceId, status, user?.id);
             
             // If approved, open disbursement modal BEFORE showing success toast
             if (status === 'Pending') {

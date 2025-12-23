@@ -61,6 +61,22 @@ export const useStateFilter = create<StateFilterState>()(
     }),
     {
       name: "state-filter-storage",
+      version: 1,
+      migrate: (persistedState: any, version: number) => {
+        // If version is 0 or undefined, or state is invalid, reset to defaults
+        if (version === 0 || version === undefined || !persistedState) {
+          return {
+            selectedState: 'all',
+            documentType: 'all',
+          };
+        }
+        
+        // Ensure required fields exist with valid defaults
+        return {
+          selectedState: persistedState.selectedState || 'all',
+          documentType: persistedState.documentType || 'all',
+        };
+      },
     }
   )
 );

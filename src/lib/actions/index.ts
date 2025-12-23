@@ -61,6 +61,17 @@ export {
 
 export {
   getAllAuditLogsAction,
+  getAuditLogsAction,
+  getUserAuditLogsAction,
+  getResourceAuditLogsAction,
+  getAuditLogsByCategoryAction,
+  getAuthAuditLogsAction,
+  getApprovalAuditLogsAction,
+  getErrorAuditLogsAction,
+  searchAuditLogsAction,
+  getAuditActionLabelsAction,
+  getAuditCategoriesAction,
+  getAuditSeveritiesAction,
 } from './audit.actions';
 
 export {

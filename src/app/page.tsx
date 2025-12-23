@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { StoredInvoice } from '@/lib/domain/types';
 import { processInvoiceAction, getPendingVendorByInvoiceIdAction, completeVendorSetupAction, getVendorTypesAction, lookupContactsAction } from '@/lib/actions/index';
 import { useToast } from "@/hooks/use-toast";
+import { useAuthStore } from "@/hooks/use-auth-store";
 import { UploadView } from "@/components/invoice/upload-view";
 import { ReviewView } from "@/components/invoice/review-view";
 import { LoadingView } from "@/components/invoice/loading-view";
@@ -42,6 +43,7 @@ interface FileProgress {
 }
 
 export default function InvoiceProcessorPage() {
+  const { user } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [extractedData, setExtractedData] =
@@ -482,7 +484,7 @@ export default function InvoiceProcessorPage() {
         phone: phone || undefined,
         address: address || undefined,
         requires1099,
-      });
+      }, user?.id);
 
       if (result.success) {
         toast({

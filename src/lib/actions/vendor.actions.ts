@@ -9,6 +9,9 @@ import { revalidatePath } from 'next/cache';
 import { vendorService } from '../services/vendor.service';
 import type { Vendor, VendorType } from '../domain/types';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
+import { auditService } from '../core/audit/audit.service';
+import { AuditAction, AuditResource, AuditCategory, AuditSeverity } from '../core/audit/audit.types';
+import { getRequestMetadata } from '../utils/request-context';
 
 /**
  * Get all vendors
@@ -56,9 +59,57 @@ export async function getSuggestedVendorTypesAction(vendorName: string): Promise
 /**
  * Save vendor (create or update)
  */
-export async function saveVendorAction(vendor: Vendor): Promise<{ success: boolean; error?: string }> {
+export async function saveVendorAction(
+  vendor: Vendor,
+  performedByUserId?: string
+): Promise<{ success: boolean; error?: string }> {
   return withActionHandler(async () => {
+    // Check if this is a new vendor or update
+    const existingVendor = await vendorService.getVendorById(vendor.id);
+    const isNew = !existingVendor;
+    const metadata = await getRequestMetadata();
+
     await vendorService.saveVendor(vendor);
+
+    // Audit logging
+    if (isNew) {
+      await auditService.logVendorCreated(performedByUserId || 'system', vendor.id, {
+        vendorName: vendor.name,
+        vendorType: vendor.vendorType || undefined,
+        email: vendor.email || undefined,
+      }, metadata);
+    } else {
+      // Determine changed fields
+      const changedFields: string[] = [];
+      const previousValue: Record<string, any> = {};
+      const newValue: Record<string, any> = {};
+
+      if (existingVendor.name !== vendor.name) {
+        changedFields.push('name');
+        previousValue.name = existingVendor.name;
+        newValue.name = vendor.name;
+      }
+      if (existingVendor.email !== vendor.email) {
+        changedFields.push('email');
+        previousValue.email = existingVendor.email;
+        newValue.email = vendor.email;
+      }
+      if (existingVendor.vendorType !== vendor.vendorType) {
+        changedFields.push('vendorType');
+        previousValue.vendorType = existingVendor.vendorType;
+        newValue.vendorType = vendor.vendorType;
+      }
+
+      if (changedFields.length > 0) {
+        await auditService.logVendorUpdated(performedByUserId || 'system', vendor.id, {
+          vendorName: vendor.name,
+          changedFields,
+          previousValue,
+          newValue,
+        }, metadata);
+      }
+    }
+
     revalidatePath('/vendors');
     return { success: true };
   }, 'Failed to save vendor');
@@ -67,9 +118,36 @@ export async function saveVendorAction(vendor: Vendor): Promise<{ success: boole
 /**
  * Delete vendor
  */
-export async function deleteVendorAction(id: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteVendorAction(
+  id: string,
+  performedByUserId?: string
+): Promise<{ success: boolean; error?: string }> {
   return withActionHandler(async () => {
+    // Get vendor info before deleting for audit log
+    const vendor = await vendorService.getVendorById(id);
+    const metadata = await getRequestMetadata();
+
     await vendorService.removeVendor(id);
+
+    // Audit log vendor deletion
+    if (vendor) {
+      await auditService.log({
+        userId: performedByUserId || 'system',
+        action: AuditAction.VENDOR_DELETED,
+        resource: AuditResource.VENDOR,
+        resourceId: id,
+        category: AuditCategory.VENDOR_MANAGEMENT,
+        severity: AuditSeverity.WARNING,
+        details: {
+          description: `Vendor deleted: ${vendor.name}`,
+          vendorName: vendor.name,
+          vendorType: vendor.vendorType,
+          email: vendor.email,
+        },
+        metadata,
+      });
+    }
+
     revalidatePath('/vendors');
     return { success: true };
   }, 'Failed to delete vendor');
@@ -159,14 +237,19 @@ export async function updateVendor1099StatusAction(
   status: {
     form1099Status?: 'Not Required' | 'Required' | 'Received' | 'Tracked' | 'Pending';
     w9Status?: 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
-  }
+  },
+  performedByUserId?: string
 ): Promise<{ success: boolean; error?: string }> {
   return withActionHandler(async () => {
     const vendor = await vendorService.getVendorById(vendorId);
     if (!vendor) {
       throw new Error('Vendor not found');
     }
-    
+
+    const previousW9Status = vendor.w9Status;
+    const previous1099Status = vendor.form1099Status;
+    const metadata = await getRequestMetadata();
+
     const updatedVendor: Vendor = {
       ...vendor,
       form1099Status: status.form1099Status ?? vendor.form1099Status,
@@ -175,15 +258,39 @@ export async function updateVendor1099StatusAction(
       w9ReceivedDate: status.w9Status === 'Received' ? new Date() : vendor.w9ReceivedDate,
       updatedAt: new Date(),
     };
-    
+
     await vendorService.saveVendor(updatedVendor);
+
+    // Audit log W9 status change
+    if (status.w9Status && status.w9Status !== previousW9Status) {
+      await auditService.logVendorW9StatusChanged(
+        performedByUserId || 'system',
+        vendorId,
+        {
+          vendorName: vendor.name,
+          previousStatus: previousW9Status || undefined,
+          newStatus: status.w9Status,
+        },
+        metadata
+      );
+    }
+
+    // Audit log 1099 status change
+    if (status.form1099Status && status.form1099Status !== previous1099Status) {
+      await auditService.logVendor1099StatusChanged(
+        performedByUserId || 'system',
+        vendorId,
+        {
+          vendorName: vendor.name,
+          previousStatus: previous1099Status || undefined,
+          newStatus: status.form1099Status,
+        },
+        metadata
+      );
+    }
+
     revalidatePath('/w9-requests');
     revalidatePath('/vendors');
     return { success: true };
   }, 'Failed to update vendor 1099 status');
 }
-
-
-
-
-

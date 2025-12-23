@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserById, updateUser } from '@/lib/repositories/user.repository';
 import bcrypt from 'bcryptjs';
+import { auditService } from '@/lib/core/audit/audit.service';
+import { AuditAction, AuditResource, AuditCategory, AuditSeverity } from '@/lib/core/audit/audit.types';
 
 // Parse token to extract userId (matching login route format)
 function parseToken(token: string): { userId: string } | null {
@@ -16,6 +18,12 @@ function parseToken(token: string): { userId: string } | null {
 }
 
 export async function POST(request: NextRequest) {
+  // Get client IP address for audit logging
+  const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0] ||
+                    request.headers.get('x-real-ip') ||
+                    'unknown';
+  const userAgent = request.headers.get('user-agent') || undefined;
+
   try {
     // Get authorization header
     const authHeader = request.headers.get('authorization');
@@ -66,6 +74,19 @@ export async function POST(request: NextRequest) {
 
     // Check if user has a password
     if (!user.password) {
+      await auditService.log({
+        userId: user.id,
+        userEmail: user.email,
+        action: AuditAction.PASSWORD_CHANGE_FAILED,
+        resource: AuditResource.AUTHENTICATION,
+        category: AuditCategory.AUTHENTICATION,
+        severity: AuditSeverity.WARNING,
+        details: {
+          description: 'Password change attempted on OAuth-only account',
+          reason: 'No password set for account',
+        },
+        metadata: { ipAddress, userAgent },
+      });
       return NextResponse.json(
         { error: 'Cannot change password for this account type' },
         { status: 400 }
@@ -76,6 +97,19 @@ export async function POST(request: NextRequest) {
     const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
 
     if (!isCurrentPasswordValid) {
+      await auditService.log({
+        userId: user.id,
+        userEmail: user.email,
+        action: AuditAction.PASSWORD_CHANGE_FAILED,
+        resource: AuditResource.AUTHENTICATION,
+        category: AuditCategory.AUTHENTICATION,
+        severity: AuditSeverity.WARNING,
+        details: {
+          description: 'Password change failed - incorrect current password',
+          reason: 'Current password is incorrect',
+        },
+        metadata: { ipAddress, userAgent },
+      });
       return NextResponse.json(
         { error: 'Current password is incorrect' },
         { status: 400 }
@@ -88,11 +122,26 @@ export async function POST(request: NextRequest) {
     // Update password
     await updateUser(user.id, { password: hashedPassword });
 
+    // Log successful password change
+    await auditService.logPasswordChanged(user.id, user.email, {
+      ipAddress,
+      userAgent,
+    });
+
     return NextResponse.json({
       message: 'Password changed successfully',
     });
   } catch (error) {
     console.error('Change password error:', error);
+    await auditService.logApiError(undefined, {
+      endpoint: '/api/auth/change-password',
+      method: 'POST',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      stackTrace: error instanceof Error ? error.stack : undefined,
+    }, {
+      ipAddress,
+      userAgent,
+    });
     return NextResponse.json(
       { error: 'An error occurred while changing password' },
       { status: 500 }

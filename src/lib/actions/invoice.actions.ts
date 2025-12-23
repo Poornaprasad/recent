@@ -16,6 +16,9 @@ import { eq } from 'drizzle-orm';
 import { serializeMeta } from '../repositories/mappers/invoice.mapper';
 import { retryPlaintiffNameExtraction } from '@/ai/flows/extract-invoice-data';
 import { findInvoiceById } from '../repositories/invoice.repository';
+import { auditService } from '../core/audit/audit.service';
+import { AuditAction, AuditResource, AuditCategory, AuditSeverity } from '../core/audit/audit.types';
+import { getRequestMetadata, getCurrentUserId } from '../utils/request-context';
 
 /**
  * Process a new invoice upload
@@ -209,13 +212,42 @@ export async function canApproveInvoiceAction(
  */
 export async function updateInvoiceStatusAction(
   id: string,
-  status: 'Pending' | 'Draft'
+  status: 'Pending' | 'Draft',
+  userId?: string
 ): Promise<{ success: boolean, error?: string}> {
   return withActionHandler(async () => {
+    // Get invoice before update for audit log
+    const invoice = await findInvoiceById(id);
+    if (!invoice) {
+      throw new Error('Invoice not found');
+    }
+
+    const previousStatus = invoice.status;
+
     const result = await invoiceService.updateStatus(id, status);
     if (!result.success) {
       return result;
     }
+
+    // Audit log: Invoice status changed
+    try {
+      const auditUserId = userId || await getCurrentUserId() || 'system';
+      const metadata = await getRequestMetadata();
+      await auditService.logInvoiceStatusChanged(
+        auditUserId,
+        id,
+        {
+          invoiceNumber: invoice.invoiceNumber?.value || invoice.invoiceNumber,
+          previousStatus,
+          newStatus: status,
+        },
+        metadata
+      );
+    } catch (error) {
+      // Don't fail the operation if audit logging fails
+      console.error('Failed to log invoice status change:', error);
+    }
+
     revalidatePath('/approvals');
     revalidatePath('/invoices');
     revalidatePath(`/invoices/${id}`);
@@ -242,7 +274,8 @@ export async function getInvoicesAction(
  * Cannot flag invoices that require escalation (they are handled via role-based access control)
  */
 export async function flagInvoiceForReviewAction(
-  id: string
+  id: string,
+  userId?: string
 ): Promise<{ success: boolean; error?: string }> {
   return withActionHandler(async () => {
     // First check if invoice requires escalation
@@ -259,6 +292,29 @@ export async function flagInvoiceForReviewAction(
     }
     
     await invoiceService.updateStatus(id, 'Review');
+    
+    // Audit log: Invoice flagged for review
+    try {
+      const auditUserId = userId || await getCurrentUserId() || 'system';
+      const metadata = await getRequestMetadata();
+      await auditService.log({
+        userId: auditUserId,
+        action: AuditAction.INVOICE_FLAGGED_FOR_REVIEW,
+        resource: AuditResource.INVOICE,
+        resourceId: id,
+        category: AuditCategory.INVOICE_MANAGEMENT,
+        severity: AuditSeverity.INFO,
+        details: {
+          description: `Invoice flagged for review`,
+          invoiceNumber: invoice.invoiceNumber?.value || invoice.invoiceNumber,
+        },
+        metadata,
+      });
+    } catch (error) {
+      // Don't fail the operation if audit logging fails
+      console.error('Failed to log invoice flag for review:', error);
+    }
+    
     revalidatePath('/approvals');
     revalidatePath('/invoices');
     revalidatePath(`/invoices/${id}`);
@@ -271,10 +327,38 @@ export async function flagInvoiceForReviewAction(
  */
 export async function addInvoiceCommentAction(
   id: string,
-  comment: string
+  comment: string,
+  userId?: string
 ): Promise<{ success: boolean; error?: string }> {
   return withActionHandler(async () => {
+    // Get invoice for audit log
+    const invoice = await findInvoiceById(id);
+    
     await invoiceService.addComment(id, comment);
+    
+    // Audit log: Invoice comment added
+    try {
+      const auditUserId = userId || await getCurrentUserId() || 'system';
+      const metadata = await getRequestMetadata();
+      await auditService.log({
+        userId: auditUserId,
+        action: AuditAction.INVOICE_COMMENT_ADDED,
+        resource: AuditResource.INVOICE,
+        resourceId: id,
+        category: AuditCategory.INVOICE_MANAGEMENT,
+        severity: AuditSeverity.INFO,
+        details: {
+          description: `Comment added to invoice`,
+          invoiceNumber: invoice?.invoiceNumber?.value || invoice?.invoiceNumber,
+          commentLength: comment.length,
+        },
+        metadata,
+      });
+    } catch (error) {
+      // Don't fail the operation if audit logging fails
+      console.error('Failed to log invoice comment:', error);
+    }
+    
     revalidatePath(`/invoices/${id}`);
     return { success: true };
   }, 'Failed to add comment');
@@ -285,10 +369,40 @@ export async function addInvoiceCommentAction(
  */
 export async function updateInvoiceCaseNumberAction(
   id: string,
-  caseNumber: string | undefined
+  caseNumber: string | undefined,
+  userId?: string
 ): Promise<{ success: boolean; error?: string }> {
   const result = await withActionHandler(async () => {
+    // Get invoice before update for audit log
+    const invoice = await findInvoiceById(id);
+    if (!invoice) {
+      throw new Error('Invoice not found');
+    }
+    
+    const previousCaseNumber = invoice.caseNumber;
+    
     await invoiceService.updateCaseNumber(id, caseNumber);
+    
+    // Audit log: Invoice case number updated
+    try {
+      const auditUserId = userId || await getCurrentUserId() || 'system';
+      const metadata = await getRequestMetadata();
+      await auditService.logInvoiceFieldEdited(
+        auditUserId,
+        id,
+        {
+          invoiceNumber: invoice.invoiceNumber?.value || invoice.invoiceNumber,
+          fieldName: 'caseNumber',
+          previousValue: previousCaseNumber || null,
+          newValue: caseNumber || null,
+        },
+        metadata
+      );
+    } catch (error) {
+      // Don't fail the operation if audit logging fails
+      console.error('Failed to log invoice case number update:', error);
+    }
+    
     revalidatePath(`/invoices/${id}`);
     revalidatePath('/approvals');
     return { success: true };
@@ -324,11 +438,21 @@ export async function updateInvoiceFieldAction(
   invoiceId: string,
   fieldName: string,
   fieldValue: string,
-  isEdited: boolean = true
+  isEdited: boolean = true,
+  userId?: string
 ): Promise<{ success: boolean; error?: string }> {
   const result = await withActionHandler(async () => {
     await initDb();
     const db = getDb();
+
+    // Get invoice before update for audit log
+    const invoice = await findInvoiceById(invoiceId);
+    if (!invoice) {
+      throw new Error('Invoice not found');
+    }
+
+    // Get previous value for audit log
+    const previousValue = (invoice as any)[fieldName]?.value || (invoice as any)[fieldName] || null;
 
     const mapping = fieldToColumnMap[fieldName];
     if (!mapping) {
@@ -363,6 +487,28 @@ export async function updateInvoiceFieldAction(
       .set(updateData)
       .where(eq(invoices.id, invoiceId));
 
+    // Audit log: Invoice field edited
+    if (isEdited) {
+      try {
+        const auditUserId = userId || await getCurrentUserId() || 'system';
+        const metadata = await getRequestMetadata();
+        await auditService.logInvoiceFieldEdited(
+          auditUserId,
+          invoiceId,
+          {
+            invoiceNumber: invoice.invoiceNumber?.value || invoice.invoiceNumber,
+            fieldName,
+            previousValue: previousValue,
+            newValue: fieldValue,
+          },
+          metadata
+        );
+      } catch (error) {
+        // Don't fail the operation if audit logging fails
+        console.error('Failed to log invoice field edit:', error);
+      }
+    }
+
     revalidatePath(`/invoices/${invoiceId}`);
     return { success: true };
   }, 'Failed to update invoice field');
@@ -380,7 +526,8 @@ export async function updateInvoiceFieldAction(
  */
 export async function updateInvoiceDisbursementResponseAction(
   invoiceId: string,
-  disbursementResponse: any
+  disbursementResponse: any,
+  userId?: string
 ): Promise<{ success: boolean; error?: string }> {
   return withActionHandler(async () => {
     await initDb();
@@ -478,6 +625,32 @@ export async function updateInvoiceDisbursementResponseAction(
       .set(updateData)
       .where(eq(invoices.id, invoiceId));
 
+    // Audit log: Invoice pushed to CRM (disbursement created)
+    try {
+      const auditUserId = userId || await getCurrentUserId() || 'system';
+      const metadata = await getRequestMetadata();
+      const { parseInvoiceAmount } = await import('../utils/invoice-utils');
+      const amount = parseInvoiceAmount(invoice.totalAmount?.value || invoice.amount?.value);
+      
+      await auditService.logInvoiceCrmPushed(
+        auditUserId,
+        invoiceId,
+        {
+          invoiceNumber: invoice.invoiceNumber?.value || invoice.invoiceNumber,
+          vendorName: invoice.vendorName?.value || invoice.vendorName,
+          amount: amount || 0,
+          crmStatus: 'Disbursement Created',
+          disbursementId: typeof disbursementResponse === 'object' 
+            ? disbursementResponse?.id?.toString() 
+            : undefined,
+        },
+        metadata
+      );
+    } catch (error) {
+      // Don't fail the operation if audit logging fails
+      console.error('Failed to log invoice CRM push:', error);
+    }
+
     revalidatePath(`/invoices/${invoiceId}`);
     revalidatePath('/approvals');
     revalidatePath('/invoices');
@@ -491,11 +664,20 @@ export async function updateInvoiceDisbursementResponseAction(
  */
 export async function updateInvoiceCrmStatusAction(
   invoiceId: string,
-  crmStatus: 'Associated' | 'Draft' | 'Not Found' | 'Duplicate'
+  crmStatus: 'Associated' | 'Draft' | 'Not Found' | 'Duplicate',
+  userId?: string
 ): Promise<{ success: boolean; error?: string }> {
   return withActionHandler(async () => {
     await initDb();
     const db = getDb();
+
+    // Get invoice before update for audit log
+    const invoice = await findInvoiceById(invoiceId);
+    if (!invoice) {
+      throw new Error('Invoice not found');
+    }
+
+    const previousCrmStatus = invoice.crmStatus;
 
     const updateData: Record<string, any> = {
       crmStatus,
@@ -506,6 +688,30 @@ export async function updateInvoiceCrmStatusAction(
       .update(invoices)
       .set(updateData)
       .where(eq(invoices.id, invoiceId));
+
+    // Audit log: Invoice CRM status updated
+    try {
+      const auditUserId = userId || await getCurrentUserId() || 'system';
+      const metadata = await getRequestMetadata();
+      await auditService.log({
+        userId: auditUserId,
+        action: AuditAction.INVOICE_UPDATED,
+        resource: AuditResource.INVOICE,
+        resourceId: invoiceId,
+        category: AuditCategory.CRM_INTEGRATION,
+        severity: AuditSeverity.INFO,
+        details: {
+          description: `Invoice CRM status updated`,
+          invoiceNumber: invoice.invoiceNumber?.value || invoice.invoiceNumber,
+          previousCrmStatus: previousCrmStatus || 'None',
+          newCrmStatus: crmStatus,
+        },
+        metadata,
+      });
+    } catch (error) {
+      // Don't fail the operation if audit logging fails
+      console.error('Failed to log invoice CRM status update:', error);
+    }
 
     revalidatePath(`/invoices/${invoiceId}`);
     revalidatePath('/approvals');

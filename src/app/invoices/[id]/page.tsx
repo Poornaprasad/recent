@@ -344,7 +344,7 @@ export default function InvoiceDetailPage() {
     if (!invoiceData) return;
     setIsUpdating(true);
     try {
-      await updateInvoiceStatusAction(invoiceData.id, status);
+      await updateInvoiceStatusAction(invoiceData.id, status, user?.id);
       
       // If approved, open disbursement modal
       if (status === 'Pending') {
@@ -446,7 +446,7 @@ export default function InvoiceDetailPage() {
     
     setIsUpdating(true);
     try {
-      const result = await flagInvoiceForReviewAction(invoiceData.id);
+      const result = await flagInvoiceForReviewAction(invoiceData.id, user?.id);
       if (result.success) {
         toast({
           title: 'Invoice Flagged for Review',
@@ -475,7 +475,7 @@ export default function InvoiceDetailPage() {
     if (!invoiceData) return;
     setIsAddingComment(true);
     try {
-      const result = await addInvoiceCommentAction(invoiceData.id, comment);
+      const result = await addInvoiceCommentAction(invoiceData.id, comment, user?.id);
       if (result.success) {
         toast({
           title: 'Comment Added',
@@ -517,7 +517,7 @@ export default function InvoiceDetailPage() {
         phone: data.phone || undefined,
         address: data.address || undefined,
         requires1099: data.requires1099,
-      });
+      }, user?.id);
 
       if (result.success) {
         toast({

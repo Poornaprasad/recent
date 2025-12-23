@@ -21,6 +21,9 @@ import {
 } from '../services/disbursement-type.service';
 import type { DisbursementOption } from '../crm/smartadvocate/types';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
+import { auditService } from '../core/audit/audit.service';
+import { AuditAction, AuditResource, AuditCategory, AuditSeverity } from '../core/audit/audit.types';
+import { getRequestMetadata, getCurrentUserId } from '../utils/request-context';
 
 /**
  * Fetch disbursement types from SmartAdvocate API
@@ -105,12 +108,40 @@ export async function getDisbursementTypesForVendorAction(
  */
 export async function createDisbursementAction(
   caseID: number,
-  disbursementData: CreateDisbursementRequest
+  disbursementData: CreateDisbursementRequest,
+  userId?: string
 ): Promise<ActionResult<any>> {
-  return withActionHandler(
-    () => createDisbursement(caseID, disbursementData),
-    'Failed to create disbursement in CRM'
-  );
+  return withActionHandler(async () => {
+    const result = await createDisbursement(caseID, disbursementData);
+    
+    // Audit log: Disbursement created
+    try {
+      const auditUserId = userId || await getCurrentUserId() || 'system';
+      const metadata = await getRequestMetadata();
+      await auditService.log({
+        userId: auditUserId,
+        action: AuditAction.DISBURSEMENT_CREATED,
+        resource: AuditResource.DISBURSEMENT,
+        resourceId: result?.id?.toString() || result?.disbursementID?.toString(),
+        category: AuditCategory.CRM_INTEGRATION,
+        severity: AuditSeverity.INFO,
+        details: {
+          description: `Disbursement created in CRM`,
+          caseID,
+          amount: disbursementData.amount,
+          vendorName: disbursementData.vendorName,
+          invoiceNumber: disbursementData.invoiceNumber,
+          disbursementId: result?.id?.toString() || result?.disbursementID?.toString(),
+        },
+        metadata,
+      });
+    } catch (error) {
+      // Don't fail the operation if audit logging fails
+      console.error('Failed to log disbursement creation:', error);
+    }
+    
+    return result;
+  }, 'Failed to create disbursement in CRM');
 }
 
 /**

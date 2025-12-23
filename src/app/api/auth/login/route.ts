@@ -3,6 +3,7 @@ import { getUserByEmail } from '@/lib/repositories/user.repository';
 import bcrypt from 'bcryptjs';
 import { randomUUID } from 'crypto';
 import type { User } from '@/lib/domain/types';
+import { auditService } from '@/lib/core/audit/audit.service';
 
 // Simple JWT-like token generation (for development)
 // In production, use a proper JWT library like 'jsonwebtoken'
@@ -17,12 +18,22 @@ function generateToken(userId: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // Get client IP address for audit logging
+  const ipAddress = request.headers.get('x-forwarded-for')?.split(',')[0] ||
+                    request.headers.get('x-real-ip') ||
+                    'unknown';
+  const userAgent = request.headers.get('user-agent') || undefined;
+
   try {
     const body = await request.json();
     const { email, password } = body;
 
     // Validate input
     if (!email || !password) {
+      await auditService.logLoginFailed(email || 'unknown', 'Missing email or password', {
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Email and password are required' },
         { status: 400 }
@@ -33,6 +44,10 @@ export async function POST(request: NextRequest) {
     const user = await getUserByEmail(email);
 
     if (!user) {
+      await auditService.logLoginFailed(email, 'User not found', {
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
@@ -41,6 +56,10 @@ export async function POST(request: NextRequest) {
 
     // Check if user has a password (might be OAuth-only user)
     if (!user.password) {
+      await auditService.logLoginFailed(email, 'No password set for user', {
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
@@ -51,6 +70,10 @@ export async function POST(request: NextRequest) {
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
+      await auditService.logLoginFailed(email, 'Invalid password', {
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Invalid email or password' },
         { status: 401 }
@@ -59,6 +82,10 @@ export async function POST(request: NextRequest) {
 
     // Check if user is active
     if (user.status !== 'Active') {
+      await auditService.logLoginFailed(email, `Account status: ${user.status}`, {
+        ipAddress,
+        userAgent,
+      });
       return NextResponse.json(
         { error: 'Account is not active. Please contact an administrator.' },
         { status: 403 }
@@ -82,6 +109,18 @@ export async function POST(request: NextRequest) {
       updatedAt: user.updatedAt,
     };
 
+    // Log successful login
+    await auditService.logLoginSuccess(
+      user.id,
+      user.email,
+      user.name,
+      user.role,
+      {
+        ipAddress,
+        userAgent,
+      }
+    );
+
     return NextResponse.json({
       user: domainUser,
       token,
@@ -90,6 +129,15 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Login error:', error);
+    await auditService.logApiError(undefined, {
+      endpoint: '/api/auth/login',
+      method: 'POST',
+      errorMessage: error instanceof Error ? error.message : 'Unknown error',
+      stackTrace: error instanceof Error ? error.stack : undefined,
+    }, {
+      ipAddress,
+      userAgent,
+    });
     return NextResponse.json(
       { error: 'An error occurred during login' },
       { status: 500 }
