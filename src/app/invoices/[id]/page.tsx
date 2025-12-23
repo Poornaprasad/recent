@@ -179,6 +179,23 @@ export default function InvoiceDetailPage() {
     fetchInvoice();
   }, [id, toast]);
 
+  // Re-check approval eligibility when vendor name changes
+  useEffect(() => {
+    if (!id || !invoiceData || invoiceData.status !== 'Review') return;
+
+    const checkApproval = async () => {
+      // Wait a bit longer to ensure database save has completed
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const approvalCheck = await canApproveInvoiceAction(id);
+      setCanApprove(approvalCheck.canApprove || false);
+      setApprovalError(approvalCheck.error || null);
+    };
+
+    // Debounce the check to avoid too many calls, and give time for DB save
+    const timeoutId = setTimeout(checkApproval, 1500);
+    return () => clearTimeout(timeoutId);
+  }, [id, invoiceData?.vendorName?.value, invoiceData?.status]);
+
   // Memoize validation callback to prevent infinite loops
   const handleValidationChange = useCallback((isValid: boolean, missing: string[]) => {
     setIsFormValid(isValid);
@@ -1172,7 +1189,9 @@ export default function InvoiceDetailPage() {
                       onClick={() => handleStatusUpdate('Pending')} 
                       disabled={isUpdating || invoiceData.vendorRequires1099 || !isFormValid || !canApprove} 
                       title={
-                        !canApprove && approvalError
+                        isUpdating
+                          ? 'Processing...'
+                          : !canApprove && approvalError
                           ? approvalError
                           : invoiceData.vendorRequires1099 
                           ? 'Vendor must be set up before approving' 
@@ -1184,19 +1203,29 @@ export default function InvoiceDetailPage() {
                       <Check className="mr-2 h-4 w-4" />
                       Approve
                     </Button>
-                    {!canApprove && approvalError && (
-                      <p className="text-xs text-destructive self-center max-w-md">
-                        {approvalError}
-                      </p>
-                    )}
-                    {invoiceData.vendorRequires1099 && canApprove && (
+                    {isUpdating && (
                       <p className="text-xs text-muted-foreground self-center">
-                        Complete vendor setup to approve
+                        Processing...
                       </p>
                     )}
-                    {!isFormValid && missingFields.length > 0 && !invoiceData.vendorRequires1099 && (
+                    {!isUpdating && !canApprove && approvalError && (
+                      <p className="text-xs text-destructive self-center max-w-md whitespace-pre-wrap">
+                        ⚠️ {approvalError}
+                      </p>
+                    )}
+                    {!isUpdating && !canApprove && !approvalError && (
+                      <p className="text-xs text-destructive self-center max-w-md">
+                        ⚠️ Cannot approve invoice. Please check vendor W9/tax ID requirements.
+                      </p>
+                    )}
+                    {!isUpdating && invoiceData.vendorRequires1099 && canApprove && (
                       <p className="text-xs text-destructive self-center">
-                        Required fields missing: {missingFields.join(', ')}
+                        ⚠️ Vendor must be set up before approving. Complete vendor setup to enable approval.
+                      </p>
+                    )}
+                    {!isUpdating && !isFormValid && missingFields.length > 0 && !invoiceData.vendorRequires1099 && canApprove && (
+                      <p className="text-xs text-destructive self-center">
+                        ⚠️ Required fields missing: {missingFields.join(', ')}
                       </p>
                     )}
                   </>

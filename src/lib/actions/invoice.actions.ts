@@ -63,7 +63,7 @@ export async function getInvoiceDataUriAction(uri: string): Promise<{ dataUri?: 
 export async function canApproveInvoiceAction(
   id: string
 ): Promise<{ canApprove: boolean; error?: string }> {
-  return withActionHandler(async () => {
+  try {
     const invoice = await invoiceService.getInvoiceById(id);
     if (!invoice) {
       return { canApprove: false, error: 'Invoice not found' };
@@ -86,15 +86,29 @@ export async function canApproveInvoiceAction(
 
     // Check if vendor requires 1099/W9
     const { findVendorByName } = await import('../repositories/vendor.repository');
-    const vendor = await findVendorByName(vendorName);
+    // Try exact match first, then trimmed match
+    const vendor = await findVendorByName(vendorName) || await findVendorByName(vendorName.trim());
     
     // Check if W9 is received or tax ID exists
+    // Tax ID can be string or number, so convert to string for checking
     const hasW9Received = vendor?.w9Status === 'Received';
-    const hasTaxId = vendor?.taxId && vendor.taxId.trim() !== '';
+    const taxIdValue = vendor?.taxId;
+    const hasTaxId = taxIdValue !== null && taxIdValue !== undefined && 
+                     String(taxIdValue).trim() !== '';
     const noNeedToTrack = hasW9Received || hasTaxId;
     
-    // Check threshold for ALL vendors (in list or not) if they don't have W9/tax ID
-    if (!noNeedToTrack) {
+    // If vendor has tax ID or W9 received, allow approval immediately
+    if (noNeedToTrack) {
+      return { canApprove: true };
+    }
+    
+    // If vendor is not found in database, allow approval (can't verify requirements)
+    if (!vendor) {
+      return { canApprove: true };
+    }
+    
+    // Check threshold for vendors in database that don't have W9/tax ID
+    if (!noNeedToTrack && vendor) {
       // Get financial year from invoice date
       const invoiceDate = typeof invoice.invoiceDate === 'object' && invoice.invoiceDate?.value 
         ? invoice.invoiceDate.value 
@@ -183,7 +197,11 @@ export async function canApproveInvoiceAction(
     }
 
     return { canApprove: true };
-  }, 'Failed to check approval eligibility');
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to check approval eligibility';
+    console.error('Error in canApproveInvoiceAction:', error);
+    return { canApprove: false, error: message };
+  }
 }
 
 /**

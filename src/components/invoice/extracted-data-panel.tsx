@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
@@ -144,9 +144,23 @@ export function ExtractedDataPanel({
   // Track previous validation state to avoid unnecessary callbacks
   const prevValidationRef = useRef<{ isValid: boolean; missingFields: string[] } | null>(null);
 
+  // Extract case number to a stable value to avoid dependency array issues
+  const savedCaseNumber = useMemo(() => invoiceData?.caseNumber || '', [invoiceData?.caseNumber]);
+
   // Validate mandatory fields and notify parent
   useEffect(() => {
     if (!onValidationChange) return;
+
+    // Don't validate until disbursement options are loaded (to avoid false negatives)
+    // But if options are already loaded (arrays have items), proceed with validation
+    // Also proceed if loading has completed (both loading states are false)
+    const optionsLoaded = disbursementTypes.length > 0 && disbursementStatuses.length > 0;
+    const loadingComplete = !isLoadingTypes && !isLoadingStatuses;
+    
+    // Only skip validation if we're still loading AND options aren't loaded yet
+    if (!loadingComplete && !optionsLoaded) {
+      return;
+    }
 
     const missingFields: string[] = [];
     
@@ -155,8 +169,8 @@ export function ExtractedDataPanel({
       missingFields.push('Document Type');
     }
     
-    // Check Case Number (must be saved to invoiceData, not just in local state)
-    if (!invoiceData.caseNumber || !invoiceData.caseNumber.trim()) {
+    // Check Case Number - use the memoized saved value
+    if (!savedCaseNumber.trim()) {
       missingFields.push('Case Number');
     }
     
@@ -172,7 +186,7 @@ export function ExtractedDataPanel({
 
     const isValid = missingFields.length === 0;
     
-    // Only call callback if validation state actually changed
+    // Always call callback on first run, then only if validation state changed
     const prevValidation = prevValidationRef.current;
     if (!prevValidation || 
         prevValidation.isValid !== isValid || 
@@ -181,7 +195,7 @@ export function ExtractedDataPanel({
       onValidationChange(isValid, missingFields);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentType, invoiceData.caseNumber, selectedDisbursementType, selectedDisbursementStatus]);
+  }, [documentType, savedCaseNumber, selectedDisbursementType, selectedDisbursementStatus, isLoadingTypes, isLoadingStatuses, disbursementTypes.length, disbursementStatuses.length]);
 
   // Initialize original field data and detect already-edited fields on mount
   useEffect(() => {
