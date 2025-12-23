@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import {
   Card,
   CardContent,
@@ -124,17 +124,17 @@ const ACTION_LABELS: Record<string, string> = {
   bulk_delete: 'Bulk Delete',
 };
 
-// Category icons
-const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  authentication: <Shield className="h-4 w-4" />,
-  invoice_management: <FileText className="h-4 w-4" />,
-  approval_workflow: <AlertCircle className="h-4 w-4" />,
-  vendor_management: <Building2 className="h-4 w-4" />,
-  user_management: <User className="h-4 w-4" />,
-  system: <Settings className="h-4 w-4" />,
-  security: <Shield className="h-4 w-4" />,
-  data_export: <FileText className="h-4 w-4" />,
-  crm_integration: <RefreshCw className="h-4 w-4" />,
+// Category icons with accessibility labels
+const CATEGORY_ICONS: Record<string, { icon: React.ReactNode; label: string }> = {
+  authentication: { icon: <Shield className="h-4 w-4" aria-hidden="true" />, label: "Authentication" },
+  invoice_management: { icon: <FileText className="h-4 w-4" aria-hidden="true" />, label: "Invoice Management" },
+  approval_workflow: { icon: <AlertCircle className="h-4 w-4" aria-hidden="true" />, label: "Approval Workflow" },
+  vendor_management: { icon: <Building2 className="h-4 w-4" aria-hidden="true" />, label: "Vendor Management" },
+  user_management: { icon: <User className="h-4 w-4" aria-hidden="true" />, label: "User Management" },
+  system: { icon: <Settings className="h-4 w-4" aria-hidden="true" />, label: "System" },
+  security: { icon: <Shield className="h-4 w-4" aria-hidden="true" />, label: "Security" },
+  data_export: { icon: <FileText className="h-4 w-4" aria-hidden="true" />, label: "Data Export" },
+  crm_integration: { icon: <RefreshCw className="h-4 w-4" aria-hidden="true" />, label: "CRM Integration" },
 };
 
 export default function AuditLogsPage() {
@@ -152,6 +152,8 @@ export default function AuditLogsPage() {
   const [categories, setCategories] = useState<Array<{ value: string; label: string }>>([]);
   const [severities, setSeverities] = useState<Array<{ value: string; label: string }>>([]);
   const [activeTab, setActiveTab] = useState('all');
+  const statusMessageRef = useRef<HTMLDivElement>(null);
+  const tableRef = useRef<HTMLTableElement>(null);
 
   // Check access - only admin, director, and manager can view audit logs
   const hasAccess = useMemo(() => {
@@ -221,9 +223,16 @@ export default function AuditLogsPage() {
       if (result.data) {
         setLogs(result.data.logs);
         setTotalLogs(result.data.total);
+        // Announce results to screen readers
+        if (statusMessageRef.current) {
+          statusMessageRef.current.textContent = `Loaded ${result.data.logs.length} of ${result.data.total} audit log entries`;
+        }
       }
     } catch (error) {
       console.error('Failed to fetch audit logs:', error);
+      if (statusMessageRef.current) {
+        statusMessageRef.current.textContent = 'Error loading audit logs. Please try again.';
+      }
     } finally {
       setIsLoading(false);
     }
@@ -319,11 +328,11 @@ export default function AuditLogsPage() {
 
   if (!hasAccess) {
     return (
-      <div className="flex-1 flex items-center justify-center p-8">
+      <main className="flex-1 flex items-center justify-center p-8" role="main" aria-label="Audit Logs">
         <Card className="max-w-md">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-red-600">
-              <Shield className="h-5 w-5" />
+            <CardTitle className="flex items-center gap-2 text-red-600" role="alert">
+              <Shield className="h-5 w-5" aria-hidden="true" />
               Access Denied
             </CardTitle>
             <CardDescription>
@@ -331,79 +340,117 @@ export default function AuditLogsPage() {
             </CardDescription>
           </CardHeader>
         </Card>
-      </div>
+      </main>
     );
   }
 
   return (
-    <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between">
+    <main className="flex-1 space-y-4 p-4 md:p-8 pt-6" role="main" aria-label="Audit Logs">
+      {/* Skip link for keyboard navigation */}
+      <a 
+        href="#audit-logs-content" 
+        className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+      >
+        Skip to main content
+      </a>
+      
+      {/* Status message for screen readers */}
+      <div 
+        ref={statusMessageRef}
+        role="status" 
+        aria-live="polite" 
+        aria-atomic="true"
+        className="sr-only"
+      />
+      
+      <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-3xl font-bold tracking-tight">Audit Logs</h2>
+          <h1 className="text-3xl font-bold tracking-tight">Audit Logs</h1>
           <p className="text-muted-foreground">Security and compliance audit trail</p>
         </div>
-        <Button onClick={fetchLogs} variant="outline" size="sm">
-          <RefreshCw className="h-4 w-4 mr-2" />
+        <Button 
+          onClick={fetchLogs} 
+          variant="outline" 
+          size="sm"
+          aria-label="Refresh audit logs"
+          disabled={isLoading}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} aria-hidden="true" />
           Refresh
         </Button>
-      </div>
+      </header>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="all">All Logs</TabsTrigger>
-          <TabsTrigger value="auth">Authentication</TabsTrigger>
-          <TabsTrigger value="approvals">Approvals</TabsTrigger>
-          <TabsTrigger value="errors">Errors</TabsTrigger>
+        <TabsList role="tablist" aria-label="Filter audit logs by category">
+          <TabsTrigger value="all" role="tab" aria-controls="all-logs-panel" id="all-logs-tab">All Logs</TabsTrigger>
+          <TabsTrigger value="auth" role="tab" aria-controls="auth-logs-panel" id="auth-logs-tab">Authentication</TabsTrigger>
+          <TabsTrigger value="approvals" role="tab" aria-controls="approvals-logs-panel" id="approvals-logs-tab">Approvals</TabsTrigger>
+          <TabsTrigger value="errors" role="tab" aria-controls="errors-logs-panel" id="errors-logs-tab">Errors</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="space-y-4">
-          <Card>
+        <TabsContent value={activeTab} className="space-y-4" id={`${activeTab}-logs-panel`} role="tabpanel" aria-labelledby={`${activeTab}-logs-tab`} tabIndex={0}>
+          <Card id="audit-logs-content">
             <CardHeader className="pb-4">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <CardTitle className="flex items-center gap-2">
-                  <Badge variant="secondary">{totalLogs.toLocaleString()}</Badge>
+                  <Badge variant="secondary" aria-label={`Total audit logs: ${totalLogs.toLocaleString()}`}>{totalLogs.toLocaleString()}</Badge>
                   <span>Audit Trail</span>
                 </CardTitle>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2" role="search" aria-label="Filter audit logs">
                   <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <label htmlFor="search-logs-input" className="sr-only">Search audit logs</label>
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
                     <Input
+                      id="search-logs-input"
+                      type="search"
                       placeholder="Search logs..."
                       className="pl-8 w-64"
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
+                      aria-label="Search audit logs"
                     />
                   </div>
-                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger className="w-[160px]">
-                      <Filter className="h-4 w-4 mr-2" />
-                      <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Categories</SelectItem>
-                      {categories.map((cat) => (
-                        <SelectItem key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={severityFilter} onValueChange={setSeverityFilter}>
-                    <SelectTrigger className="w-[140px]">
-                      <SelectValue placeholder="Severity" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Severities</SelectItem>
-                      {severities.map((sev) => (
-                        <SelectItem key={sev.value} value={sev.value}>
-                          {sev.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div>
+                    <label htmlFor="category-filter" className="sr-only">Filter by category</label>
+                    <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                      <SelectTrigger id="category-filter" className="w-[160px]" aria-label="Filter by category">
+                        <Filter className="h-4 w-4 mr-2" aria-hidden="true" />
+                        <SelectValue placeholder="Category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Categories</SelectItem>
+                        {categories.map((cat) => (
+                          <SelectItem key={cat.value} value={cat.value}>
+                            {cat.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label htmlFor="severity-filter" className="sr-only">Filter by severity</label>
+                    <Select value={severityFilter} onValueChange={setSeverityFilter}>
+                      <SelectTrigger id="severity-filter" className="w-[140px]" aria-label="Filter by severity">
+                        <SelectValue placeholder="Severity" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Severities</SelectItem>
+                        {severities.map((sev) => (
+                          <SelectItem key={sev.value} value={sev.value}>
+                            {sev.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                   {hasActiveFilters && (
-                    <Button variant="ghost" size="sm" onClick={clearFilters}>
-                      <X className="h-4 w-4 mr-1" />
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={clearFilters}
+                      aria-label="Clear all filters"
+                    >
+                      <X className="h-4 w-4 mr-1" aria-hidden="true" />
                       Clear
                     </Button>
                   )}
@@ -412,27 +459,42 @@ export default function AuditLogsPage() {
             </CardHeader>
             <CardContent>
               {isLoading ? (
-                <div className="text-center py-12">
-                  <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" />
+                <div className="text-center py-12" role="status" aria-live="polite" aria-label="Loading audit logs">
+                  <RefreshCw className="h-8 w-8 animate-spin mx-auto mb-4 text-muted-foreground" aria-hidden="true" />
                   <p className="text-muted-foreground">Loading audit logs...</p>
                 </div>
               ) : logs.length > 0 ? (
                 <div className="rounded-md border">
-                  <Table>
+                  <Table ref={tableRef}>
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[180px]">Timestamp</TableHead>
-                        <TableHead className="w-[120px]">User</TableHead>
-                        <TableHead className="w-[160px]">Action</TableHead>
-                        <TableHead className="w-[140px]">Category</TableHead>
-                        <TableHead>Details</TableHead>
-                        <TableHead className="w-[90px]">Severity</TableHead>
-                        <TableHead className="w-[60px] text-right">View</TableHead>
+                        <TableHead className="w-[180px]" scope="col">Timestamp</TableHead>
+                        <TableHead className="w-[120px]" scope="col">User</TableHead>
+                        <TableHead className="w-[160px]" scope="col">Action</TableHead>
+                        <TableHead className="w-[140px]" scope="col">Category</TableHead>
+                        <TableHead scope="col">Details</TableHead>
+                        <TableHead className="w-[90px]" scope="col">Severity</TableHead>
+                        <TableHead className="w-[60px] text-right" scope="col">
+                          <span className="sr-only">View details</span>
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {logs.map((log) => (
-                        <TableRow key={log.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedLog(log)}>
+                      {logs.map((log, index) => (
+                        <TableRow 
+                          key={log.id} 
+                          className="cursor-pointer hover:bg-muted/50 focus-within:bg-muted/50" 
+                          onClick={() => setSelectedLog(log)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSelectedLog(log);
+                            }
+                          }}
+                          tabIndex={0}
+                          role="button"
+                          aria-label={`View details for audit log ${index + 1}: ${ACTION_LABELS[log.action] || log.action} by ${log.userName || log.userId} at ${formatTimestamp(log.timestamp)}`}
+                        >
                           <TableCell className="font-mono text-xs">
                             {formatTimestamp(log.timestamp)}
                           </TableCell>
@@ -450,14 +512,18 @@ export default function AuditLogsPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              {CATEGORY_ICONS[log.category] || <Settings className="h-4 w-4" />}
+                              {CATEGORY_ICONS[log.category]?.icon || <Settings className="h-4 w-4" aria-hidden="true" />}
                               <span className="text-sm">
                                 {ACTION_LABELS[log.action] || log.action}
                               </span>
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={cn("text-xs", getCategoryBadgeClass(log.category))}>
+                            <Badge 
+                              variant="outline" 
+                              className={cn("text-xs", getCategoryBadgeClass(log.category))}
+                              aria-label={`Category: ${categories.find(c => c.value === log.category)?.label || log.category}`}
+                            >
                               {categories.find(c => c.value === log.category)?.label || log.category}
                             </Badge>
                           </TableCell>
@@ -467,7 +533,11 @@ export default function AuditLogsPage() {
                             </span>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={cn("text-xs", getSeverityBadgeClass(log.severity))}>
+                            <Badge 
+                              variant="outline" 
+                              className={cn("text-xs", getSeverityBadgeClass(log.severity))}
+                              aria-label={`Severity: ${log.severity}`}
+                            >
                               {log.severity}
                             </Badge>
                           </TableCell>
@@ -479,8 +549,9 @@ export default function AuditLogsPage() {
                                 e.stopPropagation();
                                 setSelectedLog(log);
                               }}
+                              aria-label={`View details for ${ACTION_LABELS[log.action] || log.action} audit log`}
                             >
-                              <Eye className="h-4 w-4" />
+                              <Eye className="h-4 w-4" aria-hidden="true" />
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -489,16 +560,21 @@ export default function AuditLogsPage() {
                   </Table>
                 </div>
               ) : (
-                <div className="text-center py-12">
-                  <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold">No Logs Found</h3>
+                <div className="text-center py-12" role="status" aria-live="polite">
+                  <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" aria-hidden="true" />
+                  <h2 className="text-lg font-semibold">No Logs Found</h2>
                   <p className="text-muted-foreground mt-2">
                     {hasActiveFilters
                       ? "No audit logs match your search criteria."
                       : "There are no audit logs yet."}
                   </p>
                   {hasActiveFilters && (
-                    <Button variant="outline" className="mt-4" onClick={clearFilters}>
+                    <Button 
+                      variant="outline" 
+                      className="mt-4" 
+                      onClick={clearFilters}
+                      aria-label="Clear all filters to show all audit logs"
+                    >
                       Clear Filters
                     </Button>
                   )}
@@ -506,13 +582,14 @@ export default function AuditLogsPage() {
               )}
             </CardContent>
             {logs.length > 0 && (
-              <div className="flex items-center justify-between py-4 px-6 border-t">
-                <div className="text-sm text-muted-foreground">
+              <nav className="flex items-center justify-between py-4 px-6 border-t" aria-label="Pagination">
+                <div className="text-sm text-muted-foreground" aria-live="polite" aria-atomic="true">
                   Showing {((currentPage - 1) * rowsPerPage) + 1} to {Math.min(currentPage * rowsPerPage, totalLogs)} of {totalLogs} entries
                 </div>
                 <div className="flex items-center space-x-4">
                   <div className="flex items-center space-x-2">
-                    <span className="text-sm">Rows</span>
+                    <label htmlFor="rows-per-page" className="text-sm sr-only">Rows per page</label>
+                    <span className="text-sm" aria-hidden="true">Rows</span>
                     <Select
                       value={`${rowsPerPage}`}
                       onValueChange={(value) => {
@@ -520,7 +597,7 @@ export default function AuditLogsPage() {
                         setCurrentPage(1);
                       }}
                     >
-                      <SelectTrigger className="h-8 w-[70px]">
+                      <SelectTrigger id="rows-per-page" className="h-8 w-[70px]" aria-label="Select number of rows per page">
                         <SelectValue placeholder={rowsPerPage} />
                       </SelectTrigger>
                       <SelectContent side="top">
@@ -538,11 +615,13 @@ export default function AuditLogsPage() {
                       size="sm"
                       onClick={handlePrevPage}
                       disabled={currentPage === 1}
+                      aria-label={`Go to previous page, page ${currentPage - 1}`}
                     >
-                      <ChevronLeft className="h-4 w-4" />
-                      Previous
+                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                      <span className="sr-only">Previous</span>
+                      <span aria-hidden="true">Previous</span>
                     </Button>
-                    <span className="text-sm font-medium px-2">
+                    <span className="text-sm font-medium px-2" aria-label={`Current page ${currentPage} of ${totalPages || 1}`}>
                       Page {currentPage} of {totalPages || 1}
                     </span>
                     <Button
@@ -550,13 +629,15 @@ export default function AuditLogsPage() {
                       size="sm"
                       onClick={handleNextPage}
                       disabled={currentPage >= totalPages}
+                      aria-label={`Go to next page, page ${currentPage + 1}`}
                     >
-                      Next
-                      <ChevronRight className="h-4 w-4" />
+                      <span className="sr-only">Next</span>
+                      <span aria-hidden="true">Next</span>
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
-              </div>
+              </nav>
             )}
           </Card>
         </TabsContent>
@@ -564,78 +645,136 @@ export default function AuditLogsPage() {
 
       {/* Detail Dialog */}
       <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent 
+          className="max-w-2xl max-h-[80vh] overflow-y-auto"
+          aria-labelledby="audit-log-dialog-title"
+          aria-describedby="audit-log-dialog-description"
+        >
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {selectedLog && CATEGORY_ICONS[selectedLog.category]}
-              {selectedLog && (ACTION_LABELS[selectedLog.action] || selectedLog.action)}
+            <DialogTitle id="audit-log-dialog-title" className="flex items-center gap-2">
+              {selectedLog && CATEGORY_ICONS[selectedLog.category]?.icon}
+              <span>
+                {selectedLog 
+                  ? (ACTION_LABELS[selectedLog.action] || selectedLog.action)
+                  : 'Audit Log Details'
+                }
+              </span>
             </DialogTitle>
-            <DialogDescription>
-              {selectedLog && formatTimestamp(selectedLog.timestamp)}
+            {selectedLog && (
+              <span className="sr-only">
+                {CATEGORY_ICONS[selectedLog.category]?.label || 'Category'}
+              </span>
+            )}
+            <DialogDescription id="audit-log-dialog-description">
+              {selectedLog ? formatTimestamp(selectedLog.timestamp) : 'Loading audit log details...'}
             </DialogDescription>
           </DialogHeader>
           {selectedLog && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-4" role="region" aria-label="Audit log details">
+              <dl className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">User</label>
-                  <p className="mt-1">{selectedLog.userName || selectedLog.userId}</p>
+                  <dt className="text-sm font-medium text-muted-foreground">User</dt>
+                  <dd className="mt-1">{selectedLog.userName || selectedLog.userId}</dd>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Role</label>
-                  <p className="mt-1">{selectedLog.userRole || '-'}</p>
+                  <dt className="text-sm font-medium text-muted-foreground">Role</dt>
+                  <dd className="mt-1">{selectedLog.userRole || '-'}</dd>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Email</label>
-                  <p className="mt-1">{selectedLog.userEmail || '-'}</p>
+                  <dt className="text-sm font-medium text-muted-foreground">Email</dt>
+                  <dd className="mt-1">{selectedLog.userEmail || '-'}</dd>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Category</label>
-                  <p className="mt-1">
-                    <Badge variant="outline" className={cn(getCategoryBadgeClass(selectedLog.category))}>
+                  <dt className="text-sm font-medium text-muted-foreground">Category</dt>
+                  <dd className="mt-1">
+                    <Badge 
+                      variant="outline" 
+                      className={cn(getCategoryBadgeClass(selectedLog.category))}
+                      aria-label={`Category: ${categories.find(c => c.value === selectedLog.category)?.label || selectedLog.category}`}
+                    >
                       {categories.find(c => c.value === selectedLog.category)?.label || selectedLog.category}
                     </Badge>
-                  </p>
+                  </dd>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Severity</label>
-                  <p className="mt-1">
-                    <Badge variant="outline" className={cn(getSeverityBadgeClass(selectedLog.severity))}>
+                  <dt className="text-sm font-medium text-muted-foreground">Severity</dt>
+                  <dd className="mt-1">
+                    <Badge 
+                      variant="outline" 
+                      className={cn(getSeverityBadgeClass(selectedLog.severity))}
+                      aria-label={`Severity: ${selectedLog.severity}`}
+                    >
                       {selectedLog.severity}
                     </Badge>
-                  </p>
+                  </dd>
                 </div>
                 <div>
-                  <label className="text-sm font-medium text-muted-foreground">Resource</label>
-                  <p className="mt-1">{selectedLog.resource} {selectedLog.resourceId ? `(${selectedLog.resourceId})` : ''}</p>
+                  <dt className="text-sm font-medium text-muted-foreground">Resource</dt>
+                  <dd className="mt-1">{selectedLog.resource} {selectedLog.resourceId ? `(${selectedLog.resourceId})` : ''}</dd>
                 </div>
-              </div>
+              </dl>
 
               {selectedLog.details && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Details</label>
-                  <div className="mt-2 p-3 bg-muted rounded-md">
-                    <pre className="text-sm whitespace-pre-wrap overflow-x-auto">
-                      {JSON.stringify(selectedLog.details, null, 2)}
-                    </pre>
+                <section className="pt-4 border-t" aria-labelledby="details-heading">
+                  <h3 id="details-heading" className="text-sm font-medium text-muted-foreground mb-2">Details</h3>
+                  <div className="p-4 rounded-md bg-muted/50 border">
+                    <dl className="grid grid-cols-2 gap-4">
+                      {Object.entries(selectedLog.details).map(([key, value]) => {
+                        // Format key: convert camelCase to Title Case
+                        const formattedKey = key
+                          .replace(/([A-Z])/g, ' $1')
+                          .replace(/^./, str => str.toUpperCase())
+                          .trim();
+                        
+                        // Format value
+                        const formattedValue = typeof value === 'object' && value !== null
+                          ? JSON.stringify(value)
+                          : String(value);
+                        
+                        return (
+                          <div key={key}>
+                            <dt className="text-sm font-medium text-muted-foreground">{formattedKey}</dt>
+                            <dd className="mt-1">{formattedValue}</dd>
+                          </div>
+                        );
+                      })}
+                    </dl>
                   </div>
-                </div>
+                </section>
               )}
 
               {selectedLog.metadata && (
-                <div>
-                  <label className="text-sm font-medium text-muted-foreground">Metadata</label>
-                  <div className="mt-2 p-3 bg-muted rounded-md">
-                    <pre className="text-sm whitespace-pre-wrap overflow-x-auto">
-                      {JSON.stringify(selectedLog.metadata, null, 2)}
-                    </pre>
+                <section className="pt-4 border-t" aria-labelledby="metadata-heading">
+                  <h3 id="metadata-heading" className="text-sm font-medium text-muted-foreground mb-2">Metadata</h3>
+                  <div className="p-4 rounded-md bg-muted/50 border">
+                    <dl className="grid grid-cols-2 gap-4">
+                      {Object.entries(selectedLog.metadata).map(([key, value]) => {
+                        // Format key: convert camelCase to Title Case
+                        const formattedKey = key
+                          .replace(/([A-Z])/g, ' $1')
+                          .replace(/^./, str => str.toUpperCase())
+                          .trim();
+                        
+                        // Format value
+                        const formattedValue = typeof value === 'object' && value !== null
+                          ? JSON.stringify(value)
+                          : String(value);
+                        
+                        return (
+                          <div key={key}>
+                            <dt className="text-sm font-medium text-muted-foreground">{formattedKey}</dt>
+                            <dd className="mt-1">{formattedValue}</dd>
+                          </div>
+                        );
+                      })}
+                    </dl>
                   </div>
-                </div>
+                </section>
               )}
             </div>
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </main>
   );
 }
