@@ -153,6 +153,35 @@ export function compareEmails(email1: string, email2: string): boolean {
 }
 
 /**
+ * Converts name from "Last, First" format to "First Last" format
+ * Handles formats like:
+ * - "Smith, John" -> "John Smith"
+ * - "Smith, John Michael" -> "John Michael Smith"
+ * - "John Smith" -> "John Smith" (already in correct format)
+ *
+ * @param name - Name in "Last, First" or "First Last" format
+ * @returns Name in "First Last" format
+ */
+export function formatNameFirstLast(name: string): string {
+  if (!name || !name.trim()) return name;
+  
+  const trimmed = name.trim();
+  
+  // Check if it's in "Last, First" format
+  if (trimmed.includes(',')) {
+    const parts = trimmed.split(',').map(p => p.trim()).filter(p => p);
+    if (parts.length >= 2) {
+      const lastName = parts[0];
+      const firstParts = parts.slice(1).join(' ').trim();
+      return `${firstParts} ${lastName}`.trim();
+    }
+  }
+  
+  // Already in "First Last" format or doesn't have comma
+  return trimmed;
+}
+
+/**
  * Match result with detailed information
  */
 export interface MatchResult {

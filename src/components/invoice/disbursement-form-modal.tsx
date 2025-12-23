@@ -33,6 +33,7 @@ import {
 import type { DisbursementOption, ContactLookupResult } from '@/lib/crm/smartadvocate/types';
 import { formatCurrency } from '@/lib/utils/invoice-utils';
 import { cn } from '@/lib/utils/utils';
+import { formatNameFirstLast } from '@/lib/utils/name-matching';
 
 interface DisbursementFormModalProps {
   isOpen: boolean;
@@ -219,7 +220,8 @@ export function DisbursementFormModal({
     if (isOpen) {
       const invNum = invoiceNumber || invoice.invoiceNumber?.value || '';
       const caseNum = invoice.caseNumber || '';
-      const plaintiff = plaintiffName || '';
+      // Convert plaintiff name from "Last, First" to "First Last" format
+      const plaintiff = plaintiffName ? formatNameFirstLast(plaintiffName) : '';
       
       // Build comment string with available values
       const parts: string[] = [];
