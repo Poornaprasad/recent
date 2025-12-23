@@ -11,6 +11,7 @@ import type { User } from '../db/schema';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
 import { auditService } from '../core/audit/audit.service';
 import { AuditAction, AuditResource, AuditCategory, AuditSeverity } from '../core/audit/audit.types';
+import { getRequestMetadata } from '../utils/request-context';
 
 /**
  * Get all users
@@ -58,6 +59,7 @@ export async function createUserAction(
   return withActionHandler(
     async () => {
       const user = await userService.createUser(input);
+      const metadata = await getRequestMetadata();
 
       // Audit log user creation
       await auditService.logUserCreated(
@@ -67,7 +69,8 @@ export async function createUserAction(
           userName: user.name,
           userEmail: user.email,
           userRole: user.role,
-        }
+        },
+        metadata
       );
 
       revalidatePath('/users');
@@ -100,6 +103,7 @@ export async function updateUserAction(
       }
 
       const user = await userService.updateUser(id, input);
+      const metadata = await getRequestMetadata();
 
       // Track changes for audit log
       const changedFields: string[] = [];
@@ -135,6 +139,7 @@ export async function updateUserAction(
             previousStatus: existingUser.status,
             newStatus: input.status,
           },
+          metadata,
         });
       }
       if (input.role && input.role !== existingUser.role) {
@@ -150,7 +155,8 @@ export async function updateUserAction(
             userName: user.name,
             previousRole: existingUser.role,
             newRole: input.role,
-          }
+          },
+          metadata
         );
       }
       if (input.assignedStates !== undefined && input.assignedStates !== existingUser.assignedStates) {
@@ -172,6 +178,7 @@ export async function updateUserAction(
             previousStates: existingUser.assignedStates,
             newStates: input.assignedStates,
           },
+          metadata,
         });
       }
 
@@ -185,7 +192,8 @@ export async function updateUserAction(
             changedFields,
             previousValue,
             newValue,
-          }
+          },
+          metadata
         );
       }
 
@@ -208,6 +216,7 @@ export async function deleteUserAction(
     async () => {
       // Get user info before deleting for audit log
       const user = await userService.getUserById(id);
+      const metadata = await getRequestMetadata();
 
       await userService.deleteUser(id);
 
@@ -219,7 +228,8 @@ export async function deleteUserAction(
           {
             userName: user.name,
             userEmail: user.email,
-          }
+          },
+          metadata
         );
       }
 

@@ -11,6 +11,7 @@ import type { Vendor, VendorType } from '../domain/types';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
 import { auditService } from '../core/audit/audit.service';
 import { AuditAction, AuditResource, AuditCategory, AuditSeverity } from '../core/audit/audit.types';
+import { getRequestMetadata } from '../utils/request-context';
 
 /**
  * Get all vendors
@@ -66,6 +67,7 @@ export async function saveVendorAction(
     // Check if this is a new vendor or update
     const existingVendor = await vendorService.getVendorById(vendor.id);
     const isNew = !existingVendor;
+    const metadata = await getRequestMetadata();
 
     await vendorService.saveVendor(vendor);
 
@@ -75,7 +77,7 @@ export async function saveVendorAction(
         vendorName: vendor.name,
         vendorType: vendor.vendorType || undefined,
         email: vendor.email || undefined,
-      });
+      }, metadata);
     } else {
       // Determine changed fields
       const changedFields: string[] = [];
@@ -104,7 +106,7 @@ export async function saveVendorAction(
           changedFields,
           previousValue,
           newValue,
-        });
+        }, metadata);
       }
     }
 
@@ -123,6 +125,7 @@ export async function deleteVendorAction(
   return withActionHandler(async () => {
     // Get vendor info before deleting for audit log
     const vendor = await vendorService.getVendorById(id);
+    const metadata = await getRequestMetadata();
 
     await vendorService.removeVendor(id);
 
@@ -141,6 +144,7 @@ export async function deleteVendorAction(
           vendorType: vendor.vendorType,
           email: vendor.email,
         },
+        metadata,
       });
     }
 
@@ -244,6 +248,7 @@ export async function updateVendor1099StatusAction(
 
     const previousW9Status = vendor.w9Status;
     const previous1099Status = vendor.form1099Status;
+    const metadata = await getRequestMetadata();
 
     const updatedVendor: Vendor = {
       ...vendor,
@@ -265,7 +270,8 @@ export async function updateVendor1099StatusAction(
           vendorName: vendor.name,
           previousStatus: previousW9Status || undefined,
           newStatus: status.w9Status,
-        }
+        },
+        metadata
       );
     }
 
@@ -278,7 +284,8 @@ export async function updateVendor1099StatusAction(
           vendorName: vendor.name,
           previousStatus: previous1099Status || undefined,
           newStatus: status.form1099Status,
-        }
+        },
+        metadata
       );
     }
 
@@ -287,8 +294,3 @@ export async function updateVendor1099StatusAction(
     return { success: true };
   }, 'Failed to update vendor 1099 status');
 }
-
-
-
-
-
