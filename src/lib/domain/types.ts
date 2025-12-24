@@ -43,6 +43,7 @@ export type StoredInvoice = BaseEntity & ExtractedDataOnly & {
   documentType?: 'Webhook Source' | 'Invoice' | 'Receipt' | 'Per Diem' | 'Estate' | 'Other Document' | 'Other' | 'Office Disbursement' | 'Office Reimbursement' | 'Case Details' | 'Reimbursement' | 'Office Credit Card Bill'; // Document type classification
   disbursementResponse?: any; // Disbursement creation response from CRM (JSON object)
   crmStatus?: 'Associated' | 'Draft' | 'Not Found' | 'Duplicate'; // CRM status: indicates if invoice is associated, draft, not found, or duplicate
+  documentHash?: string; // Hash of document ID and case number for duplicate detection
 };
 
 export type User = BaseEntity & {

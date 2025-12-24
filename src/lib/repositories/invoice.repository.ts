@@ -178,6 +178,28 @@ export async function checkForDuplicateInvoice(
 }
 
 /**
+ * Check for duplicate invoice by document hash
+ * This is used to prevent duplicate documents from SmartAdvocate sync
+ * 
+ * @param documentHash The hash of document ID and case number
+ * @returns The existing invoice if found, null otherwise
+ */
+export async function findInvoiceByDocumentHash(documentHash: string): Promise<StoredInvoice | null> {
+  const db = await getDatabase();
+
+  const row = await db
+    .select()
+    .from(invoices)
+    .where(eq(invoices.documentHash, documentHash))
+    .limit(1)
+    .then(rows => rows[0]);
+
+  if (!row) return null;
+
+  return mapDbRowToInvoice(row);
+}
+
+/**
  * Get invoices by vendor name (case-insensitive)
  */
 export async function findInvoicesByVendorName(vendorName: string): Promise<StoredInvoice[]> {

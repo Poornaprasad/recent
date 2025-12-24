@@ -16,6 +16,8 @@ import { getConfig } from '../crm/smartadvocate/utils';
 import { processInvoiceAction } from './invoice.actions';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
 import type { SmartAdvocateDocument } from '../crm/smartadvocate/types';
+import { generateDocumentHash } from '../utils/document-hash';
+import { findInvoiceByDocumentHash } from '../repositories/invoice.repository';
 
 export interface DocumentSyncResult {
   totalDocuments: number;
@@ -23,6 +25,7 @@ export interface DocumentSyncResult {
   processedDocuments: number;
   successful: number;
   failed: number;
+  skipped: number; // Documents skipped due to duplicates
   errors: Array<{ documentID: number; error: string }>;
 }
 
@@ -63,6 +66,7 @@ export async function syncDocumentsFromSmartAdvocate(
       processedDocuments: 0,
       successful: 0,
       failed: 0,
+      skipped: 0,
       errors: [],
     };
 
@@ -95,10 +99,23 @@ export async function syncDocumentsFromSmartAdvocate(
       // Process each filtered document
       for (const doc of filteredDocs) {
         try {
-          result.processedDocuments++;
-
           // Extract metadata
           const metadata = extractDocumentMetadata(doc);
+          
+          // Generate hash from document ID and case number
+          const documentHash = generateDocumentHash(metadata.documentID, metadata.caseNumber);
+          
+          // Check if this document already exists (duplicate check)
+          const existingInvoice = await findInvoiceByDocumentHash(documentHash);
+          if (existingInvoice) {
+            result.skipped++;
+            console.log(
+              `[Document Sync] Skipping duplicate document ${metadata.documentID} (Case: ${metadata.caseNumber}) - already exists as invoice ${existingInvoice.id}`
+            );
+            continue;
+          }
+
+          result.processedDocuments++;
           console.log(
             `[Document Sync] Processing document ${metadata.documentID} (${metadata.documentName})`
           );
@@ -110,9 +127,11 @@ export async function syncDocumentsFromSmartAdvocate(
           );
 
           // Process the document through invoice processing
+          // Note: documentHash will be set in the invoice service
           const processResult = await processInvoiceAction({
             invoiceDataUri: content.dataUri,
             caseNumber: metadata.caseNumber, // Auto-populate case number from SmartAdvocate
+            documentID: metadata.documentID, // Pass document ID for hash generation
           });
 
           if (processResult.error) {
@@ -163,6 +182,7 @@ export async function syncDocumentsFromSmartAdvocate(
     console.log(`  Processed: ${result.processedDocuments}`);
     console.log(`  Successful: ${result.successful}`);
     console.log(`  Failed: ${result.failed}`);
+    console.log(`  Skipped (duplicates): ${result.skipped}`);
 
     // Revalidate paths
     revalidatePath('/invoices');

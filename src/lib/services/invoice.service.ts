@@ -22,6 +22,7 @@ import type { StoredInvoice } from '../domain/types';
 import { stateDetectionService } from '../core/state/state-detection.service';
 import { isApprovedAndPushedToCrm } from '../utils/status-utils';
 import { auditService } from '../core/audit/audit.service';
+import { generateDocumentHash } from '../utils/document-hash';
 
 export class InvoiceService {
   /**
@@ -29,7 +30,7 @@ export class InvoiceService {
    */
   async processInvoice(
     input: ExtractInvoiceDataInput,
-    options?: { caseNumber?: string }
+    options?: { caseNumber?: string; documentID?: number }
   ): Promise<{ data?: StoredInvoice; error?: string }> {
     try {
       // Validate file type
@@ -177,6 +178,12 @@ export class InvoiceService {
         detectedState = stateResult.state;
       }
       
+      // Generate document hash if documentID is provided (for SmartAdvocate sync)
+      let documentHash: string | undefined = undefined;
+      if (options?.documentID !== undefined) {
+        documentHash = generateDocumentHash(options.documentID, caseNumber);
+      }
+      
       // Create final invoice object
       const now = new Date(Math.floor(Date.now() / 1000) * 1000);
       const finalInvoice: StoredInvoice = {
@@ -200,6 +207,7 @@ export class InvoiceService {
         vendorRequires1099: vendorRequires1099,
         caseNumber: caseNumber,
         state: detectedState,
+        documentHash: documentHash,
         createdAt: now,
         updatedAt: now,
       };

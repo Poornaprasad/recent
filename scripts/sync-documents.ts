@@ -18,7 +18,7 @@
  */
 
 import 'dotenv/config';
-import { initDb, closeDb } from '../src/lib/db/script';
+import { initDb, closeDb, getDb } from '../src/lib/db/script';
 import {
   getDocumentsByDate,
   getDocumentContent,
@@ -28,6 +28,9 @@ import {
 import { getConfig } from '../src/lib/crm/smartadvocate/utils.script';
 import { processInvoice } from '../src/lib/services/invoice.service.script';
 import type { SmartAdvocateDocument } from '../src/lib/crm/smartadvocate/types';
+import { generateDocumentHash } from '../src/lib/utils/document-hash';
+import { invoices } from '../src/lib/db/schema';
+import { eq } from 'drizzle-orm';
 
 interface SyncOptions {
   fromDate?: string;
@@ -42,6 +45,7 @@ interface SyncResult {
   processedDocuments: number;
   successful: number;
   failed: number;
+  skipped: number; // Documents skipped due to duplicates
   errors: Array<{ documentID: number; error: string }>;
 }
 
@@ -68,14 +72,15 @@ async function syncDocuments(options: SyncOptions = {}): Promise<SyncResult> {
   console.log(`Mode: ${options.preview ? 'PREVIEW (no processing)' : 'SYNC (will process documents)'}`);
   console.log('');
 
-  const result: SyncResult = {
-    totalDocuments: 0,
-    filteredDocuments: 0,
-    processedDocuments: 0,
-    successful: 0,
-    failed: 0,
-    errors: [],
-  };
+    const result: SyncResult = {
+      totalDocuments: 0,
+      filteredDocuments: 0,
+      processedDocuments: 0,
+      successful: 0,
+      failed: 0,
+      skipped: 0,
+      errors: [],
+    };
 
   let currentPage = 0;
   const pageSize = config.SA_DOCUMENT_SYNC_PAGE_SIZE || 100;
@@ -119,10 +124,31 @@ async function syncDocuments(options: SyncOptions = {}): Promise<SyncResult> {
       // Process each filtered document
       for (const doc of filteredDocs) {
         try {
-          result.processedDocuments++;
-
           // Extract metadata
           const metadata = extractDocumentMetadata(doc);
+          
+          // Generate hash from document ID and case number
+          const documentHash = generateDocumentHash(metadata.documentID, metadata.caseNumber);
+          
+          // Check if this document already exists (duplicate check)
+          // Use direct database access since we're in a script context
+          const db = getDb();
+          const existingInvoice = await db
+            .select()
+            .from(invoices)
+            .where(eq(invoices.documentHash, documentHash))
+            .limit(1)
+            .then(rows => rows[0]);
+          
+          if (existingInvoice) {
+            result.skipped++;
+            console.log(
+              `\n⏭️  Skipping duplicate document ${metadata.documentID} (Case: ${metadata.caseNumber}) - already exists as invoice ${existingInvoice.id}`
+            );
+            continue;
+          }
+
+          result.processedDocuments++;
           console.log(
             `\n📄 Processing document ${result.processedDocuments}/${filteredDocs.length}: ${metadata.documentName}`
           );
@@ -155,6 +181,7 @@ async function syncDocuments(options: SyncOptions = {}): Promise<SyncResult> {
             },
             {
               caseNumber: metadata.caseNumber, // Auto-populate case number from SmartAdvocate
+              documentID: metadata.documentID, // Pass document ID for hash generation
             }
           );
 
@@ -264,6 +291,7 @@ async function main() {
       console.log(`Documents processed: ${result.processedDocuments}`);
       console.log(`✓ Successful: ${result.successful}`);
       console.log(`✗ Failed: ${result.failed}`);
+      console.log(`⏭️  Skipped (duplicates): ${result.skipped}`);
 
       if (result.errors.length > 0) {
         console.log('\n=== Errors ===');

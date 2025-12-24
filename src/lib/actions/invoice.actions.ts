@@ -24,11 +24,11 @@ import { getRequestMetadata, getCurrentUserId } from '../utils/request-context';
  * Process a new invoice upload
  */
 export async function processInvoiceAction(
-  input: { invoiceDataUri: string; caseNumber?: string }
+  input: { invoiceDataUri: string; caseNumber?: string; documentID?: number }
 ): Promise<{ data?: StoredInvoice; error?: string }> {
   const result = await invoiceService.processInvoice(
     { invoiceDataUri: input.invoiceDataUri },
-    { caseNumber: input.caseNumber }
+    { caseNumber: input.caseNumber, documentID: input.documentID }
   );
 
   if (result.data) {

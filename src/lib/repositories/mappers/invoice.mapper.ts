@@ -85,6 +85,7 @@ export function mapDbRowToInvoice(row: Invoice): StoredInvoice {
       }
     })() : undefined,
     crmStatus: row.crmStatus as StoredInvoice['crmStatus'] | undefined,
+    documentHash: row.documentHash || undefined,
 
     // Extracted fields with metadata
     invoiceNumber: createField(row.invoiceNumber, row.invoiceNumberMeta),
@@ -149,6 +150,7 @@ export function mapInvoiceToDbRow(invoice: Partial<StoredInvoice>): Partial<Invo
       ? invoice.disbursementResponse 
       : JSON.stringify(invoice.disbursementResponse)) : undefined,
     crmStatus: invoice.crmStatus,
+    documentHash: invoice.documentHash,
 
     // Extract values and metadata
     invoiceNumber: extractValue(invoice.invoiceNumber),

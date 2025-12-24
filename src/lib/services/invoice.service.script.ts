@@ -203,7 +203,7 @@ async function analyzeRecurringBill(
  */
 export async function processInvoice(
   input: ExtractInvoiceDataInput,
-  options?: { caseNumber?: string }
+  options?: { caseNumber?: string; documentID?: number }
 ): Promise<{ data?: StoredInvoice; error?: string }> {
   try {
     // Validate file type
@@ -363,6 +363,13 @@ export async function processInvoice(
       }
     }
 
+    // Generate document hash if documentID is provided (for SmartAdvocate sync)
+    let documentHash: string | undefined = undefined;
+    if (options?.documentID !== undefined) {
+      const { generateDocumentHash } = await import('../utils/document-hash');
+      documentHash = generateDocumentHash(options.documentID, caseNumber);
+    }
+
     // Create final invoice object
     const now = new Date(Math.floor(Date.now() / 1000) * 1000);
     const finalInvoice: StoredInvoice = {
@@ -386,6 +393,7 @@ export async function processInvoice(
       vendorRequires1099: vendorRequires1099,
       caseNumber: caseNumber,
       state: detectedState,
+      documentHash: documentHash,
       createdAt: now,
       updatedAt: now,
     };
@@ -467,6 +475,7 @@ export async function processInvoice(
       caseNumber: finalInvoice.caseNumber || null,
       state: finalInvoice.state || null,
       paymentType: finalInvoice.paymentType || null,
+      documentHash: finalInvoice.documentHash || null,
       approvalStatus: finalInvoice.approvalStatus || 'Pending',
       approvedBy: finalInvoice.approvedBy || null,
       approvedAt: finalInvoice.approvedAt || null,
