@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
-import { Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
+import { Loader2, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils/utils';
 
@@ -26,32 +26,38 @@ export function PDFViewer({ file }: PDFViewerProps) {
   }, []);
   
   const [numPages, setNumPages] = useState<number | null>(null);
-  const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
+  const [containerWidth, setContainerWidth] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const MIN_SCALE = 0.5;
   const MAX_SCALE = 3.0;
   const SCALE_STEP = 0.25;
 
+  // Calculate container width on mount and resize
+  useEffect(() => {
+    const updateWidth = () => {
+      if (scrollContainerRef.current) {
+        // Get the scroll container width minus padding
+        const width = scrollContainerRef.current.clientWidth - 32; // Subtract padding (16px * 2)
+        setContainerWidth(width > 0 ? width : null);
+      }
+    };
+
+    // Use a small delay to ensure container is rendered
+    const timeoutId = setTimeout(updateWidth, 100);
+    updateWidth();
+    
+    window.addEventListener('resize', updateWidth);
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', updateWidth);
+    };
+  }, []);
+
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
-    setPageNumber(1);
-  }
-
-  function changePage(offset: number) {
-    setPageNumber(prevPageNumber => {
-      const newPage = prevPageNumber + offset;
-      return Math.max(1, Math.min(newPage, numPages || 1));
-    });
-  }
-
-  function previousPage() {
-    changePage(-1);
-  }
-
-  function nextPage() {
-    changePage(1);
   }
 
   function zoomIn() {
@@ -95,42 +101,23 @@ export function PDFViewer({ file }: PDFViewerProps) {
   }, []);
 
   return (
-    <div className="w-full h-full flex flex-col">
+    <div 
+      ref={containerRef} 
+      className="w-full h-full flex flex-col overflow-hidden"
+      style={{ 
+        maxWidth: '100%', 
+        width: '100%',
+        contain: 'layout style',
+        isolation: 'isolate'
+      }}
+    >
       {/* Controls Bar - Always visible */}
       <div className="flex items-center justify-between p-2 bg-background border-b gap-2 flex-shrink-0 z-10">
-        {/* Page Navigation */}
+        {/* Page Info */}
         <div className="flex items-center gap-2">
-          {numPages && numPages > 1 ? (
-            <>
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8"
-                disabled={pageNumber <= 1} 
-                onClick={previousPage}
-                title="Previous page"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm font-medium text-muted-foreground min-w-[80px] text-center">
-                Page {pageNumber} of {numPages}
-              </span>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                className="h-8 w-8"
-                disabled={pageNumber >= numPages} 
-                onClick={nextPage}
-                title="Next page"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </>
-          ) : (
-            <span className="text-sm font-medium text-muted-foreground">
-              PDF Viewer
-            </span>
-          )}
+          <span className="text-sm font-medium text-muted-foreground">
+            {numPages ? `${numPages} ${numPages === 1 ? 'page' : 'pages'}` : 'PDF Viewer'}
+          </span>
         </div>
         
         {/* Zoom Controls - Always visible */}
@@ -173,35 +160,61 @@ export function PDFViewer({ file }: PDFViewerProps) {
         </div>
       </div>
 
-      {/* Scrollable PDF Container */}
+      {/* Scrollable PDF Container - Only the document area scrolls and zooms */}
       <div 
         ref={scrollContainerRef}
-        className="flex-1 overflow-auto bg-muted/20 flex items-start justify-center p-4"
-        style={{ minHeight: 0 }}
+        className="flex-1 overflow-auto bg-muted/20"
+        style={{ 
+          minHeight: 0, 
+          width: '100%', 
+          maxWidth: '100%',
+          overflowX: 'auto',
+          overflowY: 'auto'
+        }}
       >
-        <Document
-          file={file}
-          onLoadSuccess={onDocumentLoadSuccess}
-          loading={
-            <div className="flex items-center text-muted-foreground">
-              <Loader2 className="mr-2 h-6 w-6 animate-spin" />
-              Loading PDF...
-            </div>
-          }
-          error={
-            <div className="text-destructive-foreground">
-              Failed to load PDF file.
-            </div>
-          }
-          className="flex justify-center"
+        <div 
+          className="flex flex-col items-center p-4 gap-4" 
+          style={{ 
+            width: '100%',
+            boxSizing: 'border-box'
+          }}
         >
-          <Page 
-            pageNumber={pageNumber} 
-            renderTextLayer={false}
-            scale={scale}
-            className="shadow-lg"
-          />
-        </Document>
+          <Document
+            file={file}
+            onLoadSuccess={onDocumentLoadSuccess}
+            loading={
+              <div className="flex items-center justify-center py-8 text-muted-foreground">
+                <Loader2 className="mr-2 h-6 w-6 animate-spin" />
+                Loading PDF...
+              </div>
+            }
+            error={
+              <div className="flex items-center justify-center py-8 text-destructive-foreground">
+                Failed to load PDF file.
+              </div>
+            }
+            className="flex flex-col items-center"
+          >
+            {numPages && Array.from(new Array(numPages), (el, index) => (
+              <div 
+                key={`page_wrapper_${index + 1}`} 
+                className="flex justify-center"
+                style={{ 
+                  width: '100%',
+                  minWidth: 0
+                }}
+              >
+                <Page 
+                  pageNumber={index + 1} 
+                  renderTextLayer={false}
+                  scale={scale}
+                  width={containerWidth || undefined}
+                  className="shadow-lg mb-4"
+                />
+              </div>
+            ))}
+          </Document>
+        </div>
       </div>
     </div>
   );

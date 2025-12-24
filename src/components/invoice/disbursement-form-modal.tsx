@@ -158,11 +158,23 @@ export function DisbursementFormModal({
   // Auto-populate fields from invoice when modal opens
   useEffect(() => {
     if (isOpen && invoice) {
+      console.log('DisbursementFormModal: Auto-populating fields, invoice.documentID:', invoice.documentID);
+      
       // Auto-populate from invoice data
       setInvoiceNumber(invoice.invoiceNumber?.value || '');
       setAmount(String(invoice.amount?.value || invoice.totalAmount?.value || ''));
       setDescription(invoice.description?.value || '');
       setPayeeName(invoice.vendorName?.value || '');
+      
+      // Auto-populate document ID if available
+      if (invoice.documentID !== undefined && invoice.documentID !== null) {
+        const docIdStr = String(invoice.documentID);
+        console.log('DisbursementFormModal: Setting documentIDs to:', docIdStr);
+        setDocumentIDs(docIdStr);
+      } else {
+        console.log('DisbursementFormModal: No documentID found in invoice');
+        setDocumentIDs(''); // Reset if no documentID
+      }
 
       // Parse invoice date
       if (invoice.invoiceDate?.value) {
@@ -214,8 +226,30 @@ export function DisbursementFormModal({
       if (invoice.vendorName?.value) {
         searchVendorContact(invoice.vendorName.value);
       }
+    } else {
+      // Reset all fields when modal closes
+      setInvoiceNumber('');
+      setAmount('');
+      setDescription('');
+      setPayeeName('');
+      setDocumentIDs('');
+      setInvoiceDate('');
+      setStatusDate('');
+      setCaseID(null);
+      setPlaintiffId(null);
+      setPlaintiffName('');
+      setDisbursementTypeId('');
+      setDisbursementStatusId('');
+      setPayeeContactId(null);
+      setCheckNumber('');
+      setComments('');
+      setShareAcrossClients(false);
+      setRecoverable(true);
+      setWaived(false);
+      setIsLienor(false);
+      setCustomField1('');
     }
-  }, [isOpen, invoice]);
+  }, [isOpen, invoice, invoice?.documentID]);
 
   // Auto-populate comments with invoice number/plaintiff name/case number
   useEffect(() => {

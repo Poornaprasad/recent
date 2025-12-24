@@ -30,7 +30,22 @@ export class InvoiceService {
    */
   async processInvoice(
     input: ExtractInvoiceDataInput,
-    options?: { caseNumber?: string; documentID?: number }
+    options?: { 
+      caseNumber?: string; 
+      documentID?: number; 
+      description?: string; 
+      comment?: string;
+      smartAdvocateMetadata?: Partial<Pick<StoredInvoice, 
+        | 'saCaseId' | 'saDocumentName' | 'saFromUniqueContactId' | 'saToContactName' | 'saFromContactName'
+        | 'saDocType' | 'saTemplateId' | 'saAttachFlag' | 'saCreatedUserId' | 'saCreatedDate'
+        | 'saModifiedUserId' | 'saModifiedDate' | 'saCategoryId' | 'saCategoryName'
+        | 'saSubCategoryId' | 'saSubCategoryName' | 'saSubSubCategoryId' | 'saSubSubSubCategoryId'
+        | 'saMedProvUniqueContactId' | 'saIsReviewed' | 'saToUniqueContactId' | 'saDocumentDate'
+        | 'saPriority' | 'saPriorityName' | 'saDocumentDirection' | 'saDirectionName'
+        | 'saDocumentOrigin' | 'saOriginName' | 'saIsSharedInPortal' | 'saIsSharedWithEveryoneInPortal'
+        | 'saCaseDocumentId' | 'saDeliveryMethodId' | 'saDeliveryName' | 'saMetadata'
+      >>;
+    }
   ): Promise<{ data?: StoredInvoice; error?: string }> {
     try {
       // Validate file type
@@ -180,12 +195,19 @@ export class InvoiceService {
       
       // Generate document hash if documentID is provided (for SmartAdvocate sync)
       let documentHash: string | undefined = undefined;
-      if (options?.documentID !== undefined) {
-        documentHash = generateDocumentHash(options.documentID, caseNumber);
+      const documentID = options?.documentID;
+      if (documentID !== undefined) {
+        documentHash = generateDocumentHash(documentID, caseNumber);
       }
       
       // Create final invoice object
       const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+      
+      // Use description from options if provided, otherwise use extracted description
+      const finalDescription = options?.description 
+        ? { value: options.description, reasoning: 'From SmartAdvocate API' }
+        : dataWithoutDuplicateCheck.description;
+      
       const finalInvoice: StoredInvoice = {
         ...dataWithoutDuplicateCheck,
         id: invoiceId,
@@ -208,6 +230,11 @@ export class InvoiceService {
         caseNumber: caseNumber,
         state: detectedState,
         documentHash: documentHash,
+        documentID: documentID,
+        description: finalDescription,
+        comment: options?.comment || undefined,
+        // SmartAdvocate metadata fields
+        ...(options?.smartAdvocateMetadata || {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -620,6 +647,39 @@ export class InvoiceService {
       console.error('Update data:', JSON.stringify(updateData, null, 2));
       throw new Error(`Failed to update invoice: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  /**
+   * Update plaintiff name
+   * Stores the plaintiff name from case lookup
+   */
+  async updatePlaintiffName(id: string, plaintiffName: string | undefined): Promise<void> {
+    try {
+      await initDb();
+    } catch (error) {
+      console.error('Failed to initialize database:', error);
+      throw new Error('Database connection failed');
+    }
+
+    const db = getDb();
+
+    // Get the invoice to verify it exists
+    const invoice = await findInvoiceById(id);
+    if (!invoice) {
+      throw new Error('Invoice not found');
+    }
+
+    // Normalize plaintiff name (trim whitespace, convert empty string to undefined)
+    const normalizedPlaintiffName = plaintiffName?.trim() || undefined;
+
+    // Update the invoice
+    await db
+      .update(invoices)
+      .set({
+        plaintiffName: normalizedPlaintiffName || null,
+        updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
+      })
+      .where(eq(invoices.id, id));
   }
 }
 

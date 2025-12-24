@@ -24,11 +24,33 @@ import { getRequestMetadata, getCurrentUserId } from '../utils/request-context';
  * Process a new invoice upload
  */
 export async function processInvoiceAction(
-  input: { invoiceDataUri: string; caseNumber?: string; documentID?: number }
+  input: { 
+    invoiceDataUri: string; 
+    caseNumber?: string; 
+    documentID?: number; 
+    description?: string; 
+    comment?: string;
+    smartAdvocateMetadata?: Partial<Pick<StoredInvoice, 
+      | 'saCaseId' | 'saDocumentName' | 'saFromUniqueContactId' | 'saToContactName' | 'saFromContactName'
+      | 'saDocType' | 'saTemplateId' | 'saAttachFlag' | 'saCreatedUserId' | 'saCreatedDate'
+      | 'saModifiedUserId' | 'saModifiedDate' | 'saCategoryId' | 'saCategoryName'
+      | 'saSubCategoryId' | 'saSubCategoryName' | 'saSubSubCategoryId' | 'saSubSubSubCategoryId'
+      | 'saMedProvUniqueContactId' | 'saIsReviewed' | 'saToUniqueContactId' | 'saDocumentDate'
+      | 'saPriority' | 'saPriorityName' | 'saDocumentDirection' | 'saDirectionName'
+      | 'saDocumentOrigin' | 'saOriginName' | 'saIsSharedInPortal' | 'saIsSharedWithEveryoneInPortal'
+      | 'saCaseDocumentId' | 'saDeliveryMethodId' | 'saDeliveryName' | 'saMetadata'
+    >>;
+  }
 ): Promise<{ data?: StoredInvoice; error?: string }> {
   const result = await invoiceService.processInvoice(
     { invoiceDataUri: input.invoiceDataUri },
-    { caseNumber: input.caseNumber, documentID: input.documentID }
+    { 
+      caseNumber: input.caseNumber, 
+      documentID: input.documentID, 
+      description: input.description, 
+      comment: input.comment,
+      smartAdvocateMetadata: input.smartAdvocateMetadata
+    }
   );
 
   if (result.data) {
@@ -410,6 +432,56 @@ export async function updateInvoiceCaseNumberAction(
     revalidatePath('/approvals');
     return { success: true };
   }, 'Failed to update case number');
+
+  // Unwrap the result to match the expected return type
+  if (result.error) {
+    return { success: false, error: result.error };
+  }
+  return result.data || { success: false, error: 'Unknown error' };
+}
+
+/**
+ * Update invoice plaintiff name
+ */
+export async function updateInvoicePlaintiffNameAction(
+  id: string,
+  plaintiffName: string | undefined,
+  userId?: string
+): Promise<{ success: boolean; error?: string }> {
+  const result = await withActionHandler(async () => {
+    // Get invoice before update for audit log
+    const invoice = await findInvoiceById(id);
+    if (!invoice) {
+      throw new Error('Invoice not found');
+    }
+    
+    const previousPlaintiffName = invoice.plaintiffName;
+    
+    await invoiceService.updatePlaintiffName(id, plaintiffName);
+    
+    // Audit log: Invoice plaintiff name updated
+    try {
+      const auditUserId = userId || await getCurrentUserId() || 'system';
+      const metadata = await getRequestMetadata();
+      await auditService.logInvoiceFieldEdited(
+        auditUserId,
+        id,
+        {
+          invoiceNumber: invoice.invoiceNumber?.value || invoice.invoiceNumber,
+          fieldName: 'plaintiffName',
+          previousValue: previousPlaintiffName || null,
+          newValue: plaintiffName || null,
+        },
+        metadata
+      );
+    } catch (error) {
+      // Don't fail the operation if audit logging fails
+      console.error('Failed to log invoice plaintiff name update:', error);
+    }
+    
+    revalidatePath(`/invoices/${id}`);
+    return { success: true };
+  }, 'Failed to update plaintiff name');
 
   // Unwrap the result to match the expected return type
   if (result.error) {

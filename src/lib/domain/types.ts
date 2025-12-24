@@ -32,6 +32,7 @@ export type StoredInvoice = BaseEntity & ExtractedDataOnly & {
   specialHandlingReason?: 'per_diem' | 'mixed_document_types' | 'other';
   comment?: string; // User comments/notes
   caseNumber?: string; // SmartAdvocate case number
+  plaintiffName?: string; // Plaintiff name from case lookup (stored after case search)
   state?: 'CA' | 'NY'; // State: CA (California) or NY (New York)
   paymentType?: 'Receipt' | 'Invoice' | 'Non-Financial' | 'Other'; // Payment type category
   approvalStatus?: 'Pending' | 'Approved' | 'Rejected' | 'Requires_Approval'; // Approval status
@@ -44,6 +45,43 @@ export type StoredInvoice = BaseEntity & ExtractedDataOnly & {
   disbursementResponse?: any; // Disbursement creation response from CRM (JSON object)
   crmStatus?: 'Associated' | 'Draft' | 'Not Found' | 'Duplicate'; // CRM status: indicates if invoice is associated, draft, not found, or duplicate
   documentHash?: string; // Hash of document ID and case number for duplicate detection
+  documentID?: number; // SmartAdvocate document ID (for disbursement creation)
+  
+  // SmartAdvocate document metadata fields
+  saCaseId?: number;
+  saDocumentName?: string;
+  saFromUniqueContactId?: number;
+  saToContactName?: string;
+  saFromContactName?: string;
+  saDocType?: string;
+  saTemplateId?: number;
+  saAttachFlag?: boolean;
+  saCreatedUserId?: number;
+  saCreatedDate?: Date;
+  saModifiedUserId?: number;
+  saModifiedDate?: Date;
+  saCategoryId?: number;
+  saCategoryName?: string;
+  saSubCategoryId?: number;
+  saSubCategoryName?: string;
+  saSubSubCategoryId?: number;
+  saSubSubSubCategoryId?: number;
+  saMedProvUniqueContactId?: number;
+  saIsReviewed?: boolean;
+  saToUniqueContactId?: number;
+  saDocumentDate?: Date;
+  saPriority?: number;
+  saPriorityName?: string;
+  saDocumentDirection?: number;
+  saDirectionName?: string;
+  saDocumentOrigin?: number;
+  saOriginName?: string;
+  saIsSharedInPortal?: boolean;
+  saIsSharedWithEveryoneInPortal?: boolean;
+  saCaseDocumentId?: number;
+  saDeliveryMethodId?: number;
+  saDeliveryName?: string;
+  saMetadata?: Record<string, unknown>; // Additional SmartAdvocate metadata as JSON
 };
 
 export type User = BaseEntity & {

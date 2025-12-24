@@ -43,6 +43,7 @@ export const invoices = pgTable('invoices', {
   specialHandlingReason: text('special_handling_reason'), // 'per_diem', 'mixed_document_types', 'other'
   comment: text('comment'), // User comments/notes on the invoice
   caseNumber: text('case_number'), // SmartAdvocate case number
+  plaintiffName: text('plaintiff_name'), // Plaintiff name from case lookup (stored after case search)
   state: text('state', { enum: ['CA', 'NY'] }), // State: CA (California) or NY (New York)
   paymentType: text('payment_type', { enum: ['Receipt', 'Invoice', 'Non-Financial', 'Other'] }), // Payment type category
   approvalStatus: text('approval_status', { enum: ['Pending', 'Approved', 'Rejected', 'Requires_Approval'] }).default('Pending'),
@@ -53,6 +54,43 @@ export const invoices = pgTable('invoices', {
   disbursementResponse: text('disbursement_response'), // JSON string of disbursement creation response from CRM
   crmStatus: text('crm_status', { enum: ['Associated', 'Draft', 'Not Found', 'Duplicate'] }), // CRM status: Associated, Draft, Not Found, or Duplicate
   documentHash: text('document_hash'), // Hash of document ID and case number for duplicate detection
+  documentID: integer('document_id'), // SmartAdvocate document ID (for disbursement creation)
+
+  // SmartAdvocate document metadata fields
+  saCaseId: integer('sa_case_id'), // SmartAdvocate case ID
+  saDocumentName: text('sa_document_name'), // SmartAdvocate document name
+  saFromUniqueContactId: integer('sa_from_unique_contact_id'),
+  saToContactName: text('sa_to_contact_name'),
+  saFromContactName: text('sa_from_contact_name'),
+  saDocType: text('sa_doc_type'),
+  saTemplateId: integer('sa_template_id'),
+  saAttachFlag: boolean('sa_attach_flag'),
+  saCreatedUserId: integer('sa_created_user_id'),
+  saCreatedDate: timestamp('sa_created_date'),
+  saModifiedUserId: integer('sa_modified_user_id'),
+  saModifiedDate: timestamp('sa_modified_date'),
+  saCategoryId: integer('sa_category_id'),
+  saCategoryName: text('sa_category_name'),
+  saSubCategoryId: integer('sa_sub_category_id'),
+  saSubCategoryName: text('sa_sub_category_name'),
+  saSubSubCategoryId: integer('sa_sub_sub_category_id'),
+  saSubSubSubCategoryId: integer('sa_sub_sub_sub_category_id'),
+  saMedProvUniqueContactId: integer('sa_med_prov_unique_contact_id'),
+  saIsReviewed: boolean('sa_is_reviewed'),
+  saToUniqueContactId: integer('sa_to_unique_contact_id'),
+  saDocumentDate: timestamp('sa_document_date'),
+  saPriority: integer('sa_priority'),
+  saPriorityName: text('sa_priority_name'),
+  saDocumentDirection: integer('sa_document_direction'),
+  saDirectionName: text('sa_direction_name'),
+  saDocumentOrigin: integer('sa_document_origin'),
+  saOriginName: text('sa_origin_name'),
+  saIsSharedInPortal: boolean('sa_is_shared_in_portal'),
+  saIsSharedWithEveryoneInPortal: boolean('sa_is_shared_with_everyone_in_portal'),
+  saCaseDocumentId: integer('sa_case_document_id'),
+  saDeliveryMethodId: integer('sa_delivery_method_id'),
+  saDeliveryName: text('sa_delivery_name'),
+  saMetadata: text('sa_metadata'), // JSON string for additional SmartAdvocate metadata
 
   // Extracted field metadata (JSON strings)
   invoiceNumberMeta: text('invoice_number_meta'), // {confidence, reasoning, bbox}

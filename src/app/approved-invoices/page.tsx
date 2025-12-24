@@ -50,9 +50,11 @@ import { getStatusBadgeClass, getDisplayStatus, hasDisbursementBeenSent, canPush
 import { getOverallConfidence, formatTotalAmount, parseInvoiceAmount } from '@/lib/utils/invoice-utils';
 import Link from "next/link";
 import { CircularProgressBadge } from "@/components/invoice/circular-progress-badge";
-import { getInvoicesAction } from '@/lib/actions/index';
+import { getInvoicesAction, getCaseInfoAction } from '@/lib/actions/index';
 import type { StoredInvoice } from '@/lib/domain/types';
+import type { SmartAdvocateCase } from '@/lib/crm/smartadvocate/types';
 import { encodeId } from "@/lib/utils/id-utils";
+import { formatNameFirstLast } from "@/lib/utils/name-matching";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { DocumentTypeCell } from "@/components/invoice/document-type-cell";
@@ -80,6 +82,37 @@ interface CaseGroup {
   invoiceCount: number;
   state?: string;
   clientName?: string;
+  plaintiffName?: string; // Real plaintiff name from case lookup
+}
+
+/**
+ * Extract plaintiff name from case info (client-side version)
+ * Gets the primary plaintiff's name from the case data
+ */
+function extractPlaintiffNameFromCase(caseInfo: SmartAdvocateCase | null): string | null {
+  if (!caseInfo) {
+    return null;
+  }
+
+  const plaintiffs = caseInfo.plaintiffs;
+  if (!plaintiffs || !Array.isArray(plaintiffs) || plaintiffs.length === 0) {
+    return null;
+  }
+
+  // Find the primary plaintiff first
+  let plaintiff = plaintiffs.find(p => p.primary === true);
+
+  // If no primary plaintiff, find the primary contact
+  if (!plaintiff) {
+    plaintiff = plaintiffs.find(p => p.primaryContact === true);
+  }
+
+  // If still no match, use the first plaintiff
+  if (!plaintiff) {
+    plaintiff = plaintiffs[0];
+  }
+
+  return plaintiff?.name || null;
 }
 
 export default function ApprovedInvoicesPage() {
@@ -96,6 +129,7 @@ export default function ApprovedInvoicesPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [caseFilter, setCaseFilter] = useState<string>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [caseInfoMap, setCaseInfoMap] = useState<Map<string, string>>(new Map()); // Map of caseNumber -> plaintiffName
 
   const loadInvoices = useCallback(async () => {
       setIsLoading(true);
@@ -132,6 +166,57 @@ export default function ApprovedInvoicesPage() {
     return filterByState(invoices, effectiveStateFilter);
   }, [invoices, effectiveStateFilter]);
 
+  // Fetch case info for unique case numbers
+  useEffect(() => {
+    const fetchCaseInfo = async () => {
+      const uniqueCaseNumbers = new Set<string>();
+      stateFilteredInvoices.forEach(inv => {
+        if (inv.caseNumber && inv.caseNumber.trim()) {
+          uniqueCaseNumbers.add(inv.caseNumber.trim());
+        }
+      });
+
+      const newCaseInfoMap = new Map<string, string>();
+      
+      // Fetch case info for each unique case number that we don't already have
+      for (const caseNumber of uniqueCaseNumbers) {
+        // Skip if we already have this case info
+        if (caseInfoMap.has(caseNumber)) {
+          continue;
+        }
+
+        try {
+          const result = await getCaseInfoAction(caseNumber);
+          if (result.data) {
+            const plaintiffName = extractPlaintiffNameFromCase(result.data);
+            if (plaintiffName) {
+              // Convert from "Last, First" to "First Last" format
+              const formattedName = formatNameFirstLast(plaintiffName);
+              newCaseInfoMap.set(caseNumber, formattedName);
+            }
+          }
+        } catch (error) {
+          console.error(`Failed to fetch case info for ${caseNumber}:`, error);
+          // Continue with other cases even if one fails
+        }
+      }
+
+      // Only update if we have new data
+      if (newCaseInfoMap.size > 0) {
+        setCaseInfoMap(prev => {
+          const merged = new Map(prev);
+          newCaseInfoMap.forEach((value, key) => merged.set(key, value));
+          return merged;
+        });
+      }
+    };
+
+    if (stateFilteredInvoices.length > 0) {
+      fetchCaseInfo();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stateFilteredInvoices]);
+
   // Create case groups from state-filtered invoices
   const stateFilteredCaseGroups = useMemo(() => {
     const grouped = new Map<string, StoredInvoice[]>();
@@ -159,6 +244,8 @@ export default function ApprovedInvoicesPage() {
 
       const state = caseInvoices[0]?.state;
       const clientName = caseInvoices[0]?.clientName?.value || caseInvoices[0]?.customerName?.value;
+      // Get real plaintiff name from case lookup, fallback to AI-extracted clientName
+      const plaintiffName = caseInfoMap.get(caseNumber) || clientName;
 
       groups.push({
         caseNumber,
@@ -167,6 +254,7 @@ export default function ApprovedInvoicesPage() {
         invoiceCount: caseInvoices.length,
         state,
         clientName,
+        plaintiffName,
       });
     });
 
@@ -191,7 +279,7 @@ export default function ApprovedInvoicesPage() {
       if (b.caseNumber === 'No Case Number') return -1;
       return a.caseNumber.localeCompare(b.caseNumber);
     });
-  }, [stateFilteredInvoices]);
+  }, [stateFilteredInvoices, caseInfoMap]);
 
   // Filter case groups
   const filteredCaseGroups = useMemo(() => {
@@ -441,9 +529,9 @@ export default function ApprovedInvoicesPage() {
                                 </Badge>
                               )}
                             </div>
-                            {group.clientName && (
+                            {group.plaintiffName && (
                               <p className="text-sm text-muted-foreground">
-                                {group.clientName}
+                                {group.plaintiffName}
                               </p>
                             )}
                           </div>

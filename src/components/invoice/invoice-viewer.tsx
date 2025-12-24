@@ -240,9 +240,26 @@ export function InvoiceViewer({
   }
 
   return (
-    <div className="w-1/2 border-r flex flex-col bg-muted/40 relative overflow-hidden" ref={containerRef}>
+    <div 
+      className="w-1/2 border-r flex flex-col bg-muted/40 relative overflow-hidden" 
+      ref={containerRef}
+      style={{ 
+        maxWidth: '50%',
+        minWidth: 0,
+        width: '50%',
+        flexShrink: 0,
+        flexGrow: 0
+      }}
+    >
       {isPdf ? (
-        <div className="relative w-full h-full flex flex-col min-h-0">
+        <div 
+          className="relative w-full h-full flex flex-col min-h-0"
+          style={{ 
+            maxWidth: '100%',
+            width: '100%',
+            overflow: 'hidden'
+          }}
+        >
           <PDFViewer file={absoluteUri} />
           {/* Bounding box overlay for PDFs - positioned relative to PDF container */}
           <div className="absolute inset-0 pointer-events-none z-40">

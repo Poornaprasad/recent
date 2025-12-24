@@ -12,6 +12,7 @@ export {
   flagInvoiceForReviewAction,
   addInvoiceCommentAction,
   updateInvoiceCaseNumberAction,
+  updateInvoicePlaintiffNameAction,
   updateInvoiceFieldAction,
   updateInvoiceDisbursementResponseAction,
   updateInvoiceCrmStatusAction,

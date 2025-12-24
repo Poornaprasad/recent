@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/lib/utils/utils';
 import { Search, Loader2, AlertTriangle, CheckCircle2, Save, X, RotateCcw } from 'lucide-react';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import type { BoundingBox } from '@/lib/utils/bbox-utils';
 import type { StoredInvoice, DocumentType } from '@/lib/domain/types';
 import {
@@ -24,6 +25,7 @@ import {
   getPreviousDisbursementTypeForVendorAction,
   saveDisbursementTypeMappingAction,
   updateInvoiceCaseNumberAction,
+  updateInvoicePlaintiffNameAction,
   lookupCaseInfoAction,
   updateInvoiceFieldAction,
   lookupContactsAction,
@@ -42,7 +44,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/hooks/use-auth-store';
 import { getDocumentTypeBadgeClass } from '@/lib/utils/document-type-utils';
 import { formatCurrency } from '@/lib/utils/invoice-utils';
-import { matchPlaintiffData, type MatchResult } from '@/lib/utils/name-matching';
+import { matchPlaintiffData, type MatchResult, formatNameFirstLast } from '@/lib/utils/name-matching';
 
 const toTitleCase = (str: string) => {
   if (!str) return '';
@@ -107,8 +109,11 @@ export function ExtractedDataPanel({
   // Plaintiff name state - track both sources SEPARATELY
   // AI Extracted (from document) - this is the original extraction, never changes
   const aiExtractedPlaintiffName = invoiceData.clientName?.value || invoiceData.customerName?.value || '';
-  // Case Sourced (from case number lookup) - fetched separately from SmartAdvocate API
-  const [casePlaintiffName, setCasePlaintiffName] = useState<string>('');
+  // Case Sourced (from case number lookup) - loaded from database or fetched from SmartAdvocate API
+  // Initialize from database if available, otherwise empty
+  const [casePlaintiffName, setCasePlaintiffName] = useState<string>(
+    invoiceData.plaintiffName || ''
+  );
 
   // Document type state
   const [documentType, setDocumentType] = useState<DocumentType | undefined>(invoiceData.documentType);
@@ -142,6 +147,87 @@ export function ExtractedDataPanel({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [invoiceData.caseNumber]);
+
+  // Load plaintiff name from database only on initial invoice load
+  // This preserves the stored name and doesn't overwrite it unless user explicitly searches
+  useEffect(() => {
+    const storedPlaintiffName = invoiceData.plaintiffName || '';
+    if (storedPlaintiffName && !casePlaintiffName) {
+      setCasePlaintiffName(storedPlaintiffName);
+    }
+    // Only run when invoice ID changes (new invoice loaded)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceData.id]);
+
+  // Automatically fetch plaintiff name if case number exists but plaintiff name is missing
+  // Use a ref to track if we've already attempted to fetch for this invoice
+  const hasAutoFetchedRef = useRef<Set<string>>(new Set());
+  
+  useEffect(() => {
+    const fetchPlaintiffName = async () => {
+      const currentCaseNumber = invoiceData.caseNumber?.trim();
+      const hasStoredPlaintiffName = invoiceData.plaintiffName && invoiceData.plaintiffName.trim().length > 0;
+      const invoiceKey = `${invoiceData.id}-${currentCaseNumber}`;
+      
+      // Only fetch if:
+      // 1. Case number exists
+      // 2. No stored plaintiff name
+      // 3. We haven't already fetched for this invoice/case combination
+      // 4. We're not currently submitting a case number search
+      if (
+        currentCaseNumber && 
+        !hasStoredPlaintiffName && 
+        !hasAutoFetchedRef.current.has(invoiceKey) &&
+        !isSubmittingCaseNumber &&
+        caseLookupStatus !== 'loading'
+      ) {
+        hasAutoFetchedRef.current.add(invoiceKey);
+        
+        try {
+          setCaseLookupStatus('loading');
+          const lookupResult = await lookupCaseInfoAction(currentCaseNumber);
+          
+          if (lookupResult.error) {
+            setCaseLookupStatus('error');
+            setCaseLookupError(lookupResult.error);
+            // Don't show toast for automatic lookup failures - user can manually search if needed
+            return;
+          }
+
+          if (lookupResult.data) {
+            // Format plaintiff name from "Last, First" to "First Last"
+            const formattedName = formatNameFirstLast(lookupResult.data.name);
+            setCasePlaintiffName(formattedName);
+            setCaseLookupStatus('success');
+            
+            // Save plaintiff name to database
+            const savePlaintiffResult = await updateInvoicePlaintiffNameAction(
+              invoiceData.id,
+              formattedName,
+              user?.id
+            );
+            
+            if (savePlaintiffResult.success) {
+              // Update parent component with new plaintiff name
+              onInvoiceUpdate({
+                ...invoiceData,
+                plaintiffName: formattedName,
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Failed to auto-fetch plaintiff name:', error);
+          setCaseLookupStatus('error');
+          setCaseLookupError(error instanceof Error ? error.message : 'Failed to fetch plaintiff name');
+          // Remove from set so we can retry if needed
+          hasAutoFetchedRef.current.delete(invoiceKey);
+        }
+      }
+    };
+
+    fetchPlaintiffName();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceData.caseNumber, invoiceData.plaintiffName, invoiceData.id]);
 
   // Track previous validation state to avoid unnecessary callbacks
   const prevValidationRef = useRef<{ isValid: boolean; missingFields: string[] } | null>(null);
@@ -308,7 +394,7 @@ export function ExtractedDataPanel({
     setIsSubmittingCaseNumber(true);
     setCaseLookupStatus('loading');
     setCaseLookupError('');
-    setCasePlaintiffName(''); // Clear previous result
+    // Don't clear plaintiff name here - it will be updated when case lookup succeeds
 
     try {
       // First save the case number to the invoice
@@ -339,11 +425,29 @@ export function ExtractedDataPanel({
       }
 
       if (lookupResult.data) {
-        setCasePlaintiffName(lookupResult.data.name);
+        // Format plaintiff name from "Last, First" to "First Last"
+        const formattedName = formatNameFirstLast(lookupResult.data.name);
+        setCasePlaintiffName(formattedName);
+        
+        // Save plaintiff name to database
+        const savePlaintiffResult = await updateInvoicePlaintiffNameAction(
+          invoiceData.id,
+          formattedName,
+          user?.id
+        );
+        
+        if (savePlaintiffResult.success) {
+          // Update parent component with new plaintiff name
+          onInvoiceUpdate({
+            ...invoiceData,
+            plaintiffName: formattedName,
+          });
+        }
+        
         setCaseLookupStatus('success');
         toast({
           title: 'Case Found',
-          description: `Plaintiff: ${lookupResult.data.name}`,
+          description: `Plaintiff: ${formattedName}`,
         });
       } else {
         setCaseLookupStatus('error');
@@ -767,8 +871,55 @@ export function ExtractedDataPanel({
   const amountHasBbox = amountData?.bbox && Array.isArray(amountData.bbox) && amountData.bbox.length >= 4;
   const isAmountEdited = editedFields.has('amount');
 
+  // Get description and comment for Document Info section
+  const descriptionData = invoiceData.description;
+  const descriptionValue = typeof descriptionData === 'object' && descriptionData !== null && 'value' in descriptionData
+    ? (descriptionData.value !== null && descriptionData.value !== undefined ? String(descriptionData.value) : '')
+    : (descriptionData ? String(descriptionData) : '');
+  const hasDescription = descriptionValue.trim().length > 0;
+  
+  const commentValue = invoiceData.comment ? String(invoiceData.comment) : '';
+  const hasComment = commentValue.trim().length > 0;
+
   return (
     <div className="space-y-4 p-4">
+      {/* Document Info Section - Collapsible */}
+      <div className="rounded-md border">
+        <Accordion type="single" collapsible className="w-full">
+          <AccordionItem value="document-info" className="border-none">
+            <AccordionTrigger className="px-4 py-3 hover:no-underline">
+              <div className="flex items-center gap-2">
+                <Label className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
+                  Document Info
+                </Label>
+              </div>
+            </AccordionTrigger>
+            <AccordionContent className="px-4 pb-4 space-y-3">
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Description
+                </Label>
+                <div className="p-2.5 rounded-lg border bg-muted/30">
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                    {hasDescription ? descriptionValue : <span className="text-muted-foreground italic">No description available</span>}
+                  </p>
+                </div>
+              </div>
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
+                  Comment
+                </Label>
+                <div className="p-2.5 rounded-lg border bg-muted/30">
+                  <p className="text-sm text-foreground whitespace-pre-wrap">
+                    {hasComment ? commentValue : <span className="text-muted-foreground italic">No comment</span>}
+                  </p>
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
+
       {/* Key Information Section - Compact Grid Layout */}
       <div className="space-y-2.5">
         <div className="flex items-center gap-2 mb-3">

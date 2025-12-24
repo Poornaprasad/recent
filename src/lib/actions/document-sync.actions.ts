@@ -12,6 +12,7 @@ import {
   filterDocumentsByCategory,
   extractDocumentMetadata,
 } from '../crm/smartadvocate/document';
+import { mapSmartAdvocateDocumentToInvoice } from '../utils/smartadvocate-mapper';
 import { getConfig } from '../crm/smartadvocate/utils';
 import { processInvoiceAction } from './invoice.actions';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
@@ -126,12 +127,18 @@ export async function syncDocumentsFromSmartAdvocate(
             `[Document Sync] Fetched content for document ${metadata.documentID} (${content.size} bytes, ${content.contentType})`
           );
 
+          // Map SmartAdvocate document to invoice metadata fields
+          const saMetadata = mapSmartAdvocateDocumentToInvoice(doc);
+
           // Process the document through invoice processing
           // Note: documentHash will be set in the invoice service
           const processResult = await processInvoiceAction({
             invoiceDataUri: content.dataUri,
             caseNumber: metadata.caseNumber, // Auto-populate case number from SmartAdvocate
             documentID: metadata.documentID, // Pass document ID for hash generation
+            description: metadata.description || undefined, // Pass description from SmartAdvocate
+            comment: metadata.comments || undefined, // Pass comments from SmartAdvocate
+            smartAdvocateMetadata: saMetadata, // Pass all SmartAdvocate metadata fields
           });
 
           if (processResult.error) {

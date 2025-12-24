@@ -203,7 +203,22 @@ async function analyzeRecurringBill(
  */
 export async function processInvoice(
   input: ExtractInvoiceDataInput,
-  options?: { caseNumber?: string; documentID?: number }
+  options?: { 
+    caseNumber?: string; 
+    documentID?: number; 
+    description?: string; 
+    comment?: string;
+    smartAdvocateMetadata?: Partial<Pick<StoredInvoice, 
+      | 'saCaseId' | 'saDocumentName' | 'saFromUniqueContactId' | 'saToContactName' | 'saFromContactName'
+      | 'saDocType' | 'saTemplateId' | 'saAttachFlag' | 'saCreatedUserId' | 'saCreatedDate'
+      | 'saModifiedUserId' | 'saModifiedDate' | 'saCategoryId' | 'saCategoryName'
+      | 'saSubCategoryId' | 'saSubCategoryName' | 'saSubSubCategoryId' | 'saSubSubSubCategoryId'
+      | 'saMedProvUniqueContactId' | 'saIsReviewed' | 'saToUniqueContactId' | 'saDocumentDate'
+      | 'saPriority' | 'saPriorityName' | 'saDocumentDirection' | 'saDirectionName'
+      | 'saDocumentOrigin' | 'saOriginName' | 'saIsSharedInPortal' | 'saIsSharedWithEveryoneInPortal'
+      | 'saCaseDocumentId' | 'saDeliveryMethodId' | 'saDeliveryName' | 'saMetadata'
+    >>;
+  }
 ): Promise<{ data?: StoredInvoice; error?: string }> {
   try {
     // Validate file type
@@ -365,13 +380,20 @@ export async function processInvoice(
 
     // Generate document hash if documentID is provided (for SmartAdvocate sync)
     let documentHash: string | undefined = undefined;
-    if (options?.documentID !== undefined) {
+    const documentID = options?.documentID;
+    if (documentID !== undefined) {
       const { generateDocumentHash } = await import('../utils/document-hash');
-      documentHash = generateDocumentHash(options.documentID, caseNumber);
+      documentHash = generateDocumentHash(documentID, caseNumber);
     }
 
     // Create final invoice object
     const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+    
+    // Use description from options if provided, otherwise use extracted description
+    const finalDescription = options?.description 
+      ? { value: options.description, reasoning: 'From SmartAdvocate API' }
+      : dataWithoutDuplicateCheck.description;
+    
     const finalInvoice: StoredInvoice = {
       ...dataWithoutDuplicateCheck,
       id: invoiceId,
@@ -394,6 +416,11 @@ export async function processInvoice(
       caseNumber: caseNumber,
       state: detectedState,
       documentHash: documentHash,
+      documentID: documentID,
+      description: finalDescription,
+      comment: options?.comment || undefined,
+      // SmartAdvocate metadata fields
+      ...(options?.smartAdvocateMetadata || {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -487,6 +514,7 @@ export async function processInvoice(
             : JSON.stringify(finalInvoice.disbursementResponse)) 
         : null,
       crmStatus: finalInvoice.crmStatus || null,
+      documentID: finalInvoice.documentID || null,
       createdAt: now,
       updatedAt: now,
     };
