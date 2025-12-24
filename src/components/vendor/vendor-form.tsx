@@ -355,8 +355,8 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
                       <div className="flex gap-2">
                         <FormControl className="flex-1">
                           <Select 
-                            onValueChange={field.onChange} 
-                            value={field.value || ''}
+                            onValueChange={(value) => field.onChange(value === '__none__' ? '' : value)} 
+                            value={field.value || '__none__'}
                             disabled={isCheckingVendor || isLoadingContactTypes}
                           >
                             <SelectTrigger className="h-10">
@@ -382,7 +382,7 @@ export function VendorForm({ isOpen, onOpenChange, onSubmit, vendor, caseNumber 
                               ) : (
                                 <>
                                   {!vendor && (
-                                    <SelectItem value="">None (Optional)</SelectItem>
+                                    <SelectItem value="__none__">None (Optional)</SelectItem>
                                   )}
                                   {contactTypes.map((type) => {
                                     const displayText = cleanContactTypeText(type.description);

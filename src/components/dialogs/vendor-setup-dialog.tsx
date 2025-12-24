@@ -297,8 +297,8 @@ export function VendorSetupDialog({
               Optional - Selection varies by case. Previous selection for this vendor will be pre-filled if available.
             </p>
             <Select 
-              value={vendorType} 
-              onValueChange={setVendorType}
+              value={vendorType || '__none__'} 
+              onValueChange={(value) => setVendorType(value === '__none__' ? '' : value)}
               disabled={isLoadingTypes || disbursementTypes.length === 0}
             >
               <SelectTrigger id="vendor-type">
@@ -323,7 +323,7 @@ export function VendorSetupDialog({
                   </div>
                 ) : (
                   <>
-                    <SelectItem value="">None (Optional)</SelectItem>
+                    <SelectItem value="__none__">None (Optional)</SelectItem>
                     {disbursementTypes.map((type) => (
                       <SelectItem key={type} value={type}>
                         {type}
