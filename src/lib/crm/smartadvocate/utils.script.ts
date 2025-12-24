@@ -1,9 +1,9 @@
 /**
- * SmartAdvocate CRM Utilities
+ * SmartAdvocate CRM Utilities (Script-Compatible)
+ * This file does NOT import 'server-only' to allow use in Node.js scripts
  * Authentication, configuration, and helper functions
  */
 
-import 'server-only';
 import type { SmartAdvocateConfig } from './types';
 
 // ============================================================================

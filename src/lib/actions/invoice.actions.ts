@@ -24,9 +24,12 @@ import { getRequestMetadata, getCurrentUserId } from '../utils/request-context';
  * Process a new invoice upload
  */
 export async function processInvoiceAction(
-  input: { invoiceDataUri: string }
+  input: { invoiceDataUri: string; caseNumber?: string }
 ): Promise<{ data?: StoredInvoice; error?: string }> {
-  const result = await invoiceService.processInvoice(input);
+  const result = await invoiceService.processInvoice(
+    { invoiceDataUri: input.invoiceDataUri },
+    { caseNumber: input.caseNumber }
+  );
 
   if (result.data) {
     revalidatePath('/invoices');

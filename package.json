@@ -10,7 +10,8 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "postinstall": "patch-package",
+    "postinstall": "patch-package && npm run copy-pdf-worker",
+    "copy-pdf-worker": "cp node_modules/react-pdf/node_modules/pdfjs-dist/build/pdf.worker.min.mjs public/pdf.worker.min.mjs || true",
     "db:init": "tsx src/lib/db/init.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
@@ -20,7 +21,8 @@
     "db:clear-except-vendors": "tsx src/lib/db/clear-except-vendors.ts",
     "db:debug-invoice": "tsx src/lib/db/debug-invoice.ts",
     "db:seed": "tsx src/lib/db/seed-test-user.ts",
-    "db:import-vendors": "tsx scripts/import-vendors-from-csv.ts"
+    "db:import-vendors": "tsx scripts/import-vendors-from-csv.ts",
+    "sync:documents": "tsx scripts/sync-documents.ts"
   },
   "dependencies": {
     "@genkit-ai/compat-oai": "^1.23.0",
@@ -62,6 +64,8 @@
     "next": "^15.5.6",
     "next-themes": "^0.3.0",
     "patch-package": "^8.0.0",
+    "pdf-img-convert": "^2.0.0",
+    "pdf2pic": "^3.2.0",
     "pdfjs-dist": "^5.4.449",
     "pg": "^8.13.1",
     "react": "^18.3.1",

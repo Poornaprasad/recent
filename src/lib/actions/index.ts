@@ -20,6 +20,11 @@ export {
 } from './invoice.actions';
 
 export {
+  syncDocumentsFromSmartAdvocate,
+  previewDocumentsFromSmartAdvocate,
+} from './document-sync.actions';
+
+export {
   getVendorsAction,
   getVendorByIdAction,
   getVendorByNameAction,

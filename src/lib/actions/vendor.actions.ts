@@ -239,8 +239,7 @@ export async function updateVendor1099StatusAction(
     form1099Status?: 'Not Required' | 'Required' | 'Received' | 'Tracked' | 'Pending';
     w9Status?: 'Not Required' | 'Required' | 'Received' | 'Pending' | 'Expired';
   },
-  performedByUserId?: string
-  },
+  performedByUserId?: string,
   currentUserRole?: string,
   currentUserId?: string
 ): Promise<{ success: boolean; error?: string }> {

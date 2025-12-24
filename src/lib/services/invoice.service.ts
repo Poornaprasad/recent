@@ -27,7 +27,10 @@ export class InvoiceService {
   /**
    * Process and save a new invoice
    */
-  async processInvoice(input: ExtractInvoiceDataInput): Promise<{ data?: StoredInvoice; error?: string }> {
+  async processInvoice(
+    input: ExtractInvoiceDataInput,
+    options?: { caseNumber?: string }
+  ): Promise<{ data?: StoredInvoice; error?: string }> {
     try {
       // Validate file type
       const mimeType = input.invoiceDataUri.split(';')[0].split(':')[1];
@@ -166,6 +169,14 @@ export class InvoiceService {
         }
       }
       
+      // Auto-detect state from case number if provided
+      let detectedState: 'CA' | 'NY' | undefined = undefined;
+      const caseNumber = options?.caseNumber?.trim() || undefined;
+      if (caseNumber) {
+        const stateResult = stateDetectionService.detectState(caseNumber);
+        detectedState = stateResult.state;
+      }
+      
       // Create final invoice object
       const now = new Date(Math.floor(Date.now() / 1000) * 1000);
       const finalInvoice: StoredInvoice = {
@@ -187,6 +198,8 @@ export class InvoiceService {
         escalationLevel,
         documentType: documentType,
         vendorRequires1099: vendorRequires1099,
+        caseNumber: caseNumber,
+        state: detectedState,
         createdAt: now,
         updatedAt: now,
       };

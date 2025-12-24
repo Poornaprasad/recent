@@ -16,8 +16,12 @@ interface PDFViewerProps {
 export function PDFViewer({ file }: PDFViewerProps) {
   // Set up the worker
   // This is critical for react-pdf to work with Next.js/Turbopack
-  // Use local worker file from public folder instead of CDN to avoid fetch errors
+  // Use local worker file that matches react-pdf's internal pdfjs version (5.4.296)
   useEffect(() => {
+    // Use the local worker file from public folder
+    // This file is copied from node_modules/react-pdf/node_modules/pdfjs-dist/build/pdf.worker.min.mjs
+    // to ensure it matches the exact version (5.4.296) that react-pdf uses internally
+    // This avoids version mismatches and CDN loading issues
     pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
   }, []);
   

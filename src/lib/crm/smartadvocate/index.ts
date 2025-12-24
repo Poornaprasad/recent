@@ -8,4 +8,5 @@ export * from './utils';
 export * from './case-info';
 export * from './disbursement';
 export * from './contact';
+export * from './document';
 

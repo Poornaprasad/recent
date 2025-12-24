@@ -8,6 +8,9 @@ export interface SmartAdvocateConfig {
   SA_API_KEY?: string;
   SA_USERNAME?: string;
   SA_PASSWORD?: string;
+  SA_DOCUMENT_SYNC_FROM_DATE?: string;
+  SA_DOCUMENT_SYNC_TO_DATE?: string;
+  SA_DOCUMENT_SYNC_PAGE_SIZE?: number;
 }
 
 /**
@@ -210,4 +213,87 @@ export interface ContactLookupParams {
   lastName?: string;
   firstPage?: number;
   rowLimit?: number;
+}
+
+/**
+ * Document from SmartAdvocate API
+ */
+export interface SmartAdvocateDocument {
+  documentID: number;
+  caseID: number;
+  caseNumber: string;
+  documentName: string;
+  fromUniqueContactID?: number;
+  toContactName?: string;
+  fromContactName?: string;
+  docType?: string;
+  templateID?: number;
+  attachFlag?: boolean;
+  description?: string;
+  createdUserID?: number;
+  createdDate: string;
+  modifiedUserID?: number;
+  modifiedDate: string;
+  categoryID: number;
+  categoryName: string;
+  subCategoryID?: number;
+  subCategoryName?: string;
+  subSubCategoryID?: number;
+  subSubSubCategoryID?: number;
+  medProvUniqueContactID?: number;
+  comments?: string;
+  isReviewed?: boolean;
+  toUniqueContactID?: number;
+  documentDate?: string;
+  priority?: number;
+  priorityName?: string;
+  documentDirection?: number;
+  directionName?: string;
+  documentOrigin?: number;
+  originName?: string;
+  isSharedInPortal?: boolean;
+  isSharedWithEveryoneInPortal?: boolean;
+  caseDocumentID: number;
+  [key: string]: unknown;
+}
+
+/**
+ * Document content from SmartAdvocate API
+ */
+export interface SmartAdvocateDocumentContent {
+  documentID: number;
+  contentType: string;
+  dataUri: string;
+  buffer: Buffer;
+  size: number;
+}
+
+/**
+ * Request parameters for fetching documents by date
+ */
+export interface DocumentsByDateRequest {
+  modifiedFromDateTime: string;
+  modifiedToDateTime: string;
+  currentPage?: number;
+  pageSize?: number;
+  filterExpression?: Record<string, unknown>;
+}
+
+/**
+ * Pagination info in document response
+ */
+export interface DocumentPageRequest {
+  currentPage: number;
+  pageSize: number;
+  totalPages?: number;
+  totalRecords?: number;
+  filterExpression?: Record<string, unknown>;
+}
+
+/**
+ * Response from documents by date API
+ */
+export interface DocumentsByDateResponse {
+  documents: SmartAdvocateDocument[];
+  pageRequest: DocumentPageRequest;
 }

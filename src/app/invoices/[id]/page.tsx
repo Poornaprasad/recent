@@ -159,11 +159,61 @@ export default function InvoiceDetailPage() {
           setInvoiceDataUri('');
         } else if (result.data) {
           setInvoiceData(result.data);
-          const uriResult = await getInvoiceDataUriAction(result.data.invoiceDataUri);
-          if (uriResult.dataUri) {
-            setInvoiceDataUri(uriResult.dataUri);
+          
+          // Get the invoice document URI
+          const originalUri = result.data.invoiceDataUri;
+          if (!originalUri) {
+            console.error(`Invoice ${id} has no invoiceDataUri`);
+            toast({
+              variant: 'destructive',
+              title: 'Document Not Found',
+              description: 'This invoice does not have a document associated with it.',
+            });
+            setInvoiceDataUri('');
           } else {
-            setInvoiceDataUri(result.data.invoiceDataUri);
+            // Check if it's already a valid URI (data URI or URL)
+            if (originalUri.startsWith('data:') || originalUri.startsWith('http://') || originalUri.startsWith('https://')) {
+              // Already a valid URI, use it directly
+              setInvoiceDataUri(originalUri);
+            } else if (originalUri.startsWith('/uploads/')) {
+              // It's a file path - try to convert to data URI, but if that fails, use the path as a URL
+              // The /uploads/[...path] route handler will serve the file
+              const uriResult = await getInvoiceDataUriAction(originalUri);
+              if (uriResult.error) {
+                // File read failed, but we can still try to serve it via the route handler
+                console.warn(`Could not read file ${originalUri} directly, will try to serve via route handler:`, uriResult.error);
+                // Use the original path - the route handler will serve it or return 404
+                setInvoiceDataUri(originalUri);
+              } else if (uriResult.dataUri) {
+                // Successfully converted to data URI
+                if (uriResult.dataUri.startsWith('data:') || uriResult.dataUri.startsWith('http://') || uriResult.dataUri.startsWith('https://')) {
+                  setInvoiceDataUri(uriResult.dataUri);
+                } else {
+                  // Still a file path, use it as a URL
+                  setInvoiceDataUri(uriResult.dataUri);
+                }
+              } else {
+                // No dataUri returned, use original path as URL
+                setInvoiceDataUri(originalUri);
+              }
+            } else {
+              // Unknown format, try to get data URI
+              const uriResult = await getInvoiceDataUriAction(originalUri);
+              if (uriResult.error) {
+                console.error(`Failed to load invoice document for ${id}:`, uriResult.error);
+                toast({
+                  variant: 'destructive',
+                  title: 'Document Load Error',
+                  description: uriResult.error || 'Failed to load invoice document. The file may have been deleted.',
+                });
+                setInvoiceDataUri('');
+              } else if (uriResult.dataUri) {
+                setInvoiceDataUri(uriResult.dataUri);
+              } else {
+                // Fallback to original URI
+                setInvoiceDataUri(originalUri);
+              }
+            }
           }
           
           // Check if invoice can be approved (W9/tax ID check)

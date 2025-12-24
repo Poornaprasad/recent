@@ -227,8 +227,23 @@ Document: {{media url=invoiceDataUri}}
 }
 
 
-import { checkForDuplicateInvoice } from '@/lib/repositories/invoice.repository';
 import { isApprovedAndPushedToCrm } from '@/lib/utils/status-utils';
+
+// Dynamic import for duplicate check (allows script usage)
+async function checkForDuplicateInvoiceSafe(
+  invoiceNumber: string,
+  vendorName: string,
+  invoiceDate: string
+): Promise<any> {
+  try {
+    const invoiceRepo = await import('@/lib/repositories/invoice.repository');
+    return await invoiceRepo.checkForDuplicateInvoice(invoiceNumber, vendorName, invoiceDate);
+  } catch (error) {
+    // If import fails (e.g., in scripts with 'server-only'), return null (no duplicate)
+    console.warn('Duplicate check unavailable (likely in script mode):', error);
+    return null;
+  }
+}
 
 const checkForDuplicatesTool = ai.defineTool(
     {
@@ -247,7 +262,7 @@ const checkForDuplicatesTool = ai.defineTool(
             return { isDuplicate: false };
         }
         
-        const duplicate = await checkForDuplicateInvoice(
+        const duplicate = await checkForDuplicateInvoiceSafe(
             input.invoiceNumber,
             input.vendorName,
             input.invoiceDate
