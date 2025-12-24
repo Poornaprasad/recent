@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
-  Upload,
   CheckSquare,
   Users,
   ShieldCheck,
@@ -44,7 +43,6 @@ import { Button } from "./ui/button";
 
 const mainLinks = [
     { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/", label: "Upload", icon: Upload },
 ];
 
 const managementLinks = [

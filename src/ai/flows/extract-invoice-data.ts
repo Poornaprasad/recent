@@ -239,9 +239,60 @@ async function checkForDuplicateInvoiceSafe(
     const invoiceRepo = await import('@/lib/repositories/invoice.repository');
     return await invoiceRepo.checkForDuplicateInvoice(invoiceNumber, vendorName, invoiceDate);
   } catch (error) {
-    // If import fails (e.g., in scripts with 'server-only'), return null (no duplicate)
-    console.warn('Duplicate check unavailable (likely in script mode):', error);
-    return null;
+    // Check if this is a server-only import error (expected in script mode)
+    const isServerOnlyError = error instanceof Error && 
+      (error.message.includes('server-only') || 
+       error.message.includes('This module cannot be imported from a Client Component'));
+    
+    // If import fails (e.g., in scripts with 'server-only'), try script-compatible version
+    try {
+      // Use script-compatible database and mapper
+      const { getDb } = await import('@/lib/db/script');
+      const { invoices } = await import('@/lib/db/schema');
+      const { eq, and, isNull } = await import('drizzle-orm');
+      const { mapDbRowToInvoice } = await import('@/lib/repositories/mappers/invoice.mapper');
+      
+      const db = getDb();
+      
+      // Need at least invoice number or vendor + date to check duplicates
+      if (!invoiceNumber && (!vendorName || !invoiceDate)) {
+        return null;
+      }
+      
+      const conditions = [];
+      
+      if (invoiceNumber) {
+        conditions.push(eq(invoices.invoiceNumber, invoiceNumber));
+      }
+      
+      if (vendorName) {
+        conditions.push(eq(invoices.vendorName, vendorName));
+      }
+      
+      if (invoiceDate) {
+        conditions.push(eq(invoices.invoiceDate, invoiceDate));
+      }
+      
+      // If no caseNumber is provided, only check for duplicates among invoices that also don't have a case number
+      conditions.push(isNull(invoices.caseNumber));
+      
+      const rows = await db
+        .select()
+        .from(invoices)
+        .where(and(...conditions))
+        .limit(1);
+      
+      if (rows.length === 0) return null;
+      
+      return mapDbRowToInvoice(rows[0]);
+    } catch (scriptError) {
+      // If script-compatible version also fails, return null (no duplicate)
+      // Only log non-server-only errors to avoid noise
+      if (!isServerOnlyError) {
+        console.warn('Duplicate check unavailable:', error);
+      }
+      return null;
+    }
   }
 }
 
