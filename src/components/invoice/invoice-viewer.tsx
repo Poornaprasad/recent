@@ -118,12 +118,13 @@ export function InvoiceViewer({
   // Convert relative file paths to absolute URLs for PDF viewer
   const getAbsoluteUri = (uri: string): string => {
     if (uri.startsWith('/uploads/')) {
-      // Convert relative path to absolute URL
+      // Convert /uploads/... to /api/uploads/... to use the API route handler
+      const apiPath = uri.replace('/uploads/', '/api/uploads/');
       if (typeof window !== 'undefined') {
-        return `${window.location.origin}${uri}`;
+        return `${window.location.origin}${apiPath}`;
       }
       // Server-side: return as-is, will be handled by route handler
-      return uri;
+      return apiPath;
     }
     return uri;
   };

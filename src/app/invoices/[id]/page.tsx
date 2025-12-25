@@ -176,25 +176,27 @@ export default function InvoiceDetailPage() {
               // Already a valid URI, use it directly
               setInvoiceDataUri(originalUri);
             } else if (originalUri.startsWith('/uploads/')) {
-              // It's a file path - try to convert to data URI, but if that fails, use the path as a URL
-              // The /uploads/[...path] route handler will serve the file
-              const uriResult = await getInvoiceDataUriAction(originalUri);
-              if (uriResult.error) {
-                // File read failed, but we can still try to serve it via the route handler
-                console.warn(`Could not read file ${originalUri} directly, will try to serve via route handler:`, uriResult.error);
-                // Use the original path - the route handler will serve it or return 404
+              // It's a file path - for PDFs, serve directly via API route (more efficient)
+              // For images, convert to data URI for better compatibility
+              const isPdf = originalUri.toLowerCase().endsWith('.pdf');
+              
+              if (isPdf) {
+                // For PDFs, use the path directly - the /api/uploads/[...path] route handler will serve it
                 setInvoiceDataUri(originalUri);
-              } else if (uriResult.dataUri) {
-                // Successfully converted to data URI
-                if (uriResult.dataUri.startsWith('data:') || uriResult.dataUri.startsWith('http://') || uriResult.dataUri.startsWith('https://')) {
+              } else {
+                // For images, try to convert to data URI for better compatibility
+                const uriResult = await getInvoiceDataUriAction(originalUri);
+                if (uriResult.error) {
+                  // File read failed, but we can still try to serve it via the route handler
+                  console.warn(`Could not read file ${originalUri} directly, will try to serve via route handler:`, uriResult.error);
+                  setInvoiceDataUri(originalUri);
+                } else if (uriResult.dataUri) {
+                  // Successfully converted to data URI
                   setInvoiceDataUri(uriResult.dataUri);
                 } else {
-                  // Still a file path, use it as a URL
-                  setInvoiceDataUri(uriResult.dataUri);
+                  // No dataUri returned, use original path as URL
+                  setInvoiceDataUri(originalUri);
                 }
-              } else {
-                // No dataUri returned, use original path as URL
-                setInvoiceDataUri(originalUri);
               }
             } else {
               // Unknown format, try to get data URI

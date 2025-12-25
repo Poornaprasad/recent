@@ -7,7 +7,9 @@ import type { NextRequest } from 'next/server';
  */
 
 // Public API routes that don't require authentication
-const PUBLIC_API_ROUTES = ['/api/auth/login'];
+// Note: /api/uploads is public because files are accessed via unique filenames
+// and users can only get these paths from authenticated invoice pages
+const PUBLIC_API_ROUTES = ['/api/auth/login', '/api/uploads'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

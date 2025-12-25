@@ -14,7 +14,7 @@ let dbInstance: ReturnType<typeof drizzle<typeof schema>> | null = null;
 /**
  * Get PostgreSQL connection pool
  */
-function getPool(): Pool {
+export function getPool(): Pool {
   if (!pool) {
     pool = new Pool({
       connectionString: DATABASE_CONFIG.url,
