@@ -644,32 +644,27 @@ export default function AuditLogsPage() {
       </Tabs>
 
       {/* Detail Dialog */}
-      <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
-        <DialogContent 
-          className="max-w-2xl max-h-[80vh] overflow-y-auto"
-          aria-labelledby="audit-log-dialog-title"
-          aria-describedby="audit-log-dialog-description"
-        >
-          <DialogHeader>
-            <DialogTitle id="audit-log-dialog-title" className="flex items-center gap-2">
-              {selectedLog && CATEGORY_ICONS[selectedLog.category]?.icon}
-              <span>
-                {selectedLog 
-                  ? (ACTION_LABELS[selectedLog.action] || selectedLog.action)
-                  : 'Audit Log Details'
-                }
-              </span>
-            </DialogTitle>
-            {selectedLog && (
+      {selectedLog && (
+        <Dialog open={!!selectedLog} onOpenChange={() => setSelectedLog(null)}>
+          <DialogContent 
+            className="max-w-2xl max-h-[80vh] overflow-y-auto"
+            aria-labelledby="audit-log-dialog-title"
+            aria-describedby="audit-log-dialog-description"
+          >
+            <DialogHeader>
+              <div className="flex items-center gap-2">
+                {CATEGORY_ICONS[selectedLog.category]?.icon}
+                <DialogTitle id="audit-log-dialog-title">
+                  {ACTION_LABELS[selectedLog.action] || selectedLog.action || 'Audit Log Details'}
+                </DialogTitle>
+              </div>
               <span className="sr-only">
                 {CATEGORY_ICONS[selectedLog.category]?.label || 'Category'}
               </span>
-            )}
-            <DialogDescription id="audit-log-dialog-description">
-              {selectedLog ? formatTimestamp(selectedLog.timestamp) : 'Loading audit log details...'}
-            </DialogDescription>
-          </DialogHeader>
-          {selectedLog && (
+              <DialogDescription id="audit-log-dialog-description">
+                {formatTimestamp(selectedLog.timestamp)}
+              </DialogDescription>
+            </DialogHeader>
             <div className="space-y-4" role="region" aria-label="Audit log details">
               <dl className="grid grid-cols-2 gap-4">
                 <div>
@@ -772,9 +767,9 @@ export default function AuditLogsPage() {
                 </section>
               )}
             </div>
-          )}
-        </DialogContent>
-      </Dialog>
+          </DialogContent>
+        </Dialog>
+      )}
     </main>
   );
 }

@@ -300,7 +300,7 @@ export default function W9RequestsPage() {
         status: 'Active',
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      }, user?.id);
 
       if (result.success) {
         toast({
@@ -316,10 +316,12 @@ export default function W9RequestsPage() {
         throw new Error(result.error || 'Failed to add vendor');
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to add vendor.';
+      console.error('Error adding vendor:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to add vendor.',
+        description: errorMessage,
       });
     } finally {
       setIsProcessing(false);
@@ -341,6 +343,7 @@ export default function W9RequestsPage() {
       const result = await updateVendor1099StatusAction(
         vendorId, 
         updateData,
+        user?.id,
         user?.role,
         user?.id
       );
@@ -359,10 +362,12 @@ export default function W9RequestsPage() {
         });
       }
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to update status.';
+      console.error('Error updating W9 status:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
-        description: 'Failed to update status.',
+        description: errorMessage,
       });
     } finally {
       setUpdatingStatus(prev => {

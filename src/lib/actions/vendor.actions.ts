@@ -63,7 +63,7 @@ export async function saveVendorAction(
   vendor: Vendor,
   performedByUserId?: string
 ): Promise<{ success: boolean; error?: string }> {
-  return withActionHandler(async () => {
+  const result = await withActionHandler(async () => {
     // Check if this is a new vendor or update
     const existingVendor = await vendorService.getVendorById(vendor.id);
     const isNew = !existingVendor;
@@ -113,6 +113,12 @@ export async function saveVendorAction(
     revalidatePath('/vendors');
     return { success: true };
   }, 'Failed to save vendor');
+
+  // Transform ActionResult to expected format
+  if (result.error) {
+    return { success: false, error: result.error };
+  }
+  return result.data || { success: true };
 }
 
 /**
@@ -243,7 +249,7 @@ export async function updateVendor1099StatusAction(
   currentUserRole?: string,
   currentUserId?: string
 ): Promise<{ success: boolean; error?: string }> {
-  return withActionHandler(async () => {
+  const result = await withActionHandler(async () => {
     // Check permission if W9 status is being updated
     if (status.w9Status !== undefined) {
       const { rbacService, Permission, UserRole } = await import('../core/auth/rbac.service');
@@ -253,10 +259,14 @@ export async function updateVendor1099StatusAction(
         throw new Error('Authentication required to update W9 status.');
       }
 
-      const userRole = currentUserRole as UserRole;
+      // Normalize role to lowercase for comparison
+      const normalizedRole = currentUserRole.toLowerCase().trim();
+      const userRole = normalizedRole as UserRole;
 
-      // Admin has all permissions by default
-      if (userRole !== UserRole.ADMIN) {
+      // Admin has all permissions by default - check if role is admin (case-insensitive)
+      const isAdmin = normalizedRole === UserRole.ADMIN || normalizedRole === 'admin';
+      
+      if (!isAdmin) {
         const userPermissions = rbacService.getUserPermissionsSync(userRole);
 
         // Check if user has MANAGE_W9_STATUS permission
@@ -319,4 +329,10 @@ export async function updateVendor1099StatusAction(
     revalidatePath('/1099-requests');
     return { success: true };
   }, 'Failed to update vendor 1099 status');
+
+  // Transform ActionResult to expected format
+  if (result.error) {
+    return { success: false, error: result.error };
+  }
+  return result.data || { success: true };
 }

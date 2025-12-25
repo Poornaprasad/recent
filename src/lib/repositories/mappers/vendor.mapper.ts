@@ -51,8 +51,8 @@ export function mapVendorToDbRow(vendor: Partial<Vendor>): Partial<DbVendor> {
     vendorType: vendor.vendorType,
     uniqueContactId: vendor.uniqueContactId,
     taxId: vendor.taxId,
-    requires1099: vendor.requires1099 ? 1 : 0,
-    requiresW9: vendor.requiresW9 ? 1 : 0,
+    requires1099: vendor.requires1099 ?? false,
+    requiresW9: vendor.requiresW9 ?? false,
     w9Status: w9Status,
     w9ReceivedDate: vendor.taxId && vendor.taxId.trim() !== '' 
       ? new Date() as any 
@@ -60,7 +60,7 @@ export function mapVendorToDbRow(vendor: Partial<Vendor>): Partial<DbVendor> {
     w9ExpiryDate: vendor.w9ExpiryDate ? vendor.w9ExpiryDate as any : undefined,
     form1099Status: vendor.form1099Status,
     form1099ReceivedDate: vendor.form1099ReceivedDate ? vendor.form1099ReceivedDate as any : undefined,
-    isPaused: vendor.isPaused ? 1 : 0,
+    isPaused: vendor.isPaused ?? false,
     pausedReason: vendor.pausedReason,
     pausedUntil: vendor.pausedUntil ? Math.floor(vendor.pausedUntil.getTime() / 1000) as any : undefined,
     status: vendor.status,

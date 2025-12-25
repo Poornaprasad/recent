@@ -16,7 +16,7 @@ import {
 } from '@/lib/actions/index';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Search, AlertTriangle } from 'lucide-react';
-import type { ContactLookupResult } from '@/lib/crm/smartadvocate/types';
+import type { ContactLookupResult, DisbursementOption } from '@/lib/crm/smartadvocate/types';
 
 interface VendorSetupDialogProps {
   open: boolean;
@@ -49,7 +49,7 @@ export function VendorSetupDialog({
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [requires1099, setRequires1099] = useState(false);
-  const [disbursementTypes, setDisbursementTypes] = useState<string[]>([]);
+  const [disbursementTypes, setDisbursementTypes] = useState<DisbursementOption[]>([]);
   const [isLoadingTypes, setIsLoadingTypes] = useState(false);
   const [isLookupOpen, setIsLookupOpen] = useState(false);
   const [contactSearchQuery, setContactSearchQuery] = useState('');
@@ -325,8 +325,8 @@ export function VendorSetupDialog({
                   <>
                     <SelectItem value="__none__">None (Optional)</SelectItem>
                     {disbursementTypes.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
+                      <SelectItem key={type.id} value={type.description}>
+                        {type.description}
                       </SelectItem>
                     ))}
                   </>

@@ -96,13 +96,30 @@ export async function upsertVendor(vendor: Vendor): Promise<void> {
     updatedAt: new Date(Math.floor(Date.now() / 1000) * 1000),
   } as DbVendor;
 
-  await db
-    .insert(vendors)
-    .values(row)
-    .onConflictDoUpdate({
-      target: vendors.id,
-      set: row,
-    });
+  // For insert, include createdAt if provided
+  const insertRow = {
+    ...row,
+    createdAt: vendor.createdAt || new Date(Math.floor(Date.now() / 1000) * 1000),
+  };
+
+  // For update, exclude id and createdAt (don't change these)
+  const { id, createdAt, ...updateRow } = insertRow;
+
+  try {
+    await db
+      .insert(vendors)
+      .values(insertRow)
+      .onConflictDoUpdate({
+        target: vendors.id,
+        set: updateRow,
+      });
+  } catch (error) {
+    console.error('Error upserting vendor:', error);
+    console.error('Vendor data:', JSON.stringify(vendor, null, 2));
+    console.error('Insert row:', JSON.stringify(insertRow, null, 2));
+    console.error('Update row:', JSON.stringify(updateRow, null, 2));
+    throw error;
+  }
 }
 
 /**

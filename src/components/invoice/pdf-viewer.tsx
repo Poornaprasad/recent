@@ -28,6 +28,7 @@ export function PDFViewer({ file }: PDFViewerProps) {
   const [numPages, setNumPages] = useState<number | null>(null);
   const [scale, setScale] = useState(1.0);
   const [containerWidth, setContainerWidth] = useState<number | null>(null);
+  const [initialScale, setInitialScale] = useState<number | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -56,6 +57,15 @@ export function PDFViewer({ file }: PDFViewerProps) {
     };
   }, []);
 
+  // Calculate initial scale to fit PDF to screen width
+  useEffect(() => {
+    if (numPages && containerWidth && !initialScale) {
+      // PDF pages will be rendered at containerWidth, so scale 1.0 should fit by default
+      // But we need to ensure the page width matches the container
+      setInitialScale(1.0);
+    }
+  }, [numPages, containerWidth, initialScale]);
+
   function onDocumentLoadSuccess({ numPages }: { numPages: number }) {
     setNumPages(numPages);
   }
@@ -73,6 +83,7 @@ export function PDFViewer({ file }: PDFViewerProps) {
     // Scroll to top when resetting zoom
     if (scrollContainerRef.current) {
       scrollContainerRef.current.scrollTop = 0;
+      scrollContainerRef.current.scrollLeft = 0;
     }
   }
 

@@ -364,25 +364,27 @@ export function InvoiceViewer({
             {/* Scaled container - zoom is applied here, not to the whole page */}
             <div 
               ref={scaledContainerRef}
-              className="relative"
+              className="relative inline-block"
               style={{ 
                 transform: `scale(${scale})`, 
                 transformOrigin: 'top center',
                 willChange: 'transform', // Optimize transform performance
+                maxWidth: '100%',
               }}
             >
               <Image
                 src={absoluteUri}
                 alt={`Invoice ${invoiceId}`}
                 data-ai-hint="invoice document"
-                width={0}
-                height={0}
-                sizes="100vw"
-                className="w-auto h-auto max-w-none object-contain"
+                width={baseImageDimensions?.naturalWidth || 1200}
+                height={baseImageDimensions?.naturalHeight || 1600}
+                sizes="(max-width: 100%) 100vw"
+                className="object-contain"
                 style={{ 
                   display: 'block',
-                  maxWidth: '100%',
+                  width: baseImageDimensions ? `${baseImageDimensions.width}px` : 'auto',
                   height: 'auto',
+                  maxWidth: '100%',
                 }}
                 onLoad={(e) => {
                   // Next.js Image component - get the actual img element
