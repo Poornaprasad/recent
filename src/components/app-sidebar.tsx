@@ -32,6 +32,7 @@ import {
   Workflow,
   TrendingUp,
   FileCheck,
+  FileX,
 } from "lucide-react";
 import { APP_NAME } from "@/lib/constants";
 import Link from "next/link";
@@ -51,6 +52,7 @@ const managementLinks = [
     { href: "/approvals", label: "Review Pending Invoices", icon: CheckSquare },
     { href: "/escalations", label: "Escalations", icon: TrendingUp },
     { href: "/duplicates", label: "Duplicates", icon: Copy },
+    { href: "/sync-errors", label: "Sync Errors", icon: FileX },
 ];
 
 const vendorLinks = [

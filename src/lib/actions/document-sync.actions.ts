@@ -19,6 +19,7 @@ import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
 import type { SmartAdvocateDocument } from '../crm/smartadvocate/types';
 import { generateDocumentHash } from '../utils/document-hash';
 import { findInvoiceByDocumentHash } from '../repositories/invoice.repository';
+import { createDocumentSyncError } from '../repositories/document-sync-error.repository';
 
 export interface DocumentSyncResult {
   totalDocuments: number;
@@ -127,6 +128,65 @@ export async function syncDocumentsFromSmartAdvocate(
             `[Document Sync] Fetched content for document ${metadata.documentID} (${content.size} bytes, ${content.contentType})`
           );
 
+          // Skip unsupported file types
+          const supportedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'image/heic'];
+          if (!supportedTypes.includes(content.contentType)) {
+            result.failed++;
+            const errorMessage = `Unsupported file type: ${content.contentType}. Only PDF and images are supported.`;
+            result.errors.push({
+              documentID: metadata.documentID,
+              error: errorMessage,
+            });
+            
+            // Save error to database with all SmartAdvocate metadata
+            await createDocumentSyncError({
+              documentID: doc.documentID,
+              error: errorMessage,
+              errorType: 'Unsupported File Type',
+              caseID: doc.caseID,
+              caseNumber: doc.caseNumber,
+              documentName: doc.documentName,
+              contentType: content.contentType,
+              fileSize: content.size,
+              categoryID: doc.categoryID,
+              categoryName: doc.categoryName,
+              subCategoryID: doc.subCategoryID,
+              subCategoryName: doc.subCategoryName,
+              subSubCategoryID: doc.subSubCategoryID,
+              subSubSubCategoryID: doc.subSubSubCategoryID,
+              description: doc.description,
+              comments: doc.comments,
+              createdDate: doc.createdDate ? new Date(doc.createdDate) : undefined,
+              modifiedDate: doc.modifiedDate ? new Date(doc.modifiedDate) : undefined,
+              // SmartAdvocate metadata fields
+              saFromUniqueContactId: doc.fromUniqueContactID,
+              saToContactName: doc.toContactName,
+              saFromContactName: doc.fromContactName,
+              saDocType: doc.docType, // Document type (e.g., "Img", "Pdf", etc.)
+              saTemplateId: doc.templateID,
+              saAttachFlag: doc.attachFlag,
+              saCreatedUserId: doc.createdUserID,
+              saModifiedUserId: doc.modifiedUserID,
+              saMedProvUniqueContactId: doc.medProvUniqueContactID,
+              saIsReviewed: doc.isReviewed,
+              saToUniqueContactId: doc.toUniqueContactID,
+              saDocumentDate: doc.documentDate ? new Date(doc.documentDate) : undefined,
+              saPriority: doc.priority,
+              saPriorityName: doc.priorityName,
+              saDocumentDirection: doc.documentDirection,
+              saDirectionName: doc.directionName,
+              saDocumentOrigin: doc.documentOrigin,
+              saOriginName: doc.originName,
+              saIsSharedInPortal: doc.isSharedInPortal,
+              saIsSharedWithEveryoneInPortal: doc.isSharedWithEveryoneInPortal,
+              saCaseDocumentId: doc.caseDocumentID,
+              saDeliveryMethodId: (doc as any).deliveryMethodId,
+              saDeliveryName: (doc as any).deliveryName,
+            });
+            
+            continue;
+          }
+
           // Map SmartAdvocate document to invoice metadata fields
           const saMetadata = mapSmartAdvocateDocumentToInvoice(doc);
 
@@ -150,6 +210,52 @@ export async function syncDocumentsFromSmartAdvocate(
             console.error(
               `[Document Sync] Failed to process document ${metadata.documentID}: ${processResult.error}`
             );
+            
+            // Save error to database with all SmartAdvocate metadata
+            await createDocumentSyncError({
+              documentID: doc.documentID,
+              error: processResult.error,
+              errorType: 'Processing Error',
+              caseID: doc.caseID,
+              caseNumber: doc.caseNumber,
+              documentName: doc.documentName,
+              contentType: content.contentType,
+              fileSize: content.size,
+              categoryID: doc.categoryID,
+              categoryName: doc.categoryName,
+              subCategoryID: doc.subCategoryID,
+              subCategoryName: doc.subCategoryName,
+              subSubCategoryID: doc.subSubCategoryID,
+              subSubSubCategoryID: doc.subSubSubCategoryID,
+              description: doc.description,
+              comments: doc.comments,
+              createdDate: doc.createdDate ? new Date(doc.createdDate) : undefined,
+              modifiedDate: doc.modifiedDate ? new Date(doc.modifiedDate) : undefined,
+              // SmartAdvocate metadata fields
+              saFromUniqueContactId: doc.fromUniqueContactID,
+              saToContactName: doc.toContactName,
+              saFromContactName: doc.fromContactName,
+              saDocType: doc.docType, // Document type (e.g., "Img", "Pdf", etc.)
+              saTemplateId: doc.templateID,
+              saAttachFlag: doc.attachFlag,
+              saCreatedUserId: doc.createdUserID,
+              saModifiedUserId: doc.modifiedUserID,
+              saMedProvUniqueContactId: doc.medProvUniqueContactID,
+              saIsReviewed: doc.isReviewed,
+              saToUniqueContactId: doc.toUniqueContactID,
+              saDocumentDate: doc.documentDate ? new Date(doc.documentDate) : undefined,
+              saPriority: doc.priority,
+              saPriorityName: doc.priorityName,
+              saDocumentDirection: doc.documentDirection,
+              saDirectionName: doc.directionName,
+              saDocumentOrigin: doc.documentOrigin,
+              saOriginName: doc.originName,
+              saIsSharedInPortal: doc.isSharedInPortal,
+              saIsSharedWithEveryoneInPortal: doc.isSharedWithEveryoneInPortal,
+              saCaseDocumentId: doc.caseDocumentID,
+              saDeliveryMethodId: (doc as any).deliveryMethodId,
+              saDeliveryName: (doc as any).deliveryName,
+            });
           } else {
             result.successful++;
             console.log(
@@ -169,6 +275,50 @@ export async function syncDocumentsFromSmartAdvocate(
           console.error(
             `[Document Sync] Error processing document ${doc.documentID}: ${errorMessage}`
           );
+          
+          // Save error to database with all SmartAdvocate metadata
+          await createDocumentSyncError({
+            documentID: doc.documentID,
+            error: errorMessage,
+            errorType: 'Other',
+            caseID: doc.caseID,
+            caseNumber: doc.caseNumber,
+            documentName: doc.documentName,
+            categoryID: doc.categoryID,
+            categoryName: doc.categoryName,
+            subCategoryID: doc.subCategoryID,
+            subCategoryName: doc.subCategoryName,
+            subSubCategoryID: doc.subSubCategoryID,
+            subSubSubCategoryID: doc.subSubSubCategoryID,
+            description: doc.description,
+            comments: doc.comments,
+            createdDate: doc.createdDate ? new Date(doc.createdDate) : undefined,
+            modifiedDate: doc.modifiedDate ? new Date(doc.modifiedDate) : undefined,
+            // SmartAdvocate metadata fields
+            saFromUniqueContactId: doc.fromUniqueContactID,
+            saToContactName: doc.toContactName,
+            saFromContactName: doc.fromContactName,
+            saDocType: doc.docType, // Document type (e.g., "Img", "Pdf", etc.)
+            saTemplateId: doc.templateID,
+            saAttachFlag: doc.attachFlag,
+            saCreatedUserId: doc.createdUserID,
+            saModifiedUserId: doc.modifiedUserID,
+            saMedProvUniqueContactId: doc.medProvUniqueContactID,
+            saIsReviewed: doc.isReviewed,
+            saToUniqueContactId: doc.toUniqueContactID,
+            saDocumentDate: doc.documentDate ? new Date(doc.documentDate) : undefined,
+            saPriority: doc.priority,
+            saPriorityName: doc.priorityName,
+            saDocumentDirection: doc.documentDirection,
+            saDirectionName: doc.directionName,
+            saDocumentOrigin: doc.documentOrigin,
+            saOriginName: doc.originName,
+            saIsSharedInPortal: doc.isSharedInPortal,
+            saIsSharedWithEveryoneInPortal: doc.isSharedWithEveryoneInPortal,
+            saCaseDocumentId: doc.caseDocumentID,
+            saDeliveryMethodId: (doc as any).deliveryMethodId,
+            saDeliveryName: (doc as any).deliveryName,
+          });
         }
       }
 

@@ -407,3 +407,63 @@ export const permissionMatrix = pgTable('permission_matrix', {
 
 export type PermissionMatrix = typeof permissionMatrix.$inferSelect;
 export type NewPermissionMatrix = typeof permissionMatrix.$inferInsert;
+
+// Document sync errors table (tracks failed document syncs from SmartAdvocate)
+export const documentSyncErrors = pgTable('document_sync_errors', {
+  id: text('id').primaryKey(),
+  documentID: integer('document_id').notNull(), // SmartAdvocate document ID
+  caseID: integer('case_id'),
+  caseNumber: text('case_number'),
+  documentName: text('document_name'),
+  error: text('error').notNull(), // Error message
+  errorType: text('error_type', { enum: ['Unsupported File Type', 'Processing Error', 'API Error', 'Other'] }).notNull(),
+  contentType: text('content_type'), // MIME type of the document
+  fileSize: integer('file_size'), // Size in bytes
+  categoryID: integer('category_id'),
+  categoryName: text('category_name'),
+  subCategoryID: integer('sub_category_id'),
+  subCategoryName: text('sub_category_name'),
+  subSubCategoryID: integer('sub_sub_category_id'),
+  subSubSubCategoryID: integer('sub_sub_sub_category_id'),
+  description: text('description'),
+  comments: text('comments'),
+  createdDate: timestamp('created_date'), // Document creation date from SmartAdvocate
+  modifiedDate: timestamp('modified_date'), // Document modification date from SmartAdvocate
+  syncDate: timestamp('sync_date').defaultNow().notNull(), // When the sync error occurred
+  
+  // SmartAdvocate metadata fields (matching invoices table)
+  saFromUniqueContactId: integer('sa_from_unique_contact_id'),
+  saToContactName: text('sa_to_contact_name'),
+  saFromContactName: text('sa_from_contact_name'),
+  saDocType: text('sa_doc_type'), // Document type (e.g., "Img", "Pdf", etc.)
+  saTemplateId: integer('sa_template_id'),
+  saAttachFlag: boolean('sa_attach_flag'),
+  saCreatedUserId: integer('sa_created_user_id'),
+  saModifiedUserId: integer('sa_modified_user_id'),
+  saMedProvUniqueContactId: integer('sa_med_prov_unique_contact_id'),
+  saIsReviewed: boolean('sa_is_reviewed'),
+  saToUniqueContactId: integer('sa_to_unique_contact_id'),
+  saDocumentDate: timestamp('sa_document_date'),
+  saPriority: integer('sa_priority'),
+  saPriorityName: text('sa_priority_name'),
+  saDocumentDirection: integer('sa_document_direction'),
+  saDirectionName: text('sa_direction_name'),
+  saDocumentOrigin: integer('sa_document_origin'),
+  saOriginName: text('sa_origin_name'),
+  saIsSharedInPortal: boolean('sa_is_shared_in_portal'),
+  saIsSharedWithEveryoneInPortal: boolean('sa_is_shared_with_everyone_in_portal'),
+  saCaseDocumentId: integer('sa_case_document_id'),
+  saDeliveryMethodId: integer('sa_delivery_method_id'),
+  saDeliveryName: text('sa_delivery_name'),
+  
+  metadata: text('metadata'), // JSON string with additional metadata not in schema
+  resolved: boolean('resolved').default(false), // Whether the error has been resolved
+  resolvedAt: timestamp('resolved_at'),
+  resolvedBy: text('resolved_by'), // User ID who resolved it
+  resolutionNotes: text('resolution_notes'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export type DocumentSyncError = typeof documentSyncErrors.$inferSelect;
+export type NewDocumentSyncError = typeof documentSyncErrors.$inferInsert;
