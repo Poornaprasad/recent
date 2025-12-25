@@ -844,7 +844,7 @@ export function ExtractedDataPanel({
     'hasAmountAnomaly', 'amountAnomalyReason', 'expectedAmount',
     'amountDeviationPercent', 'hasMultipleVendors', 'accuracyScore',
     'requiresSpecialHandling', 'specialHandlingReason', 'vendorRequires1099',
-    'comment', 'paymentType', 'clientName', 'customerName', // plaintiff name handled separately
+    'comment', 'description', 'paymentType', 'clientName', 'customerName', // plaintiff name handled separately
     'totalAmount', 'amount', // amount handled separately in specific position
     'vendorName', // vendor name handled separately with CRM lookup
   ];
@@ -871,13 +871,7 @@ export function ExtractedDataPanel({
   const amountHasBbox = amountData?.bbox && Array.isArray(amountData.bbox) && amountData.bbox.length >= 4;
   const isAmountEdited = editedFields.has('amount');
 
-  // Get description and comment for Document Info section
-  const descriptionData = invoiceData.description;
-  const descriptionValue = typeof descriptionData === 'object' && descriptionData !== null && 'value' in descriptionData
-    ? (descriptionData.value !== null && descriptionData.value !== undefined ? String(descriptionData.value) : '')
-    : (descriptionData ? String(descriptionData) : '');
-  const hasDescription = descriptionValue.trim().length > 0;
-  
+  // Get comment for Document Info section
   const commentValue = invoiceData.comment ? String(invoiceData.comment) : '';
   const hasComment = commentValue.trim().length > 0;
 
@@ -895,16 +889,6 @@ export function ExtractedDataPanel({
               </div>
             </AccordionTrigger>
             <AccordionContent className="px-4 pb-4 space-y-3">
-              <div>
-                <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                  Description
-                </Label>
-                <div className="p-2.5 rounded-lg border bg-muted/30">
-                  <p className="text-sm text-foreground whitespace-pre-wrap">
-                    {hasDescription ? descriptionValue : <span className="text-muted-foreground italic">No description available</span>}
-                  </p>
-                </div>
-              </div>
               <div>
                 <Label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                   Comment

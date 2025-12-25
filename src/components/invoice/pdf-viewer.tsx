@@ -169,7 +169,8 @@ export function PDFViewer({ file }: PDFViewerProps) {
           width: '100%', 
           maxWidth: '100%',
           overflowX: 'auto',
-          overflowY: 'auto'
+          overflowY: 'auto',
+          isolation: 'isolate', // Isolate stacking context to prevent zoom affecting parent
         }}
       >
         <div 

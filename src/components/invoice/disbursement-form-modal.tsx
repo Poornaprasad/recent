@@ -67,7 +67,6 @@ export function DisbursementFormModal({
   const [checkNumber, setCheckNumber] = useState('');
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [amount, setAmount] = useState('');
-  const [description, setDescription] = useState('');
   const [plaintiffId, setPlaintiffId] = useState<number | null>(null);
   const [plaintiffName, setPlaintiffName] = useState<string>('');
   const [shareAcrossClients, setShareAcrossClients] = useState(false);
@@ -82,6 +81,7 @@ export function DisbursementFormModal({
   const [invoiceDate, setInvoiceDate] = useState('');
   const [statusDate, setStatusDate] = useState('');
   const [documentIDs, setDocumentIDs] = useState<string>('');
+  const [isDocumentIDsAutoPopulated, setIsDocumentIDsAutoPopulated] = useState(false);
   const [customField1, setCustomField1] = useState('');
 
   // Options
@@ -163,7 +163,6 @@ export function DisbursementFormModal({
       // Auto-populate from invoice data
       setInvoiceNumber(invoice.invoiceNumber?.value || '');
       setAmount(String(invoice.amount?.value || invoice.totalAmount?.value || ''));
-      setDescription(invoice.description?.value || '');
       setPayeeName(invoice.vendorName?.value || '');
       
       // Auto-populate document ID if available
@@ -171,9 +170,11 @@ export function DisbursementFormModal({
         const docIdStr = String(invoice.documentID);
         console.log('DisbursementFormModal: Setting documentIDs to:', docIdStr);
         setDocumentIDs(docIdStr);
+        setIsDocumentIDsAutoPopulated(true); // Mark as auto-populated
       } else {
         console.log('DisbursementFormModal: No documentID found in invoice');
         setDocumentIDs(''); // Reset if no documentID
+        setIsDocumentIDsAutoPopulated(false); // Not auto-populated
       }
 
       // Parse invoice date
@@ -230,9 +231,9 @@ export function DisbursementFormModal({
       // Reset all fields when modal closes
       setInvoiceNumber('');
       setAmount('');
-      setDescription('');
       setPayeeName('');
       setDocumentIDs('');
+      setIsDocumentIDsAutoPopulated(false);
       setInvoiceDate('');
       setStatusDate('');
       setCaseID(null);
@@ -402,9 +403,9 @@ export function DisbursementFormModal({
               exactMatches.push(contact);
             } else {
               // Check for partial match (e.g., city, state, zip)
-              const addressWords = addressLower.split(/\s+/).filter(w => w.length > 2);
-              const contactWords = contactAddress.split(/\s+/).filter(w => w.length > 2);
-              const hasCommonWords = addressWords.some(word => contactWords.includes(word));
+              const addressWords = addressLower.split(/\s+/).filter((w: string) => w.length > 2);
+              const contactWords = contactAddress.split(/\s+/).filter((w: string) => w.length > 2);
+              const hasCommonWords = addressWords.some((word: string) => contactWords.includes(word));
               
               if (hasCommonWords) {
                 partialMatches.push(contact);
@@ -611,7 +612,6 @@ export function DisbursementFormModal({
       // Add optional fields if provided
       if (checkNumber) disbursementData.checkNumber = checkNumber;
       if (invoiceNumber) disbursementData.invoiceNumber = invoiceNumber;
-      if (description) disbursementData.description = description;
       if (comments) disbursementData.comments = comments;
       if (invoiceDate) disbursementData.invoiceDate = `${invoiceDate}T00:00:00`;
       if (statusDate) {
@@ -800,17 +800,6 @@ export function DisbursementFormModal({
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
               required
-            />
-          </div>
-
-          {/* Description */}
-          <div>
-            <Label>Description</Label>
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Enter description"
-              rows={3}
             />
           </div>
 
@@ -1025,9 +1014,9 @@ export function DisbursementFormModal({
                       // Check for partial address match
                       let isPartialMatch = false;
                       if (vendorAddress && contactAddress && !isAddressMatch) {
-                        const addressWords = addressLower.split(/\s+/).filter(w => w.length > 2);
-                        const contactWords = contactAddress.split(/\s+/).filter(w => w.length > 2);
-                        isPartialMatch = addressWords.some(word => contactWords.includes(word));
+                        const addressWords = addressLower.split(/\s+/).filter((w: string) => w.length > 2);
+                        const contactWords = contactAddress.split(/\s+/).filter((w: string) => w.length > 2);
+                        isPartialMatch = addressWords.some((word: string) => contactWords.includes(word));
                       }
                       
                       return (
@@ -1181,6 +1170,8 @@ export function DisbursementFormModal({
                 value={documentIDs}
                 onChange={(e) => setDocumentIDs(e.target.value)}
                 placeholder="e.g., 3172141"
+                disabled={isDocumentIDsAutoPopulated}
+                title={isDocumentIDsAutoPopulated ? "Document ID is auto-populated and cannot be edited" : undefined}
               />
             </div>
             <div>

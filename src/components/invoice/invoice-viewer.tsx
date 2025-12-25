@@ -39,7 +39,11 @@ export function InvoiceViewer({
   const imageRef = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
-  const [imageDimensions, setImageDimensions] = useState<{ width: number; height: number; left: number; top: number } | null>(null);
+  const scaledContainerRef = useRef<HTMLDivElement | null>(null);
+  // Store base (unscaled) image dimensions for consistent calculations
+  const [baseImageDimensions, setBaseImageDimensions] = useState<{ width: number; height: number; naturalWidth: number; naturalHeight: number } | null>(null);
+  // Store the position of the scaled container relative to the scroll container
+  const [scaledContainerPosition, setScaledContainerPosition] = useState<{ left: number; top: number } | null>(null);
   const [scale, setScale] = useState(1.0);
 
   const MIN_SCALE = 0.5;
@@ -62,58 +66,66 @@ export function InvoiceViewer({
     }
   }
 
-  // Update image dimensions when window resizes or highlight box changes
+  // Update base image dimensions and container position
   useEffect(() => {
-    const updateImageDimensions = () => {
-      if (imageRef.current && containerRef.current) {
+    const updateDimensions = () => {
+      if (imageRef.current && scrollContainerRef.current && scaledContainerRef.current) {
         const img = imageRef.current;
-        const container = containerRef.current;
-        const rect = img.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        const dimensions = {
-          width: rect.width,
-          height: rect.height,
-          left: rect.left - containerRect.left,
-          top: rect.top - containerRect.top,
-        };
-        setImageDimensions(dimensions);
-        if (onImageLoad) {
-          onImageLoad(dimensions);
+        const scrollContainer = scrollContainerRef.current;
+        const scaledContainer = scaledContainerRef.current;
+        
+        // Get the natural (intrinsic) dimensions of the image
+        const naturalWidth = img.naturalWidth || img.width;
+        const naturalHeight = img.naturalHeight || img.height;
+        
+        if (naturalWidth > 0 && naturalHeight > 0) {
+          // Calculate the base rendered size (at scale 1.0)
+          // The image should fit within the container width while maintaining aspect ratio
+          const scrollContainerWidth = scrollContainer.clientWidth - 32; // Subtract padding (16px * 2)
+          const aspectRatio = naturalWidth / naturalHeight;
+          const baseWidth = Math.min(scrollContainerWidth, naturalWidth);
+          const baseHeight = baseWidth / aspectRatio;
+          
+          setBaseImageDimensions({
+            width: baseWidth,
+            height: baseHeight,
+            naturalWidth,
+            naturalHeight,
+          });
         }
-      } else if (containerRef.current) {
-        // Try to find the image element
-        const img = containerRef.current.querySelector('img');
-        if (img) {
-          imageRef.current = img;
-          const rect = img.getBoundingClientRect();
+        
+        // Get the position of the scaled container relative to the scroll container
+        const scaledContainerRect = scaledContainer.getBoundingClientRect();
+        const scrollContainerRect = scrollContainer.getBoundingClientRect();
+        
+        setScaledContainerPosition({
+          left: scaledContainerRect.left - scrollContainerRect.left,
+          top: scaledContainerRect.top - scrollContainerRect.top,
+        });
+        
+        // Also update the callback with current rendered dimensions
+        if (onImageLoad && containerRef.current && imageRef.current) {
+          const imgRect = imageRef.current.getBoundingClientRect();
           const containerRect = containerRef.current.getBoundingClientRect();
-          const dimensions = {
-            width: rect.width,
-            height: rect.height,
-            left: rect.left - containerRect.left,
-            top: rect.top - containerRect.top,
-          };
-          setImageDimensions(dimensions);
-          if (onImageLoad) {
-            onImageLoad(dimensions);
-          }
+          onImageLoad({
+            width: imgRect.width,
+            height: imgRect.height,
+            left: imgRect.left - containerRect.left,
+            top: imgRect.top - containerRect.top,
+          });
         }
       }
     };
 
-    // Update immediately
-    const timeout = setTimeout(updateImageDimensions, 100);
-
-    window.addEventListener('resize', updateImageDimensions);
-    // Update periodically to catch image load and layout changes
-    const interval = setInterval(updateImageDimensions, 300);
+    // Update when scale changes or image loads
+    const timeout = setTimeout(updateDimensions, 50);
+    window.addEventListener('resize', updateDimensions);
 
     return () => {
       clearTimeout(timeout);
-      window.removeEventListener('resize', updateImageDimensions);
-      clearInterval(interval);
+      window.removeEventListener('resize', updateDimensions);
     };
-  }, [invoiceDataUri, highlightBox, onImageLoad]);
+  }, [scale, invoiceDataUri, onImageLoad]);
 
   // Convert relative file paths to absolute URLs for PDF viewer
   const getAbsoluteUri = (uri: string): string => {
@@ -135,9 +147,14 @@ export function InvoiceViewer({
   const renderHighlightBox = () => {
     if (!highlightBox || highlightBox.length < 4) return null;
 
+    // Use natural dimensions for normalization - bounding boxes are typically relative to original image size
+    const dimensionsForNormalization = baseImageDimensions 
+      ? { width: baseImageDimensions.naturalWidth, height: baseImageDimensions.naturalHeight }
+      : undefined;
+
     const normalized = normalizeBoundingBox(
       highlightBox,
-      imageDimensions ? { width: imageDimensions.width, height: imageDimensions.height } : undefined
+      dimensionsForNormalization
     );
 
     if (!normalized) {
@@ -148,40 +165,7 @@ export function InvoiceViewer({
     const { minX: normalizedMinX, maxX: normalizedMaxX, minY: normalizedMinY, maxY: normalizedMaxY } = normalized;
 
     // For PDFs, always use percentage-based positioning
-    // For images, use pixel-based if dimensions are available
-    if (!isPdf && imageDimensions && imageDimensions.width > 0 && imageDimensions.height > 0) {
-      // Position relative to the image within the scaled container
-      // imageDimensions.left/top gives us the image's position within the scaled container
-      // We add the normalized coordinates multiplied by image size to get the bounding box position
-      const boxLeft = imageDimensions.left + normalizedMinX * imageDimensions.width;
-      const boxTop = imageDimensions.top + normalizedMinY * imageDimensions.height;
-      const boxWidth = (normalizedMaxX - normalizedMinX) * imageDimensions.width;
-      const boxHeight = (normalizedMaxY - normalizedMinY) * imageDimensions.height;
-
-      return (
-        <div
-          className="absolute border-2 border-green-500 bg-green-500/20 pointer-events-none"
-          style={{
-            left: `${boxLeft}px`,
-            top: `${boxTop}px`,
-            width: `${boxWidth}px`,
-            height: `${boxHeight}px`,
-            zIndex: 50,
-          }}
-        >
-          <div className="absolute -top-6 left-0 bg-green-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap flex items-center gap-2">
-            <span>{hoveredField && toTitleCase(hoveredField)}</span>
-            {hoveredConfidence !== null && (
-              <span className="font-mono bg-green-600 px-1.5 py-0.5 rounded">
-                {Math.round(hoveredConfidence * 100)}%
-              </span>
-            )}
-          </div>
-        </div>
-      );
-    } else {
-      // Fallback to percentage-based positioning (works for both PDFs and images)
-      // Coordinates are already normalized and clamped
+    if (isPdf) {
       return (
         <div
           className="absolute border-2 border-green-500 bg-green-500/20 pointer-events-none"
@@ -204,6 +188,63 @@ export function InvoiceViewer({
         </div>
       );
     }
+
+    // For images, calculate position using base rendered dimensions (at scale 1.0)
+    // The normalized coordinates (0-1) from normalizeBoundingBox represent percentage of image
+    // We multiply by base rendered dimensions to get position on the rendered image
+    // The scale transform will automatically apply to the bounding box since it's inside the scaled container
+    if (baseImageDimensions && scaledContainerPosition && baseImageDimensions.width > 0 && baseImageDimensions.height > 0) {
+      // Normalized coordinates are 0-1, multiply by base rendered size
+      const baseBoxLeft = normalizedMinX * baseImageDimensions.width;
+      const baseBoxTop = normalizedMinY * baseImageDimensions.height;
+      const baseBoxWidth = (normalizedMaxX - normalizedMinX) * baseImageDimensions.width;
+      const baseBoxHeight = (normalizedMaxY - normalizedMinY) * baseImageDimensions.height;
+
+      return (
+        <div
+          className="absolute border-2 border-green-500 bg-green-500/20 pointer-events-none"
+          style={{
+            left: `${baseBoxLeft}px`,
+            top: `${baseBoxTop}px`,
+            width: `${baseBoxWidth}px`,
+            height: `${baseBoxHeight}px`,
+            zIndex: 50,
+          }}
+        >
+          <div className="absolute -top-6 left-0 bg-green-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap flex items-center gap-2">
+            <span>{hoveredField && toTitleCase(hoveredField)}</span>
+            {hoveredConfidence !== null && (
+              <span className="font-mono bg-green-600 px-1.5 py-0.5 rounded">
+                {Math.round(hoveredConfidence * 100)}%
+              </span>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Fallback to percentage-based positioning if dimensions not available
+    return (
+      <div
+        className="absolute border-2 border-green-500 bg-green-500/20 pointer-events-none"
+        style={{
+          left: `${normalizedMinX * 100}%`,
+          top: `${normalizedMinY * 100}%`,
+          width: `${(normalizedMaxX - normalizedMinX) * 100}%`,
+          height: `${(normalizedMaxY - normalizedMinY) * 100}%`,
+          zIndex: 50,
+        }}
+      >
+        <div className="absolute -top-6 left-0 bg-green-500 text-white text-xs px-2 py-1 rounded whitespace-nowrap flex items-center gap-2">
+          <span>{hoveredField && toTitleCase(hoveredField)}</span>
+          {hoveredConfidence !== null && (
+            <span className="font-mono bg-green-600 px-1.5 py-0.5 rounded">
+              {Math.round(hoveredConfidence * 100)}%
+            </span>
+          )}
+        </div>
+      </div>
+    );
   };
 
   // Show error message if no document URI is provided
@@ -311,13 +352,25 @@ export function InvoiceViewer({
             </div>
           </div>
 
-          {/* Scrollable Image Container */}
+          {/* Scrollable Image Container - Zoom is isolated to this container only */}
           <div 
             ref={scrollContainerRef}
             className="flex-1 overflow-auto bg-muted/20 flex items-start justify-center p-4"
-            style={{ minHeight: 0 }}
+            style={{ 
+              minHeight: 0,
+              isolation: 'isolate', // Isolate stacking context to prevent zoom affecting parent
+            }}
           >
-            <div className="relative" style={{ transform: `scale(${scale})`, transformOrigin: 'top center' }}>
+            {/* Scaled container - zoom is applied here, not to the whole page */}
+            <div 
+              ref={scaledContainerRef}
+              className="relative"
+              style={{ 
+                transform: `scale(${scale})`, 
+                transformOrigin: 'top center',
+                willChange: 'transform', // Optimize transform performance
+              }}
+            >
               <Image
                 src={absoluteUri}
                 alt={`Invoice ${invoiceId}`}
@@ -327,47 +380,63 @@ export function InvoiceViewer({
                 sizes="100vw"
                 className="w-auto h-auto max-w-none object-contain"
                 style={{ 
-                  width: scale === 1.0 ? '100%' : 'auto',
-                  height: scale === 1.0 ? 'auto' : 'auto',
+                  display: 'block',
+                  maxWidth: '100%',
+                  height: 'auto',
                 }}
                 onLoad={(e) => {
-                  const img = e.currentTarget;
-                  imageRef.current = img;
+                  // Next.js Image component - get the actual img element
+                  const imgElement = e.currentTarget;
+                  // Find the actual img tag (Next.js wraps it)
+                  const actualImg = imgElement.querySelector('img') as HTMLImageElement || imgElement as HTMLImageElement;
+                  imageRef.current = actualImg;
                   
                   // Use a small delay to ensure layout is complete
                   setTimeout(() => {
-                    if (scrollContainerRef.current && img) {
-                      // Get the scaled container (parent of image)
-                      const scaledContainer = img.parentElement;
-                      if (scaledContainer) {
-                        const imgRect = img.getBoundingClientRect();
-                        const containerRect = scaledContainer.getBoundingClientRect();
-                        
-                        // Calculate image position relative to the scaled container
-                        // This accounts for centering/positioning within the container
-                        const dimensions = {
+                    if (scrollContainerRef.current && scaledContainerRef.current && actualImg) {
+                      // Get natural dimensions from the actual img element
+                      const naturalWidth = actualImg.naturalWidth || actualImg.width;
+                      const naturalHeight = actualImg.naturalHeight || actualImg.height;
+                      
+                      // Get the base rendered size (before scale transform)
+                      // At scale 1.0, the image will fit within the container width
+                      const scrollContainerWidth = scrollContainerRef.current.clientWidth - 32; // Subtract padding
+                      const aspectRatio = naturalWidth / naturalHeight;
+                      const baseWidth = Math.min(scrollContainerWidth, naturalWidth);
+                      const baseHeight = baseWidth / aspectRatio;
+                      
+                      setBaseImageDimensions({
+                        width: baseWidth,
+                        height: baseHeight,
+                        naturalWidth,
+                        naturalHeight,
+                      });
+                      
+                      // Get position of scaled container
+                      const scaledContainerRect = scaledContainerRef.current.getBoundingClientRect();
+                      const scrollContainerRect = scrollContainerRef.current.getBoundingClientRect();
+                      
+                      setScaledContainerPosition({
+                        left: scaledContainerRect.left - scrollContainerRect.left,
+                        top: scaledContainerRect.top - scrollContainerRect.top,
+                      });
+                      
+                      // Update callback with current rendered dimensions
+                      if (onImageLoad && containerRef.current) {
+                        const imgRect = actualImg.getBoundingClientRect();
+                        const containerRect = containerRef.current.getBoundingClientRect();
+                        onImageLoad({
                           width: imgRect.width,
                           height: imgRect.height,
                           left: imgRect.left - containerRect.left,
                           top: imgRect.top - containerRect.top,
-                        };
-                        setImageDimensions(dimensions);
-                        if (onImageLoad && containerRef.current) {
-                          const outerRect = containerRef.current.getBoundingClientRect();
-                          onImageLoad({
-                            width: imgRect.width,
-                            height: imgRect.height,
-                            left: imgRect.left - outerRect.left,
-                            top: imgRect.top - outerRect.top,
-                          });
-                        }
+                        });
                       }
                     }
-                  }, 50);
+                  }, 100);
                 }}
                 onError={(e) => {
                   console.error(`Failed to load invoice image for ${invoiceId}:`, absoluteUri);
-                  // The error will be visible as a broken image, but we've already handled empty URIs above
                 }}
               />
               {/* Bounding box overlay for images - positioned relative to scaled image container */}
