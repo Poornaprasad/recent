@@ -73,6 +73,7 @@ import {
 import { exportInvoicesToCSVFile } from "@/lib/utils/export-utils";
 import { encodeId } from "@/lib/utils/id-utils";
 import { DocumentTypeCell } from "@/components/invoice/document-type-cell";
+import { DocumentSyncButton } from "@/components/document-sync/document-sync-button";
 import { useState, useMemo, useEffect, useCallback, memo } from "react";
 import { useAuthStore } from "@/hooks/use-auth-store";
 import { 
@@ -315,8 +316,8 @@ export default function InvoicesPage() {
             >
               <RefreshCw className="h-4 w-4" />
               <span className="hidden sm:inline">
-                {effectiveStateFilter === primaryState 
-                  ? `Load ${secondaryState} First` 
+                {effectiveStateFilter === primaryState
+                  ? `Load ${secondaryState} First`
                   : `Load ${primaryState} First`}
               </span>
               <span className="sm:hidden">
@@ -324,6 +325,7 @@ export default function InvoicesPage() {
               </span>
             </Button>
           )}
+          <DocumentSyncButton variant="outline" size="sm" />
           <Button onClick={handleExport} size="sm" className="gap-1">
             <FileDown className="h-4 w-4" />
             Export {selectedInvoices.size > 0 ? `(${selectedInvoices.size})` : 'All'}
