@@ -25,8 +25,9 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
   let tempImagePaths: string[] = [];
   
   try {
-    const { createCanvas, loadImage } = await import('canvas');
-    
+    const canvas = await import('canvas');
+    const { createCanvas, Image } = canvas;
+
     // Extract base64 data from data URI
     const base64Data = pdfDataUri.split(',')[1];
     if (!base64Data) {
@@ -101,7 +102,11 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
     
     // Load all page images and calculate dimensions
     const loadedImages = await Promise.all(
-      pageImages.map((base64) => loadImage(Buffer.from(base64, 'base64')))
+      pageImages.map((base64) => {
+        const img = new Image();
+        img.src = Buffer.from(base64, 'base64');
+        return img;
+      })
     );
     
     loadedImages.forEach((img) => {
