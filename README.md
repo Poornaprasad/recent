@@ -158,7 +158,7 @@ This application follows **Clean Architecture** principles with clear separation
    # Should output: "accepting connections"
    ```
 
-   **Having issues?** See [POSTGRESQL_SETUP.md](./POSTGRESQL_SETUP.md) for detailed troubleshooting.
+   **Having issues?** See [docs/POSTGRESQL_SETUP.md](./docs/POSTGRESQL_SETUP.md) for detailed troubleshooting.
 
 4. **Create database**
    ```bash
@@ -226,7 +226,7 @@ brew services start postgresql@14
 **Issue: "server-only" import error with db:init**
 ✅ Already fixed in latest version! Update your code if you see this error.
 
-**For more troubleshooting**, see [POSTGRESQL_SETUP.md](./POSTGRESQL_SETUP.md)
+**For more troubleshooting**, see [docs/POSTGRESQL_SETUP.md](./docs/POSTGRESQL_SETUP.md)
 
 ## 🔐 Environment Variables
 

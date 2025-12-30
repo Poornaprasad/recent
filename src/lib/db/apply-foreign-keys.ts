@@ -20,7 +20,7 @@ async function applyForeignKeys() {
     
     try {
       // Read and execute the foreign keys migration
-      const migrationPath = join(process.cwd(), 'drizzle', 'migrations', '0002_add_foreign_keys.sql');
+      const migrationPath = join(process.cwd(), 'drizzle', 'migrations', '0001_add_foreign_keys.sql');
       const migrationSQL = readFileSync(migrationPath, 'utf-8');
       
       console.log('Executing foreign key constraints migration...');

@@ -6,9 +6,9 @@ This directory contains consolidated database migrations for the TBF ReconX appl
 
 ## Migration Files
 
-### `0000_consolidated_production_schema.sql`
+### `0000_production_schema.sql`
 **Status**: Active  
-**Purpose**: Consolidated production schema with all tables, indexes, and data migrations
+**Purpose**: Complete production schema with all tables, indexes, and data migrations
 
 This migration includes:
 - All core tables (invoices, users, vendors, etc.)
@@ -22,15 +22,19 @@ This migration includes:
 - Data migrations for existing records
 - Table and column comments for documentation
 
-### `0002_add_foreign_keys.sql`
+**Note**: Foreign key constraints are defined separately in `0001_add_foreign_keys.sql` to allow flexible application order and easier troubleshooting.
+
+### `0001_add_foreign_keys.sql`
 **Status**: Active  
 **Purpose**: Adds enterprise-grade foreign key constraints and data validation
 
+**Prerequisite**: Must be run after `0000_production_schema.sql` completes successfully.
+
 This migration includes:
-- 23 foreign key relationships
-- CHECK constraints for data validation
+- 23 foreign key relationships ensuring referential integrity
+- CHECK constraints for data validation (amounts, emails, timestamps)
 - UNIQUE constraints preventing duplicates
-- Additional indexes on foreign keys
+- Additional indexes on foreign keys for performance
 
 
 ## Running Migrations
@@ -52,7 +56,7 @@ npm run db:migrate
 
 ## Migration History
 
-All previous migrations from the `migrations/` directory have been consolidated:
+All previous migrations from the `migrations/` directory have been consolidated into `0000_production_schema.sql`:
 
 - ✅ `add_1099_status_columns.sql` - Consolidated
 - ✅ `add_crm_status_column.sql` - Consolidated
@@ -67,6 +71,8 @@ All previous migrations from the `migrations/` directory have been consolidated:
 - ✅ `add_unique_contact_id.sql` - Consolidated
 - ✅ `rename_disbursement_type_to_contact_type.sql` - Consolidated
 - ✅ `0001_update_audit_logs.sql` - Consolidated
+
+Foreign key constraints were added in `0001_add_foreign_keys.sql` to keep schema structure and relationships separate for better maintainability.
 
 ## Important Notes
 
@@ -89,6 +95,7 @@ When adding new migrations:
 1. **For schema changes**: Update `src/lib/db/schema.ts` and run `npm run db:generate`
 2. **For manual SQL**: Add to a new numbered migration file (e.g., `0002_new_feature.sql`)
 3. **Always test**: Test migrations on a development database before deploying to production
+4. **Follow naming**: Use sequential numbering (0000, 0001, 0002, etc.)
 
 ## Rollback
 

@@ -68,7 +68,7 @@ async function resetDatabase() {
     console.log('\nStep 2: Running consolidated migration to recreate all tables...\n');
     
     // Read and execute the consolidated migration
-    const migrationPath = join(process.cwd(), 'drizzle', 'migrations', '0000_consolidated_production_schema.sql');
+    const migrationPath = join(process.cwd(), 'drizzle', 'migrations', '0000_production_schema.sql');
     
     try {
       const migrationSQL = readFileSync(migrationPath, 'utf-8');

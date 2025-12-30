@@ -222,3 +222,4 @@ export async function getAuditSeveritiesAction(): Promise<ActionResult<Array<{ v
     'Failed to fetch audit severities'
   );
 }
+

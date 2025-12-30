@@ -6,6 +6,9 @@
 --
 -- Date: 2024
 -- Purpose: Add enterprise-grade foreign key constraints to all relationships
+--
+-- PREREQUISITE: This migration must be run AFTER 0000_production_schema.sql
+--               as it requires all tables to exist before adding constraints.
 -- ============================================================================
 
 -- ============================================================================

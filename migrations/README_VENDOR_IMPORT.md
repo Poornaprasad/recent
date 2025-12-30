@@ -9,16 +9,17 @@ This guide explains how to import vendor data from `merged_contacts_final.csv` i
 
 ## Steps
 
-### 1. Run the Migration
+### 1. Ensure Database Schema is Up to Date
 
-First, add the `unique_contact_id` column to the vendors table:
+The `unique_contact_id` column is included in the production schema. Ensure your database is up to date:
 
 ```bash
-# If using PostgreSQL directly:
-psql -d your_database_name -f migrations/add_unique_contact_id.sql
+# Run all migrations (includes schema and foreign keys):
+npm run db:migrate
 
-# Or if using drizzle migrations:
-npm run db:push
+# Or if resetting the database:
+npm run db:reset
+npm run db:apply-fks
 ```
 
 ### 2. Import Vendors

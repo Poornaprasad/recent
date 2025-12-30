@@ -1,13 +1,16 @@
 -- ============================================================================
--- Consolidated Production Migration
+-- Production Schema Migration
 -- ============================================================================
--- This migration consolidates all previous migrations into a single,
--- production-ready schema definition. It is idempotent and safe to run
--- multiple times.
+-- This migration defines the complete database schema for TBF ReconX.
+-- It is idempotent and safe to run multiple times.
 --
 -- Date: 2024
--- Purpose: Consolidate all database migrations into a single file for
---          production deployment and easier maintenance
+-- Purpose: Complete database schema with all tables, indexes, and data migrations
+--          for production deployment
+--
+-- IMPORTANT: This migration creates tables only. Foreign key constraints are
+--            defined in 0001_add_foreign_keys.sql and should be applied after
+--            this migration completes successfully.
 -- ============================================================================
 
 -- ============================================================================
@@ -668,5 +671,14 @@ COMMENT ON TABLE case_vendor_disbursement_types IS 'Stores which contact type wa
 
 -- ============================================================================
 -- MIGRATION COMPLETE
+-- ============================================================================
+--
+-- NOTE: Foreign key constraints are defined in a separate migration file
+-- (0001_add_foreign_keys.sql) to allow for:
+-- 1. Flexible application order (can apply schema first, then constraints)
+-- 2. Easier troubleshooting if constraint issues arise
+-- 3. Clear separation of concerns (schema structure vs. relationships)
+--
+-- Foreign keys should be applied after this migration completes successfully.
 -- ============================================================================
 

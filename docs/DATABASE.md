@@ -15,15 +15,17 @@ This document consolidates all database-related documentation for the TBF ReconX
 
 All database migrations are located in `drizzle/migrations/`:
 
-1. **`0000_consolidated_production_schema.sql`**
-   - Complete database schema with all tables, indexes, and constraints
+1. **`0000_production_schema.sql`**
+   - Complete database schema with all tables, indexes, and data migrations
    - Idempotent and production-ready
    - Includes all SmartAdvocate metadata fields
+   - **Note**: Foreign keys are defined separately in the next migration
 
-2. **`0002_add_foreign_keys.sql`**
-   - Adds 23 foreign key relationships
-   - Data validation constraints
-   - Unique constraints
+2. **`0001_add_foreign_keys.sql`**
+   - Adds 23 foreign key relationships ensuring referential integrity
+   - Data validation constraints (CHECK constraints for amounts, emails, timestamps)
+   - Unique constraints preventing duplicates
+   - **Prerequisite**: Must be run after `0000_production_schema.sql`
 
 ### Running Migrations
 
@@ -149,8 +151,8 @@ npm run db:studio
 ## Migration History
 
 All previous migrations have been consolidated:
-- ✅ 12 individual migration files → Consolidated into `0000_consolidated_production_schema.sql`
-- ✅ Foreign keys → Added in `0002_add_foreign_keys.sql`
+- ✅ 12 individual migration files → Consolidated into `0000_production_schema.sql`
+- ✅ Foreign keys → Added in `0001_add_foreign_keys.sql` (kept separate for maintainability)
 
 Old migrations are archived in `migrations/archive/` for historical reference.
 
