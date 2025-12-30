@@ -90,10 +90,11 @@ serverExternalPackages: ['pdf-img-convert', 'canvas', 'node-cron']
 ### Automated Sync (Cron Job)
 
 1. Set `DOCUMENT_SYNC_CRON_ENABLED=true` in your `.env` file
-2. Configure the schedule using cron expression:
+2. Configure the schedule using cron expression (default: every 6 hours):
+   - `0 */6 * * *` - Every 6 hours (default)
    - `0 2 * * *` - Daily at 2 AM
-   - `0 */6 * * *` - Every 6 hours
    - `0 8,20 * * *` - Twice daily (8 AM and 8 PM)
+   - `0 0,6,12,18 * * *` - Four times daily
 3. Set your timezone: `DOCUMENT_SYNC_CRON_TIMEZONE=America/New_York`
 4. The cron job will automatically run on the configured schedule
 
