@@ -30,14 +30,13 @@ import {
  * Sync documents from SmartAdvocate API
  * Fetches documents by date range, filters by category (Invoices/Receipts),
  * and processes each document through the invoice processing flow
- * @param options Sync options (fromDate, toDate, categoryIDs, force)
+ * @param options Sync options (fromDate, toDate, categoryIDs)
  */
 export async function syncDocumentsFromSmartAdvocate(
   options?: {
     fromDate?: string;
     toDate?: string;
     categoryIDs?: number[];
-    force?: boolean; // Force sync even if document exists
   }
 ): Promise<ActionResult<DocumentSyncResult>> {
   return withActionHandler(async () => {
@@ -140,7 +139,6 @@ export async function syncDocumentsFromSmartAdvocate(
         toDate,
         categoryIDs,
         pageSize,
-        force: options?.force,
       },
       processor,
       console.log

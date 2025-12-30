@@ -12,7 +12,6 @@ export interface DocumentSyncConfig {
   toDate: string;
   categoryIDs?: number[];
   pageSize?: number;
-  force?: boolean; // Force sync even if document exists
 }
 
 export interface DocumentSyncResult {
@@ -147,11 +146,9 @@ export async function syncDocumentsCore(
 
   const categoryIDs = config.categoryIDs || DEFAULT_CATEGORY_IDS;
   const pageSize = config.pageSize || DEFAULT_PAGE_SIZE;
-  const force = config.force || false;
 
   log(`[Document Sync] Starting sync from ${config.fromDate} to ${config.toDate}`);
   log(`[Document Sync] Filtering by category IDs: ${categoryIDs.join(', ')}`);
-  log(`[Document Sync] Force mode: ${force ? 'enabled' : 'disabled'}`);
 
   const result: DocumentSyncResult = {
     totalDocuments: 0,
@@ -204,11 +201,7 @@ export async function syncDocumentsCore(
         let shouldProcess = false;
         let isUpdate = false;
 
-        if (force) {
-          // Force mode: always process
-          shouldProcess = true;
-          isUpdate = !!existingInvoice;
-        } else if (!existingInvoice) {
+        if (!existingInvoice) {
           // New document
           shouldProcess = true;
           isUpdate = false;
