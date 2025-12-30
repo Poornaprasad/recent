@@ -45,6 +45,7 @@ export function DocumentSyncButton({ variant = 'default', size = 'sm', className
       skipped: number;
       updated: number;
     };
+    errors?: Array<{ documentID: number; error: string }>;
   } | null>(null);
 
   // Get yesterday's date as default
@@ -79,9 +80,12 @@ export function DocumentSyncButton({ variant = 'default', size = 'sm', className
           message: response.error,
         });
       } else if (response.data) {
+        const hasErrors = response.data.failed > 0 && response.data.errors.length > 0;
         setResult({
-          success: true,
-          message: 'Document sync completed successfully!',
+          success: response.data.failed === 0,
+          message: hasErrors
+            ? `Sync completed with ${response.data.failed} error(s). See details below.`
+            : 'Document sync completed successfully!',
           details: {
             totalDocuments: response.data.totalDocuments,
             filteredDocuments: response.data.filteredDocuments,
@@ -91,18 +95,21 @@ export function DocumentSyncButton({ variant = 'default', size = 'sm', className
             skipped: response.data.skipped,
             updated: response.data.updated,
           },
+          errors: response.data.errors,
         });
 
-        // Auto-close dialog after 3 seconds on success
-        setTimeout(() => {
-          setIsOpen(false);
-          // Reset state after closing
+        // Auto-close dialog after 3 seconds only if no errors
+        if (response.data.failed === 0) {
           setTimeout(() => {
-            setResult(null);
-            setFromDate(getYesterday());
-            setToDate(getToday());
-          }, 300);
-        }, 3000);
+            setIsOpen(false);
+            // Reset state after closing
+            setTimeout(() => {
+              setResult(null);
+              setFromDate(getYesterday());
+              setToDate(getToday());
+            }, 300);
+          }, 3000);
+        }
       }
     } catch (error) {
       setResult({
@@ -187,6 +194,18 @@ export function DocumentSyncButton({ variant = 'default', size = 'sm', className
                     {result.details.failed > 0 && (
                       <div className="text-red-600">✗ Failed: {result.details.failed}</div>
                     )}
+                  </div>
+                )}
+                {result.errors && result.errors.length > 0 && (
+                  <div className="mt-3 pt-3 border-t space-y-2">
+                    <div className="font-semibold text-sm">Error Details:</div>
+                    <div className="max-h-32 overflow-y-auto space-y-1">
+                      {result.errors.map((err, idx) => (
+                        <div key={idx} className="text-xs bg-red-50 dark:bg-red-950 p-2 rounded">
+                          <span className="font-medium">Doc #{err.documentID}:</span> {err.error}
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
               </AlertDescription>
