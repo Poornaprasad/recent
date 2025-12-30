@@ -99,15 +99,15 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
     const pageGap = 20;
     let totalHeight = 0;
     let maxWidth = 0;
-    
+
     // Load all page images and calculate dimensions
-    const loadedImages = await Promise.all(
-      pageImages.map((base64) => {
-        const img = new Image();
-        img.src = Buffer.from(base64, 'base64');
-        return img;
-      })
-    );
+    const loadedImages: any[] = [];
+    for (const base64 of pageImages) {
+      const img = new (canvasModule.Image as any)();
+      const imgBuffer = Buffer.from(base64, 'base64');
+      img.src = imgBuffer;
+      loadedImages.push(img);
+    }
     
     loadedImages.forEach((img) => {
       totalHeight += img.height;
