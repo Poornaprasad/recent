@@ -8,10 +8,6 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Enable instrumentation hook for cron job initialization
-  experimental: {
-    instrumentationHook: true,
-  },
   images: {
     remotePatterns: [
       {
@@ -35,10 +31,8 @@ const nextConfig: NextConfig = {
     ],
   },
   output: 'standalone',
-  // Increase server action body size limit to handle large multi-page PDF images
-  serverActions: {
-    bodySizeLimit: '50mb', // Increased from default 1mb to handle combined multi-page images
-  },
+  // Increase body size limit to handle large multi-page PDF images
+  bodySizeLimit: '50mb',
   // Configure webpack to handle canvas properly (server-side only)
   webpack: (config, { isServer }) => {
     if (!isServer) {

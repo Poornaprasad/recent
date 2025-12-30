@@ -25,6 +25,7 @@ import {
   type DocumentSyncResult,
   type DocumentProcessor,
 } from '../services/document-sync.service';
+import { convertPdfToImageServer } from '../pdf-to-image-server';
 
 /**
  * Sync documents from SmartAdvocate API
@@ -76,8 +77,26 @@ export async function syncDocumentsFromSmartAdvocate(
         const metadata = extractDocumentMetadata(doc);
         const saMetadata = mapSmartAdvocateDocumentToInvoice(doc);
 
+        // Convert PDF to image if needed (for application/pdf or application/octet-stream)
+        let invoiceDataUri = content.dataUri;
+        const isPdfOrOctetStream =
+          content.contentType === 'application/pdf' ||
+          content.contentType === 'application/octet-stream';
+
+        if (isPdfOrOctetStream) {
+          try {
+            console.log(`[Document Sync] Converting PDF to image for document ${metadata.documentID}...`);
+            invoiceDataUri = await convertPdfToImageServer(content.dataUri);
+            console.log(`[Document Sync] Successfully converted PDF to image for document ${metadata.documentID}`);
+          } catch (error) {
+            const errorMsg = error instanceof Error ? error.message : String(error);
+            console.error(`[Document Sync] Failed to convert PDF to image: ${errorMsg}`);
+            return { error: `Failed to convert PDF to image: ${errorMsg}` };
+          }
+        }
+
         return await processInvoiceAction({
-          invoiceDataUri: content.dataUri,
+          invoiceDataUri,
           caseNumber: metadata.caseNumber,
           documentID: metadata.documentID,
           description: metadata.description || undefined,
