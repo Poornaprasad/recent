@@ -54,7 +54,8 @@ const nextConfig: NextConfig = {
     },
   },
   // Ensure these packages are treated as server-only
-  serverExternalPackages: ['pdf-img-convert', 'canvas'],
+  // node-cron uses Node.js native modules (crypto, path, child_process, stream)
+  serverExternalPackages: ['pdf-img-convert', 'canvas', 'node-cron'],
 };
 
 export default nextConfig;
