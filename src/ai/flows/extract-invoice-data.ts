@@ -12,7 +12,6 @@
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 import { ExtractInvoiceDataOutputSchema as BaseExtractInvoiceDataOutputSchema, CrmInvoiceStatus, QuickBooksInvoiceStatus, ExtractedFieldSchema } from '@/lib/schemas';
-import { differenceInMonths, parseISO } from 'date-fns';
 import { checkCrmForInvoice } from '@/services/crm';
 import { getQuickBooksInvoiceStatus } from '@/services/quickbooks';
 
