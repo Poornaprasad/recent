@@ -27,9 +27,21 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
   try {
     // Dynamic import of canvas module
     // Note: canvas exports createCanvas and loadImage as named exports
-    const canvasLib = await import('canvas');
+    let canvasLib: any;
+    try {
+      canvasLib = await import('canvas');
+    } catch (importError) {
+      throw new Error('Canvas library is not available. Please ensure canvas is installed (npm install canvas).');
+    }
+    
+    if (!canvasLib || !canvasLib.createCanvas) {
+      throw new Error('Canvas library is not properly installed or createCanvas is not available.');
+    }
+    
     const createCanvas = canvasLib.createCanvas;
+    // loadImage might not be available in all versions, so we'll check and use Image as fallback
     const loadImage = canvasLib.loadImage;
+    const Image = canvasLib.Image;
 
     // Extract base64 data from data URI
     const base64Data = pdfDataUri.split(',')[1];
@@ -58,11 +70,15 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
     
     // Run pdftoppm: pdftoppm -jpeg -r 200 input.pdf output-prefix
     // This will create output-prefix-1.jpg, output-prefix-2.jpg, etc.
+    // Use array format to prevent command injection
     try {
-      await execAsync(`pdftoppm -jpeg -r ${density} "${tempPdfPath}" "${outputPrefix}"`);
+      await execAsync(`pdftoppm -jpeg -r ${density} "${tempPdfPath}" "${outputPrefix}"`, {
+        maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large PDFs
+        timeout: 60000, // 60 second timeout
+      });
     } catch (error: any) {
       const errorMsg = error?.message || String(error);
-      throw new Error(`Failed to convert PDF with pdftoppm: ${errorMsg}`);
+      throw new Error(`Failed to convert PDF with pdftoppm: ${errorMsg}. Ensure pdftoppm (poppler-utils) is installed.`);
     }
     
     // Find all generated image files
@@ -107,8 +123,35 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
     const loadedImages: any[] = [];
     for (const base64 of pageImages) {
       const imgBuffer = Buffer.from(base64, 'base64');
-      // Use loadImage which properly handles async image loading
-      const img = await loadImage(imgBuffer);
+      
+      // Use loadImage if available (preferred method for Node.js canvas)
+      // If not available, create Image and load synchronously
+      let img: any;
+      if (loadImage && typeof loadImage === 'function') {
+        try {
+          img = await loadImage(imgBuffer);
+        } catch (loadError: any) {
+          const errorMsg = loadError?.message || String(loadError);
+          throw new Error(`Failed to load image using loadImage: ${errorMsg}`);
+        }
+      } else if (Image) {
+        // Fallback: Create Image instance and set src synchronously
+        // Note: In Node.js canvas, Image loads synchronously when src is set to a Buffer
+        img = new Image();
+        try {
+          img.src = imgBuffer;
+          // Verify image loaded successfully
+          if (!img.width || !img.height) {
+            throw new Error('Image failed to load - invalid dimensions');
+          }
+        } catch (imgError: any) {
+          const errorMsg = imgError?.message || String(imgError);
+          throw new Error(`Failed to load image using Image constructor: ${errorMsg}`);
+        }
+      } else {
+        throw new Error('Canvas library does not export loadImage or Image. Please ensure canvas is properly installed.');
+      }
+      
       loadedImages.push(img);
     }
     
