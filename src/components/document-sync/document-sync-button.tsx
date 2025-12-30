@@ -33,7 +33,6 @@ interface DocumentSyncButtonProps {
 export function DocumentSyncButton({ variant = 'default', size = 'sm', className }: DocumentSyncButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [force, setForce] = useState(false);
   const [result, setResult] = useState<{
     success: boolean;
     message: string;
@@ -72,7 +71,6 @@ export function DocumentSyncButton({ variant = 'default', size = 'sm', className
       const response = await syncDocumentsFromSmartAdvocate({
         fromDate,
         toDate,
-        force,
       });
 
       if (response.error) {
@@ -103,7 +101,6 @@ export function DocumentSyncButton({ variant = 'default', size = 'sm', className
             setResult(null);
             setFromDate(getYesterday());
             setToDate(getToday());
-            setForce(false);
           }, 300);
         }, 3000);
       }
@@ -164,22 +161,6 @@ export function DocumentSyncButton({ variant = 'default', size = 'sm', className
             </div>
           </div>
 
-          {/* Force sync option */}
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="force"
-              checked={force}
-              onCheckedChange={(checked) => setForce(checked as boolean)}
-              disabled={isLoading}
-            />
-            <Label
-              htmlFor="force"
-              className="text-sm font-normal cursor-pointer"
-            >
-              Force sync (re-process existing documents)
-            </Label>
-          </div>
-
           {/* Result display */}
           {result && (
             <Alert variant={result.success ? 'default' : 'destructive'}>
@@ -215,6 +196,7 @@ export function DocumentSyncButton({ variant = 'default', size = 'sm', className
           {/* Info text */}
           <p className="text-sm text-muted-foreground">
             Default range is yesterday to today. Documents are filtered by category (Invoices and Receipts).
+            Already synced documents will be skipped unless they have been modified in SmartAdvocate.
           </p>
         </div>
 

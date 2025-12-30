@@ -56,7 +56,6 @@ async function executeSyncTask() {
     const result = await syncDocumentsFromSmartAdvocate({
       fromDate: dateRange.fromDate,
       toDate: dateRange.toDate,
-      force: false, // Never force in automated sync
     });
 
     const endTime = new Date();

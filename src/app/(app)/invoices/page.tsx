@@ -303,6 +303,8 @@ export default function InvoicesPage() {
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Sync Documents Button - First button from left */}
+          <DocumentSyncButton variant="outline" size="sm" />
           {/* State Switcher Button - Show when user has both primary and secondary states */}
           {hasBothStates && oppositeState && (
             <Button
@@ -325,7 +327,6 @@ export default function InvoicesPage() {
               </span>
             </Button>
           )}
-          <DocumentSyncButton variant="outline" size="sm" />
           <Button onClick={handleExport} size="sm" className="gap-1">
             <FileDown className="h-4 w-4" />
             Export {selectedInvoices.size > 0 ? `(${selectedInvoices.size})` : 'All'}
