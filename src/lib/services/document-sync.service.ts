@@ -62,6 +62,7 @@ export interface DocumentProcessor {
 
 const SUPPORTED_FILE_TYPES = [
   'application/pdf',
+  'application/octet-stream', // SmartAdvocate API often returns this for PDFs
   'image/jpeg',
   'image/png',
   'image/jpg',
