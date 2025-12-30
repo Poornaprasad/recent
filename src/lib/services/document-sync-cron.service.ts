@@ -22,7 +22,7 @@ let isInitialized = false;
  */
 function parseCronConfig(): CronConfig {
   const enabled = process.env.DOCUMENT_SYNC_CRON_ENABLED === 'true';
-  const schedule = process.env.DOCUMENT_SYNC_CRON_SCHEDULE || '0 2 * * *'; // Default: 2 AM daily
+  const schedule = process.env.DOCUMENT_SYNC_CRON_SCHEDULE || '0 */6 * * *'; // Default: every 6 hours
   const timezone = process.env.DOCUMENT_SYNC_CRON_TIMEZONE || 'America/New_York';
 
   return {
