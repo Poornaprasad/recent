@@ -5,6 +5,7 @@
 
 import 'server-only';
 
+import { logger } from '../core/logging/logger.service';
 import {
   findAllPendingVendors,
   findPendingVendorById,
@@ -81,7 +82,7 @@ export class PendingVendorService {
 
       return { success: true, vendorId };
     } catch (error) {
-      console.error('Error completing vendor setup:', error);
+      logger.error('Error completing vendor setup', { pendingVendorId }, error instanceof Error ? error : undefined);
       const errorMessage = error instanceof Error ? error.message : 'Failed to complete vendor setup';
       return { success: false, error: errorMessage };
     }
