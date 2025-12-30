@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // Enable instrumentation hook for cron job initialization
+  experimental: {
+    instrumentationHook: true,
+  },
   images: {
     remotePatterns: [
       {

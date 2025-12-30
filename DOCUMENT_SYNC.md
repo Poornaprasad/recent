@@ -64,17 +64,25 @@ DOCUMENT_SYNC_CRON_SCHEDULE=0 2 * * *  # 2 AM daily
 DOCUMENT_SYNC_CRON_TIMEZONE=America/New_York
 ```
 
-### 3. Initialize Cron Jobs
+### 3. Cron Job Initialization
 
-The cron job is automatically initialized when the application starts if `DOCUMENT_SYNC_CRON_ENABLED=true`.
+The cron job is **automatically initialized** when the server starts using Next.js's `instrumentation.ts` hook.
 
-For manual initialization in your code:
+**How it works:**
+1. Next.js calls `instrumentation.ts` when the server starts
+2. This imports and executes `initializeCronJobs()` from `src/lib/init/cron-init.ts`
+3. The cron job starts if `DOCUMENT_SYNC_CRON_ENABLED=true`
 
-```typescript
-import { initializeCronJobs } from '@/lib/init/cron-init';
+**Files involved:**
+- `instrumentation.ts` - Next.js instrumentation hook (root level)
+- `next.config.ts` - Enables `instrumentationHook` in experimental features
+- `src/lib/init/cron-init.ts` - Cron initialization logic
+- `src/lib/services/document-sync-cron.service.ts` - Cron job implementation
 
-// Call once at application startup
-initializeCronJobs();
+**No manual setup required** - the cron job will auto-start when you run:
+```bash
+npm start  # Production
+npm run dev  # Development (if DOCUMENT_SYNC_CRON_ENABLED=true)
 ```
 
 ### 4. Configure Next.js
