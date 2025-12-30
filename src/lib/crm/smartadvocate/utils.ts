@@ -1,9 +1,10 @@
 /**
  * SmartAdvocate CRM Utilities
  * Authentication, configuration, and helper functions
+ *
+ * Note: This module is intentionally compatible with both Next.js server
+ * components and standalone Node.js scripts (like sync-documents.ts)
  */
-
-import 'server-only';
 import type { SmartAdvocateConfig } from './types';
 
 // ============================================================================

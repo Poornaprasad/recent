@@ -21,7 +21,7 @@ import {
   filterDocumentsByCategory,
   extractDocumentMetadata,
 } from '../src/lib/crm/smartadvocate/document.script';
-import { getConfig } from '../src/lib/crm/smartadvocate/utils.script';
+import { getConfig } from '../src/lib/crm/smartadvocate/utils';
 import { mapSmartAdvocateDocumentToInvoice } from '../src/lib/utils/smartadvocate-mapper';
 import { processInvoice } from '../src/lib/services/invoice.service.script';
 import { generateDocumentHash } from '../src/lib/utils/document-hash';
