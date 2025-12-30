@@ -319,8 +319,8 @@ export default function InvoicesPage() {
               <RefreshCw className="h-4 w-4" />
               <span className="hidden sm:inline">
                 {effectiveStateFilter === primaryState
-                  ? `Load ${secondaryState} First`
-                  : `Load ${primaryState} First`}
+                  ? `Show ${secondaryState} First`
+                  : `Show ${primaryState} First`}
               </span>
               <span className="sm:hidden">
                 {effectiveStateFilter === primaryState ? secondaryState : primaryState}
