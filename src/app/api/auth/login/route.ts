@@ -1,20 +1,60 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserByEmail } from '@/lib/repositories/user.repository';
 import bcrypt from 'bcryptjs';
-import { randomUUID } from 'crypto';
+import { randomUUID, randomBytes } from 'crypto';
+import jwt from 'jsonwebtoken';
 import type { User } from '@/lib/domain/types';
 import { auditService } from '@/lib/core/audit/audit.service';
 
-// Simple JWT-like token generation (for development)
-// In production, use a proper JWT library like 'jsonwebtoken'
-function generateToken(userId: string): string {
+// JWT configuration
+const JWT_EXPIRY = '24h';
+const JWT_ALGORITHM = 'HS256' as const;
+
+/**
+ * Get JWT secret from environment variable
+ * In development, falls back to a randomly generated secret (not persistent across restarts)
+ * In production, JWT_SECRET environment variable is REQUIRED
+ */
+function getJwtSecret(): string {
+  const secret = process.env.JWT_SECRET;
+
+  if (secret) {
+    return secret;
+  }
+
+  // In production, JWT_SECRET is required
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'SECURITY: JWT_SECRET environment variable is required in production. ' +
+      'Please set a strong, random secret (at least 32 characters).'
+    );
+  }
+
+  // Development fallback - generate a temporary secret
+  // Warning: This means tokens won't persist across server restarts in development
+  console.warn('[AUTH] JWT_SECRET not set, using temporary development secret');
+  return randomBytes(32).toString('hex');
+}
+
+/**
+ * Generate a signed JWT token for authentication
+ * Uses HS256 algorithm with a secret key
+ */
+function generateToken(userId: string, email: string, role: string): string {
+  const secret = getJwtSecret();
+
   const payload = {
-    userId,
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24, // 24 hours
+    sub: userId,      // Subject (user ID)
+    email,            // User email
+    role,             // User role for authorization
+    type: 'access',   // Token type
   };
-  // Simple base64 encoding for development
-  return Buffer.from(JSON.stringify(payload)).toString('base64');
+
+  return jwt.sign(payload, secret, {
+    algorithm: JWT_ALGORITHM,
+    expiresIn: JWT_EXPIRY,
+    issuer: 'invoice-management-system',
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -93,7 +133,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate tokens
-    const token = generateToken(user.id);
+    const token = generateToken(user.id, user.email, user.role);
     const refreshToken = randomUUID();
     const tokenExpiry = Date.now() + 60 * 60 * 24 * 1000; // 24 hours in milliseconds
 

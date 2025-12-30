@@ -5,7 +5,7 @@
 
 import 'server-only';
 
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, ilike } from 'drizzle-orm';
 import { getDatabase } from '../db/context';
 import { vendors, vendorTypes, type Vendor as DbVendor, type VendorType as DbVendorType } from '../db/schema';
 import type { Vendor, VendorType } from '../domain/types';
@@ -45,10 +45,21 @@ export async function findVendorById(id: string): Promise<Vendor | undefined> {
 
 /**
  * Find vendor by name (case-insensitive)
+ * Uses SQL ILIKE for efficient case-insensitive search at database level
  */
 export async function findVendorByName(name: string): Promise<Vendor | undefined> {
-  const allVendors = await findAllVendors();
-  return allVendors.find(v => v.name.toLowerCase() === name.toLowerCase());
+  const db = await getDatabase();
+
+  const row = await db
+    .select()
+    .from(vendors)
+    .where(ilike(vendors.name, name))
+    .limit(1)
+    .then(rows => rows[0]);
+
+  if (!row) return undefined;
+
+  return mapDbRowToVendor(row);
 }
 
 /**
@@ -103,7 +114,8 @@ export async function upsertVendor(vendor: Vendor): Promise<void> {
   };
 
   // For update, exclude id and createdAt (don't change these)
-  const { id, createdAt, ...updateRow } = insertRow;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id: _id, createdAt: _createdAt, ...updateRow } = insertRow;
 
   try {
     await db
