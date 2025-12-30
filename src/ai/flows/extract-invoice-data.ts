@@ -11,9 +11,7 @@
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
-import { ExtractInvoiceDataOutputSchema as BaseExtractInvoiceDataOutputSchema, CrmInvoiceStatus, QuickBooksInvoiceStatus, ExtractedFieldSchema } from '@/lib/schemas';
-import { checkCrmForInvoice } from '@/services/crm';
-import { getQuickBooksInvoiceStatus } from '@/services/quickbooks';
+import { ExtractInvoiceDataOutputSchema as BaseExtractInvoiceDataOutputSchema, ExtractedFieldSchema } from '@/lib/schemas';
 
 
 const ExtractInvoiceDataInputSchema = z.object({
@@ -29,12 +27,6 @@ export type ExtractInvoiceDataInput = z.infer<typeof ExtractInvoiceDataInputSche
 const DuplicateCheckResultSchema = z.object({
   isDuplicate: z.boolean(),
   reason: z.string().optional(),
-});
-
-const StatusCheckResultSchema = z.object({
-    status: z.enum(['Paid', 'Pending', 'Review', 'Draft']),
-    quickbooksStatus: z.nativeEnum(QuickBooksInvoiceStatus).nullable(),
-    crmStatus: z.nativeEnum(CrmInvoiceStatus).nullable(),
 });
 
 const ExtractInvoiceDataOutputSchema = BaseExtractInvoiceDataOutputSchema.extend({
@@ -373,44 +365,6 @@ const checkForDuplicatesTool = ai.defineTool(
     }
 );
 
-const checkExternalSystemsTool = ai.defineTool(
-    {
-        name: 'checkExternalSystemsTool',
-        description: 'Checks external systems like QuickBooks and a CRM to determine the invoice status.',
-        inputSchema: z.object({
-            invoiceNumber: z.string().describe('The invoice number.'),
-            customerName: z.string().describe('The name of the customer.'),
-            totalAmount: z.number().describe('The total amount of the invoice.'),
-        }),
-        outputSchema: StatusCheckResultSchema,
-    },
-    async (input) => {
-        const { invoiceNumber, customerName, totalAmount } = input;
-        
-        const [quickbooksStatus, crmStatus] = await Promise.all([
-            getQuickBooksInvoiceStatus(invoiceNumber),
-            checkCrmForInvoice(invoiceNumber, customerName, totalAmount),
-        ]);
-
-        let finalStatus: 'Paid' | 'Pending' | 'Review' | 'Draft' = 'Review';
-
-        if (quickbooksStatus === 'Paid') {
-            finalStatus = 'Paid';
-        } else if (crmStatus === 'Associated' && quickbooksStatus === 'Sent') {
-            finalStatus = 'Pending';
-        } else if (crmStatus === 'Draft') {
-            finalStatus = 'Draft';
-        }
-
-        return {
-            status: finalStatus,
-            quickbooksStatus,
-            crmStatus,
-        };
-    }
-);
-
-
 // const extractInvoiceDataPrompt = ai.definePrompt({
 //   name: 'extractInvoiceDataPrompt',
 //   input: {schema: ExtractInvoiceDataInputSchema},
@@ -602,9 +556,8 @@ const extractInvoiceDataFlow = ai.defineFlow(
     }
 
     let duplicateCheckResult: z.infer<typeof DuplicateCheckResultSchema> = { isDuplicate: false };
-    let statusResult: z.infer<typeof StatusCheckResultSchema> = { status: 'Review', quickbooksStatus: null, crmStatus: null };
     
-    // Step 2: Check for duplicates and external status in parallel
+    // Step 2: Check for duplicates
     const invoiceNumberField = extractedData.invoiceNumber;
     const vendorNameField = extractedData.vendorName;
     const invoiceDateField = extractedData.invoiceDate;
@@ -622,33 +575,6 @@ const extractInvoiceDataFlow = ai.defineFlow(
         }).then(res => duplicateCheckResult = res));
     }
 
-    if (invoiceNumberField?.value && customerNameField?.value && totalAmountField?.value) {
-        // Parse totalAmount - it might be a string like "$550.80" or a number
-        let totalAmount: number;
-        if (typeof totalAmountField.value === 'string') {
-            // Remove currency symbols, commas, and whitespace, then parse
-            const cleanedAmount = totalAmountField.value.replace(/[$,\s]/g, '');
-            totalAmount = parseFloat(cleanedAmount);
-            if (isNaN(totalAmount)) {
-                console.warn('Could not parse totalAmount:', totalAmountField.value);
-                // Skip external systems check if we can't parse the amount
-            } else {
-                promises.push(checkExternalSystemsTool({
-                    invoiceNumber: invoiceNumberField.value,
-                    customerName: customerNameField.value,
-                    totalAmount: totalAmount
-                }).then(res => statusResult = res));
-            }
-        } else if (typeof totalAmountField.value === 'number') {
-            totalAmount = totalAmountField.value;
-            promises.push(checkExternalSystemsTool({
-                invoiceNumber: invoiceNumberField.value,
-                customerName: customerNameField.value,
-                totalAmount: totalAmount
-            }).then(res => statusResult = res));
-        }
-    }
-    
     await Promise.all(promises);
     
     // Step 3: Combine results and return
@@ -660,7 +586,7 @@ const extractInvoiceDataFlow = ai.defineFlow(
       // Map clientName to customerName if clientName exists
       customerName: extractedData.clientName || extractedData.customerName,
       duplicateCheck: duplicateCheckResult,
-      status: statusResult.status,
+      status: 'Review' as const,
     };
   }
 );
