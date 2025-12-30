@@ -25,8 +25,8 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
   let tempImagePaths: string[] = [];
   
   try {
-    const canvas = await import('canvas');
-    const { createCanvas, Image } = canvas;
+    const canvasModule = await import('canvas');
+    const { createCanvas, Image } = canvasModule;
 
     // Extract base64 data from data URI
     const base64Data = pdfDataUri.split(',')[1];
