@@ -62,13 +62,33 @@ class AuditService {
    * Log an audit entry
    */
   async log(entry: AuditLogEntry): Promise<string | null> {
+    const auditId = generateAuditId();
+    const severity = entry.severity || getSeverityForAction(entry.action);
+    const category = entry.category || getCategoryForAction(entry.action);
+
+    // For system-generated events (like document sync), skip database insert
+    // since 'system' is not a real user in the users table (foreign key constraint)
+    const isSystemUser = entry.userId === 'system';
+
+    // Always log to application logger for immediate visibility
+    logger.info(`Audit: ${ACTION_LABELS[entry.action] || entry.action}`, {
+      userId: entry.userId,
+      action: entry.action,
+      resource: entry.resource,
+      resourceId: entry.resourceId,
+      category,
+      severity,
+      details: entry.details,
+    });
+
+    // Skip database insert for system users to avoid foreign key constraint violation
+    if (isSystemUser) {
+      return auditId;
+    }
+
     try {
       await initDb();
       const db = getDb();
-
-      const auditId = generateAuditId();
-      const severity = entry.severity || getSeverityForAction(entry.action);
-      const category = entry.category || getCategoryForAction(entry.action);
 
       const auditEntry = {
         id: auditId,
@@ -88,22 +108,12 @@ class AuditService {
 
       await db.insert(auditLogs).values(auditEntry);
 
-      // Also log to application logger for immediate visibility
-      logger.info(`Audit: ${ACTION_LABELS[entry.action] || entry.action}`, {
-        userId: entry.userId,
-        action: entry.action,
-        resource: entry.resource,
-        resourceId: entry.resourceId,
-        category,
-        severity,
-      });
-
       return auditId;
     } catch (error) {
-      logger.error(
-        'Failed to log audit entry',
-        { entry },
-        error instanceof Error ? error : new Error(String(error))
+      // Log warning instead of error for audit failures - they shouldn't break the app
+      logger.warn(
+        'Failed to persist audit entry to database',
+        { auditId, action: entry.action, resource: entry.resource }
       );
       // Don't throw - audit logging should not break the application
       return null;

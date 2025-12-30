@@ -8,11 +8,18 @@ import type { StoredInvoice } from '../domain/types';
 /**
  * Parse date string from SmartAdvocate API
  * Handles various date formats from the API
+ * Returns undefined for invalid dates to prevent serialization errors
  */
 function parseSADate(dateStr: string | undefined): Date | undefined {
   if (!dateStr) return undefined;
   try {
-    return new Date(dateStr);
+    const date = new Date(dateStr);
+    // Check if the date is valid - new Date() doesn't throw for invalid strings,
+    // it just creates an Invalid Date object with NaN timestamp
+    if (isNaN(date.getTime())) {
+      return undefined;
+    }
+    return date;
   } catch {
     return undefined;
   }

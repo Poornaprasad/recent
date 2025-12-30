@@ -25,8 +25,11 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
   let tempImagePaths: string[] = [];
   
   try {
-    const canvasModule = await import('canvas');
-    const { createCanvas, Image } = canvasModule;
+    // Dynamic import of canvas module
+    // Note: canvas exports createCanvas and loadImage as named exports
+    const canvasLib = await import('canvas');
+    const createCanvas = canvasLib.createCanvas;
+    const loadImage = canvasLib.loadImage;
 
     // Extract base64 data from data URI
     const base64Data = pdfDataUri.split(',')[1];
@@ -103,9 +106,9 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
     // Load all page images and calculate dimensions
     const loadedImages: any[] = [];
     for (const base64 of pageImages) {
-      const img = new (canvasModule.Image as any)();
       const imgBuffer = Buffer.from(base64, 'base64');
-      img.src = imgBuffer;
+      // Use loadImage which properly handles async image loading
+      const img = await loadImage(imgBuffer);
       loadedImages.push(img);
     }
     
