@@ -1,7 +1,7 @@
 /**
  * Cron Initialization
  * Initialize all cron jobs when the application starts
- * Import this file in your root layout or server entry point
+ * Called from instrumentation.ts (Next.js instrumentation hook)
  */
 
 import { initializeDocumentSyncCron } from '../services/document-sync-cron.service';
@@ -15,6 +15,7 @@ let isInitialized = false;
 export function initializeCronJobs() {
   // Prevent multiple initializations
   if (isInitialized) {
+    console.log('[Cron Init] Already initialized, skipping...');
     return;
   }
 
@@ -35,9 +36,4 @@ export function initializeCronJobs() {
   } catch (error) {
     console.error('[Cron Init] Failed to initialize cron jobs:', error);
   }
-}
-
-// Auto-initialize if in production mode
-if (process.env.NODE_ENV === 'production' && process.env.DOCUMENT_SYNC_CRON_ENABLED === 'true') {
-  initializeCronJobs();
 }
