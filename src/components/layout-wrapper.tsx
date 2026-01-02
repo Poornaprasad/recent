@@ -16,28 +16,92 @@ const AUTH_PAGES = ["/login"];
 export function LayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, token, clearAuth, setUser } = useAuthStore();
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthed, setIsAuthed] = useState(false);
 
   const isAuthPage = AUTH_PAGES.some((path) => pathname.startsWith(path));
 
   useEffect(() => {
-    // Check authentication status
-    const authenticated = isAuthenticated();
-    setIsAuthed(authenticated);
+    const validateAndCheckAuth = async () => {
+      // Check authentication status
+      const authenticated = isAuthenticated();
 
-    if (!isAuthPage && !authenticated) {
-      // Redirect to login if not on auth page and not authenticated
-      const returnUrl = encodeURIComponent(pathname);
-      router.replace(`/login?redirect=${returnUrl}`);
-    } else if (isAuthPage && authenticated) {
-      // Redirect to dashboard if already authenticated and on login page
-      router.replace('/dashboard');
-    } else {
+      if (!authenticated) {
+        setIsAuthed(false);
+        if (!isAuthPage) {
+          // Redirect to login if not on auth page and not authenticated
+          const returnUrl = encodeURIComponent(pathname);
+          router.replace(`/login?redirect=${returnUrl}`);
+          return;
+        } else {
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // If authenticated, validate user exists in database
+      if (authenticated && token) {
+        try {
+          const response = await fetch('/api/auth/validate', {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+
+          if (!response.ok) {
+            // User doesn't exist or is invalid - clear auth and redirect
+            clearAuth();
+            setIsAuthed(false);
+            if (!isAuthPage) {
+              const returnUrl = encodeURIComponent(pathname);
+              router.replace(`/login?redirect=${returnUrl}`);
+              return;
+            }
+            setIsLoading(false);
+            return;
+          }
+
+          const data = await response.json();
+          if (data.valid && data.user) {
+            // User is valid - update user data in case it changed
+            setUser(data.user);
+            setIsAuthed(true);
+
+            if (isAuthPage) {
+              // Redirect to dashboard if already authenticated and on login page
+              router.replace('/dashboard');
+              return;
+            }
+          } else {
+            // Invalid response - clear auth
+            clearAuth();
+            setIsAuthed(false);
+            if (!isAuthPage) {
+              const returnUrl = encodeURIComponent(pathname);
+              router.replace(`/login?redirect=${returnUrl}`);
+              return;
+            }
+          }
+        } catch (error) {
+          console.error('Error validating user:', error);
+          // On error, clear auth to be safe
+          clearAuth();
+          setIsAuthed(false);
+          if (!isAuthPage) {
+            const returnUrl = encodeURIComponent(pathname);
+            router.replace(`/login?redirect=${returnUrl}`);
+            return;
+          }
+        }
+      }
+
       setIsLoading(false);
-    }
-  }, [pathname, isAuthenticated, isAuthPage, router]);
+    };
+
+    validateAndCheckAuth();
+  }, [pathname, isAuthenticated, isAuthPage, router, token, clearAuth, setUser]);
 
   // Show loading spinner while checking auth
   if (isLoading) {
