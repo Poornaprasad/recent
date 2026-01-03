@@ -10,6 +10,7 @@ import { sanitizeId } from '../utils/id-utils';
 import { CONFIDENCE_THRESHOLDS, HIGH_VALUE_THRESHOLDS } from '../domain/constants';
 import type { StoredInvoice } from '../domain/types';
 import { convertPdfToImageServer } from '../pdf-to-image-server';
+import { convertWordToPdf } from '../word-to-pdf-server';
 
 // Use direct database access for scripts (bypassing 'server-only' repositories)
 // Import the database connection from script-compatible module
@@ -224,12 +225,79 @@ export async function processInvoice(
     // Validate file type
     let invoiceDataUri = input.invoiceDataUri;
     const mimeType = invoiceDataUri.split(';')[0].split(':')[1];
-    if (!mimeType.startsWith('image/') && mimeType !== 'application/pdf') {
-      return { error: 'Invalid file type. Please upload an image or a PDF.' };
+    
+    // Check if it's a Word document (application/octet-stream)
+    const isWordDocument = mimeType === 'application/octet-stream';
+    let isDoc = false;
+    let isDocx = false;
+    
+    if (isWordDocument) {
+      // Check magic bytes to detect Word document format
+      const base64Data = invoiceDataUri.split(',')[1];
+      if (base64Data) {
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        // .doc files: D0 CF 11 E0 A1 B1 1A E1 (OLE2 format - Microsoft Office legacy format)
+        if (buffer.length >= 8 && 
+            buffer[0] === 0xD0 && buffer[1] === 0xCF && 
+            buffer[2] === 0x11 && buffer[3] === 0xE0 &&
+            buffer[4] === 0xA1 && buffer[5] === 0xB1 &&
+            buffer[6] === 0x1A && buffer[7] === 0xE1) {
+          isDoc = true;
+        }
+        // .docx files: PK (ZIP format, starts with 50 4B 03 04 or 50 4B 05 06)
+        // .docx files are ZIP archives containing XML files
+        else if (buffer.length >= 4 && 
+                 buffer[0] === 0x50 && buffer[1] === 0x4B && 
+                 (buffer[2] === 0x03 || buffer[2] === 0x05) && 
+                 (buffer[3] === 0x04 || buffer[3] === 0x06)) {
+          // Try to verify it's a docx by checking for common Office Open XML signatures
+          // Look for [Content_Types].xml or word/ in the ZIP structure
+          // For simplicity, if it's a ZIP file with reasonable size, assume it's docx
+          // (This is a reasonable assumption since we're filtering by file extension in sync)
+          if (buffer.length > 100) {
+            // Additional check: look for "word/" string which appears in docx files
+            const bufferString = buffer.toString('binary', 0, Math.min(1000, buffer.length));
+            if (bufferString.includes('word/') || bufferString.includes('[Content_Types]')) {
+              isDocx = true;
+            } else {
+              // If it's a ZIP but we can't confirm it's docx, still try it
+              // (might be xlsx, pptx, etc., but we'll let LibreOffice handle it)
+              isDocx = true;
+            }
+          }
+        }
+      }
     }
     
+    // Validate file type - allow images, PDFs, and Word documents
+    if (!mimeType.startsWith('image/') && 
+        mimeType !== 'application/pdf' && 
+        !isDoc && 
+        !isDocx) {
+      return { error: 'Invalid file type. Please upload an image, PDF, or Word document.' };
+    }
+    
+    // Convert Word documents to PDF first, then to images
+    if (isDoc || isDocx) {
+      try {
+        console.log(`Converting ${isDoc ? '.doc' : '.docx'} to PDF...`);
+        const pdfDataUri = await convertWordToPdf(invoiceDataUri, isDocx);
+        console.log('Word document converted to PDF successfully');
+        
+        // Now convert PDF to image
+        console.log('Converting PDF to image...');
+        invoiceDataUri = await convertPdfToImageServer(pdfDataUri);
+        console.log('PDF converted to image successfully');
+      } catch (conversionError) {
+        const errorMessage = conversionError instanceof Error ? conversionError.message : 'Unknown error';
+        return { 
+          error: `Failed to convert Word document to image: ${errorMessage}` 
+        };
+      }
+    }
     // Convert PDFs to images before processing (AI model only accepts images)
-    if (mimeType === 'application/pdf') {
+    else if (mimeType === 'application/pdf') {
       try {
         console.log('Converting PDF to image...');
         invoiceDataUri = await convertPdfToImageServer(invoiceDataUri);
@@ -337,10 +405,25 @@ export async function processInvoice(
       }
     
     // Save the file to disk (use sanitized ID for filename)
+    // Use the converted invoiceDataUri (which is now an image after Word/PDF conversion)
     let filePath: string;
     try {
-      filePath = await saveInvoiceFile(input.invoiceDataUri, invoiceId);
+      filePath = await saveInvoiceFile(invoiceDataUri, invoiceId);
+      // Verify the file was actually saved
+      const fullPath = path.join(UPLOADS_DIR, filePath.replace('/uploads/', ''));
+      try {
+        await fs.access(fullPath);
+        console.log(`✅ Invoice file saved successfully: ${filePath}`);
+      } catch (accessError) {
+        console.error(`❌ Invoice file was not saved correctly: ${filePath}`);
+        console.error(`Full path: ${fullPath}`);
+        throw new Error(`File was not saved correctly. Path: ${filePath}`);
+      }
     } catch (fileError) {
+      const errorMessage = fileError instanceof Error ? fileError.message : String(fileError);
+      console.error(`❌ Failed to save invoice file: ${errorMessage}`);
+      // Fallback to original if save fails, but log a warning
+      console.warn('⚠️ Falling back to original invoiceDataUri (may not work for Word documents)');
       filePath = input.invoiceDataUri;
     }
     

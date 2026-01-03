@@ -128,11 +128,28 @@ export async function syncDocumentsFromSmartAdvocate(
             `[Document Sync] Fetched content for document ${metadata.documentID} (${content.size} bytes, ${content.contentType})`
           );
 
+          // Check file extension for additional type detection
+          const getFileExtension = (filename: string): string => {
+            const parts = filename.split('.');
+            return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+          };
+          const fileExtension = getFileExtension(metadata.documentName || '');
+
           // Skip unsupported file types
           const supportedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'image/heic'];
-          if (!supportedTypes.includes(content.contentType)) {
+          const supportedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'doc', 'docx'];
+          
+          // Allow if content type is supported OR if file extension suggests a supported document type
+          const isContentTypeSupported = supportedTypes.includes(content.contentType);
+          const isExtensionSupported = supportedExtensions.includes(fileExtension);
+          
+          // Special handling: if content type is octet-stream but extension suggests a document, allow it
+          const isOctetStreamWithDocExtension = content.contentType === 'application/octet-stream' && 
+            (fileExtension === 'doc' || fileExtension === 'docx');
+          
+          if (!isContentTypeSupported && !isExtensionSupported && !isOctetStreamWithDocExtension) {
             result.failed++;
-            const errorMessage = `Unsupported file type: ${content.contentType}. Only PDF and images are supported.`;
+            const errorMessage = `Unsupported file type: ${content.contentType}${fileExtension ? ` (extension: .${fileExtension})` : ''}. Only PDF, images, and Word documents are supported.`;
             result.errors.push({
               documentID: metadata.documentID,
               error: errorMessage,

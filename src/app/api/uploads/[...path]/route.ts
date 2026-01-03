@@ -46,7 +46,21 @@ export async function GET(
     const resolvedPath = path.resolve(UPLOADS_DIR, filePath);
     const resolvedUploadsDir = path.resolve(UPLOADS_DIR);
     
+    // Debug logging
+    console.log('[Upload API] Request details:', {
+      pathArray,
+      filePath,
+      resolvedPath,
+      resolvedUploadsDir,
+      UPLOADS_DIR,
+    });
+    
     if (!resolvedPath.startsWith(resolvedUploadsDir)) {
+      console.error('[Upload API] Security check failed:', {
+        resolvedPath,
+        resolvedUploadsDir,
+        startsWith: resolvedPath.startsWith(resolvedUploadsDir),
+      });
       return NextResponse.json(
         { error: 'Invalid file path' },
         { status: 403 }
@@ -56,9 +70,21 @@ export async function GET(
     // Check if file exists
     try {
       await fs.access(resolvedPath);
+      console.log('[Upload API] File found:', resolvedPath);
     } catch (error) {
+      console.error('[Upload API] File not found:', {
+        resolvedPath,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // List files in directory for debugging
+      try {
+        const files = await fs.readdir(resolvedUploadsDir);
+        console.log('[Upload API] Files in uploads directory:', files.slice(0, 10));
+      } catch (dirError) {
+        console.error('[Upload API] Could not read uploads directory:', dirError);
+      }
       return NextResponse.json(
-        { error: 'File not found' },
+        { error: 'File not found', path: resolvedPath },
         { status: 404 }
       );
     }
@@ -68,7 +94,7 @@ export async function GET(
     const mimeType = getMimeType(resolvedPath);
     
     // Return the file with appropriate headers
-    return new NextResponse(fileBuffer, {
+    return new NextResponse(fileBuffer as any, {
       status: 200,
       headers: {
         'Content-Type': mimeType,
