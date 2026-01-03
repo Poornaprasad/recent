@@ -284,12 +284,19 @@ export class InvoiceService {
   async getAllInvoices(userPermissions?: { role: string; assignedStates?: string[] }): Promise<StoredInvoice[]> {
     const allInvoices = await findAllInvoices();
     
+    // Filter out invoices with excluded case number prefix
+    const excludePrefix = process.env.EXCLUDE_CASE_NUMBER_PREFIX || 'TBF-';
+    const filteredInvoices = allInvoices.filter(inv => {
+      if (!inv.caseNumber) return true; // Include invoices without case numbers
+      return !inv.caseNumber.startsWith(excludePrefix);
+    });
+    
     // Apply state-based filtering if user permissions are provided
     if (userPermissions) {
-      return this.filterInvoicesByAccess(allInvoices, userPermissions);
+      return this.filterInvoicesByAccess(filteredInvoices, userPermissions);
     }
     
-    return allInvoices;
+    return filteredInvoices;
   }
 
   /**

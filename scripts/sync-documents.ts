@@ -12,6 +12,7 @@
  *   - SA_DOCUMENT_SYNC_TO_DATE (e.g., "2024-12-31")
  *   - SA_DOCUMENT_SYNC_PAGE_SIZE (default: 100)
  *   - SA_DOCUMENT_SYNC_CATEGORY_IDS (comma-separated, default: "78,1080")
+ *   - EXCLUDE_CASE_NUMBER_PREFIX (default: "TBF-") - Case numbers starting with this prefix will be excluded
  */
 
 import 'dotenv/config';
@@ -214,6 +215,14 @@ async function syncDocuments() {
         try {
           // Extract metadata
           const metadata = extractDocumentMetadata(doc);
+          
+          // Skip documents with excluded case number prefix
+          const excludePrefix = process.env.EXCLUDE_CASE_NUMBER_PREFIX || 'TBF-';
+          if (metadata.caseNumber && metadata.caseNumber.startsWith(excludePrefix)) {
+            result.skipped++;
+            console.log(`⏭️  Skipping document ${metadata.documentID} (Case: ${metadata.caseNumber} - excluded prefix: ${excludePrefix})`);
+            continue;
+          }
           
           // Generate hash from document ID and case number
           const documentHash = generateDocumentHash(metadata.documentID, metadata.caseNumber);
