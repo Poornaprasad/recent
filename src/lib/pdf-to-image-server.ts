@@ -15,6 +15,102 @@ const unlink = promisify(fs.unlink);
 const execAsync = promisifyUtil(exec);
 
 /**
+ * Counts the number of pages in a PDF without converting it
+ * Uses pdfinfo (poppler) to get page count quickly
+ * @param pdfDataUri - The PDF file as a data URI
+ * @returns Promise resolving to the number of pages in the PDF
+ */
+export async function getPdfPageCount(pdfDataUri: string): Promise<number> {
+  let tempPdfPath: string | null = null;
+  
+  try {
+    // Extract base64 data from data URI
+    const base64Data = pdfDataUri.split(',')[1];
+    if (!base64Data) {
+      throw new Error('Invalid PDF data URI format');
+    }
+    
+    // Convert base64 to Buffer
+    const pdfBuffer = Buffer.from(base64Data, 'base64');
+    
+    // Validate PDF buffer (should start with %PDF)
+    if (pdfBuffer.length < 4 || pdfBuffer[0] !== 0x25 || pdfBuffer[1] !== 0x50 || pdfBuffer[2] !== 0x44 || pdfBuffer[3] !== 0x46) {
+      throw new Error('Invalid PDF format - buffer does not start with PDF signature');
+    }
+    
+    // Create temporary PDF file
+    const tempDir = tmpdir();
+    const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    tempPdfPath = path.join(tempDir, `pdf-count-${uniqueId}.pdf`);
+    await writeFile(tempPdfPath, pdfBuffer);
+    
+    // Use pdfinfo to get page count
+    // pdfinfo outputs metadata including "Pages: N"
+    try {
+      const { stdout } = await execAsync(`pdfinfo "${tempPdfPath}"`);
+      const pagesMatch = stdout.match(/Pages:\s*(\d+)/i);
+      if (pagesMatch && pagesMatch[1]) {
+        return parseInt(pagesMatch[1], 10);
+      }
+      throw new Error('Could not extract page count from pdfinfo output');
+    } catch (error: any) {
+      // If pdfinfo fails, fall back to counting pages using pdftoppm approach
+      // This is slower but more reliable
+      const outputPrefix = path.join(tempDir, `page-count-${uniqueId}`);
+      try {
+        // Run pdftoppm with -l 1 to limit to first page only, then count all generated pages
+        await execAsync(`pdftoppm -jpeg -r 1 "${tempPdfPath}" "${outputPrefix}"`);
+        
+        // Count generated image files
+        let pageCount = 0;
+        let pageNum = 1;
+        const maxPages = 1000; // Reasonable upper limit
+        
+        while (pageNum <= maxPages) {
+          const imagePath = `${outputPrefix}-${pageNum}.jpg`;
+          try {
+            await fs.promises.access(imagePath, fs.constants.F_OK);
+            pageCount++;
+            // Clean up the image file immediately
+            try {
+              await unlink(imagePath);
+            } catch {
+              // Ignore cleanup errors
+            }
+            pageNum++;
+          } catch {
+            // File doesn't exist, we've reached the end
+            break;
+          }
+        }
+        
+        if (pageCount === 0) {
+          throw new Error('Failed to count PDF pages - no pages found');
+        }
+        
+        return pageCount;
+      } catch (fallbackError: any) {
+        const errorMsg = fallbackError?.message || String(fallbackError);
+        throw new Error(`Failed to count PDF pages: ${errorMsg}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error counting PDF pages:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to count PDF pages: ${errorMessage}`);
+  } finally {
+    // Clean up temporary PDF file
+    if (tempPdfPath) {
+      try {
+        await unlink(tempPdfPath);
+      } catch (e) {
+        // Ignore cleanup errors
+      }
+    }
+  }
+}
+
+/**
  * Converts all pages of a PDF to a single JPEG image data URI (server-side)
  * All pages are combined vertically into one long image
  * @param pdfDataUri - The PDF file as a data URI

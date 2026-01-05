@@ -23,6 +23,8 @@ import { stateDetectionService } from '../core/state/state-detection.service';
 import { isApprovedAndPushedToCrm } from '../utils/status-utils';
 import { auditService } from '../core/audit/audit.service';
 import { generateDocumentHash } from '../utils/document-hash';
+import { convertPdfToImageServer, getPdfPageCount } from '../pdf-to-image-server';
+import { convertWordToPdf } from '../word-to-pdf-server';
 
 export class InvoiceService {
   /**
@@ -49,20 +51,210 @@ export class InvoiceService {
   ): Promise<{ data?: StoredInvoice; error?: string }> {
     try {
       // Validate file type
-      const mimeType = input.invoiceDataUri.split(';')[0].split(':')[1];
-      if (!mimeType.startsWith('image/') && mimeType !== 'application/pdf') {
-        return { error: 'Invalid file type. Please upload an image or a PDF.' };
+      let invoiceDataUri = input.invoiceDataUri;
+      const mimeType = invoiceDataUri.split(';')[0].split(':')[1];
+      
+      // Check if it's a Word document (application/octet-stream)
+      const isWordDocument = mimeType === 'application/octet-stream';
+      let isDoc = false;
+      let isDocx = false;
+      
+      if (isWordDocument) {
+        // Check magic bytes to detect Word document format
+        const base64Data = invoiceDataUri.split(',')[1];
+        if (base64Data) {
+          const buffer = Buffer.from(base64Data, 'base64');
+          
+          // .doc files: D0 CF 11 E0 A1 B1 1A E1 (OLE2 format)
+          if (buffer.length >= 8 && 
+              buffer[0] === 0xD0 && buffer[1] === 0xCF && 
+              buffer[2] === 0x11 && buffer[3] === 0xE0 &&
+              buffer[4] === 0xA1 && buffer[5] === 0xB1 &&
+              buffer[6] === 0x1A && buffer[7] === 0xE1) {
+            isDoc = true;
+          }
+          // .docx files: PK (ZIP format)
+          else if (buffer.length >= 4 && 
+                   buffer[0] === 0x50 && buffer[1] === 0x4B && 
+                   (buffer[2] === 0x03 || buffer[2] === 0x05) && 
+                   (buffer[3] === 0x04 || buffer[3] === 0x06)) {
+            if (buffer.length > 100) {
+              const bufferString = buffer.toString('binary', 0, Math.min(1000, buffer.length));
+              if (bufferString.includes('word/') || bufferString.includes('[Content_Types]')) {
+                isDocx = true;
+              } else {
+                isDocx = true; // Assume docx if ZIP
+              }
+            }
+          }
+        }
       }
       
-      // PDFs should already be converted to images on the client side
-      if (mimeType === 'application/pdf') {
-        return { 
-          error: 'PDF files must be converted to images on the client side. Please try uploading the PDF again or convert it to an image first.' 
-        };
+      if (!mimeType.startsWith('image/') && 
+          mimeType !== 'application/pdf' && 
+          !isDoc && 
+          !isDocx) {
+        return { error: 'Invalid file type. Please upload an image, PDF, or Word document.' };
+      }
+      
+      // Get max pages limit from environment variable (default: 10)
+      const maxPages = parseInt(process.env.MAX_DOCUMENT_PAGES || '10', 10);
+      
+      // Check page count for PDFs and Word documents before processing
+      let pageCount: number | null = null;
+      
+      // Convert Word documents to PDF first to check page count
+      if (isDoc || isDocx) {
+        try {
+          console.log(`Converting ${isDoc ? '.doc' : '.docx'} to PDF...`);
+          const pdfDataUri = await convertWordToPdf(invoiceDataUri, isDocx);
+          console.log('Word document converted to PDF successfully');
+          
+          // Check page count
+          console.log('Checking PDF page count...');
+          pageCount = await getPdfPageCount(pdfDataUri);
+          console.log(`PDF has ${pageCount} page(s)`);
+          
+          // If page count exceeds limit, save document but skip AI processing
+          if (pageCount > maxPages) {
+            console.log(`Document has ${pageCount} pages, exceeding limit of ${maxPages}. Saving for manual processing.`);
+            
+            // Save the document without AI processing
+            const rawInvoiceId = `INV-${Date.now()}`;
+            const invoiceId = sanitizeId(rawInvoiceId);
+            
+            // Save the original PDF file
+            let filePath: string;
+            try {
+              filePath = await saveInvoiceFile(pdfDataUri, invoiceId);
+            } catch (fileError) {
+              filePath = pdfDataUri;
+            }
+            
+            // Create a minimal invoice record for manual processing
+            const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+            const manualProcessingInvoice: StoredInvoice = {
+              id: invoiceId,
+              invoiceDataUri: filePath,
+              status: 'Review',
+              requiresSpecialHandling: true,
+              specialHandlingReason: 'other',
+              comment: `Document has ${pageCount} pages (exceeds limit of ${maxPages}). Requires manual processing.`,
+              caseNumber: options?.caseNumber || undefined,
+              documentID: options?.documentID,
+              description: options?.description ? { value: options.description, confidence: 1.0, reasoning: 'From SmartAdvocate API', bbox: null } : undefined,
+              // Required ExtractedDataOnly fields with null values
+              invoiceNumber: null,
+              invoiceDate: null,
+              vendorName: null,
+              vendorAddress: null,
+              amount: null,
+              clientName: null,
+              createdAt: now,
+              updatedAt: now,
+              ...(options?.smartAdvocateMetadata || {}),
+            };
+            
+            // Generate document hash if documentID is provided
+            if (options?.documentID !== undefined) {
+              manualProcessingInvoice.documentHash = generateDocumentHash(options.documentID, options.caseNumber);
+            }
+            
+            // Save to database
+            await upsertInvoice(manualProcessingInvoice);
+            
+            return { 
+              data: manualProcessingInvoice,
+              error: `Document has ${pageCount} pages, exceeding the limit of ${maxPages}. Document saved for manual processing.`
+            };
+          }
+          
+          // If within limit, convert PDF to image for AI processing
+          console.log('Converting PDF to image...');
+          invoiceDataUri = await convertPdfToImageServer(pdfDataUri);
+          console.log('PDF converted to image successfully');
+        } catch (conversionError) {
+          const errorMessage = conversionError instanceof Error ? conversionError.message : 'Unknown error';
+          return { 
+            error: `Failed to convert Word document to image: ${errorMessage}` 
+          };
+        }
+      }
+      // Check page count for PDFs before processing
+      else if (mimeType === 'application/pdf') {
+        try {
+          console.log('Checking PDF page count...');
+          pageCount = await getPdfPageCount(invoiceDataUri);
+          console.log(`PDF has ${pageCount} page(s)`);
+          
+          // If page count exceeds limit, save document but skip AI processing
+          if (pageCount > maxPages) {
+            console.log(`Document has ${pageCount} pages, exceeding limit of ${maxPages}. Saving for manual processing.`);
+            
+            // Save the document without AI processing
+            const rawInvoiceId = `INV-${Date.now()}`;
+            const invoiceId = sanitizeId(rawInvoiceId);
+            
+            // Save the original PDF file
+            let filePath: string;
+            try {
+              filePath = await saveInvoiceFile(invoiceDataUri, invoiceId);
+            } catch (fileError) {
+              filePath = invoiceDataUri;
+            }
+            
+            // Create a minimal invoice record for manual processing
+            const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+            const manualProcessingInvoice: StoredInvoice = {
+              id: invoiceId,
+              invoiceDataUri: filePath,
+              status: 'Review',
+              requiresSpecialHandling: true,
+              specialHandlingReason: 'other',
+              comment: `Document has ${pageCount} pages (exceeds limit of ${maxPages}). Requires manual processing.`,
+              caseNumber: options?.caseNumber || undefined,
+              documentID: options?.documentID,
+              description: options?.description ? { value: options.description, confidence: 1.0, reasoning: 'From SmartAdvocate API', bbox: null } : undefined,
+              // Required ExtractedDataOnly fields with null values
+              invoiceNumber: null,
+              invoiceDate: null,
+              vendorName: null,
+              vendorAddress: null,
+              amount: null,
+              clientName: null,
+              createdAt: now,
+              updatedAt: now,
+              ...(options?.smartAdvocateMetadata || {}),
+            };
+            
+            // Generate document hash if documentID is provided
+            if (options?.documentID !== undefined) {
+              manualProcessingInvoice.documentHash = generateDocumentHash(options.documentID, options.caseNumber);
+            }
+            
+            // Save to database
+            await upsertInvoice(manualProcessingInvoice);
+            
+            return { 
+              data: manualProcessingInvoice,
+              error: `Document has ${pageCount} pages, exceeding the limit of ${maxPages}. Document saved for manual processing.`
+            };
+          }
+          
+          // If within limit, convert PDF to image for AI processing
+          console.log('Converting PDF to image...');
+          invoiceDataUri = await convertPdfToImageServer(invoiceDataUri);
+          console.log('PDF converted to image successfully');
+        } catch (conversionError) {
+          const errorMessage = conversionError instanceof Error ? conversionError.message : 'Unknown error';
+          return { 
+            error: `Failed to convert PDF to image: ${errorMessage}` 
+          };
+        }
       }
       
       // Extract invoice data using AI
-      const data = await extractInvoiceData({ invoiceDataUri: input.invoiceDataUri });
+      const data = await extractInvoiceData({ invoiceDataUri });
 
       // Validate that we extracted some data
       const hasExtractedData = Object.values(data).some(value => {
@@ -205,7 +397,7 @@ export class InvoiceService {
       
       // Use description from options if provided, otherwise use extracted description
       const finalDescription = options?.description 
-        ? { value: options.description, reasoning: 'From SmartAdvocate API' }
+        ? { value: options.description, confidence: 1.0, reasoning: 'From SmartAdvocate API', bbox: null }
         : dataWithoutDuplicateCheck.description;
       
       const finalInvoice: StoredInvoice = {
@@ -284,12 +476,19 @@ export class InvoiceService {
   async getAllInvoices(userPermissions?: { role: string; assignedStates?: string[] }): Promise<StoredInvoice[]> {
     const allInvoices = await findAllInvoices();
     
+    // Filter out invoices with excluded case number prefix
+    const excludePrefix = process.env.EXCLUDE_CASE_NUMBER_PREFIX || 'TBF-';
+    const filteredInvoices = allInvoices.filter(inv => {
+      if (!inv.caseNumber) return true; // Include invoices without case numbers
+      return !inv.caseNumber.startsWith(excludePrefix);
+    });
+    
     // Apply state-based filtering if user permissions are provided
     if (userPermissions) {
-      return this.filterInvoicesByAccess(allInvoices, userPermissions);
+      return this.filterInvoicesByAccess(filteredInvoices, userPermissions);
     }
     
-    return allInvoices;
+    return filteredInvoices;
   }
 
   /**

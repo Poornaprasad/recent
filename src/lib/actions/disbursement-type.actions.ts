@@ -218,47 +218,81 @@ function isVendorNameStrongMatch(name1: string, name2: string): boolean {
 
 export async function checkCaseForDuplicatesAction(
   caseID: number,
-  vendorName: string,
-  invoiceNumber: string,
-  invoiceDate: string,
+  vendorName: string | null | undefined,
+  invoiceNumber: string | null | undefined,
+  invoiceDate: string | null | undefined,
   amount?: number
 ): Promise<ActionResult<DuplicateCheckResult>> {
   return withActionHandler(async () => {
-    if (!caseID) {
+    // Validate caseID - must be a positive number
+    if (!caseID || typeof caseID !== 'number' || caseID <= 0 || !Number.isInteger(caseID)) {
       return {
         isDuplicate: false,
         duplicates: [],
-        message: 'Case ID is required',
+        message: `Invalid Case ID: ${caseID}. Case ID must be a positive integer.`,
       };
     }
 
-    if (!vendorName || !invoiceNumber || !invoiceDate) {
+    // Normalize input values - handle null/undefined/empty strings
+    const normalizedVendorName = (vendorName || '').trim().toLowerCase();
+    const normalizedInvoiceNumber = (invoiceNumber || '').trim().toLowerCase();
+    const normalizedInvoiceDateInput = (invoiceDate || '').trim();
+    
+    // Allow checking with partial information - at least one field should be provided
+    if (!normalizedVendorName && !normalizedInvoiceNumber && !normalizedInvoiceDateInput) {
       return {
         isDuplicate: false,
         duplicates: [],
-        message: 'Vendor name, invoice number, and invoice date are required',
+        message: 'At least one of vendor name, invoice number, or invoice date is required to check for duplicates',
       };
     }
 
     // Fetch all disbursements for the case
-    const disbursements = await getDisbursements(caseID, 0, 200);
+    let disbursements: Disbursement[] = [];
+    try {
+      disbursements = await getDisbursements(caseID, 0, 200);
+      console.log(`[Duplicate Check] Fetched ${disbursements.length} disbursements for case ID ${caseID}`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`[Duplicate Check] Failed to fetch disbursements for case ID ${caseID}:`, errorMessage);
+      
+      // Return a helpful error message
+      if (errorMessage.includes('credentials')) {
+        return {
+          isDuplicate: false,
+          duplicates: [],
+          message: 'SmartAdvocate API credentials are not configured. Cannot check for duplicates.',
+        };
+      } else if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+        return {
+          isDuplicate: false,
+          duplicates: [],
+          message: `Case ID ${caseID} not found in SmartAdvocate. Please verify the case number is correct.`,
+        };
+      } else {
+        return {
+          isDuplicate: false,
+          duplicates: [],
+          message: `Failed to fetch disbursements: ${errorMessage}`,
+        };
+      }
+    }
 
-    // Normalize input values for comparison
-    const normalizedVendorName = vendorName.trim().toLowerCase();
-    const normalizedInvoiceNumber = invoiceNumber.trim().toLowerCase();
     const inputAmount = amount || 0;
     
     // Normalize date - handle different formats
     let normalizedInvoiceDate: string | null = null;
-    try {
-      const dateObj = new Date(invoiceDate);
-      if (!isNaN(dateObj.getTime())) {
-        // Format as YYYY-MM-DD for comparison
-        normalizedInvoiceDate = dateObj.toISOString().split('T')[0];
+    if (normalizedInvoiceDateInput) {
+      try {
+        const dateObj = new Date(normalizedInvoiceDateInput);
+        if (!isNaN(dateObj.getTime())) {
+          // Format as YYYY-MM-DD for comparison
+          normalizedInvoiceDate = dateObj.toISOString().split('T')[0];
+        }
+      } catch (e) {
+        // If date parsing fails, use original string
+        normalizedInvoiceDate = normalizedInvoiceDateInput;
       }
-    } catch (e) {
-      // If date parsing fails, use original string
-      normalizedInvoiceDate = invoiceDate.trim();
     }
 
     // Find potential duplicates
@@ -291,14 +325,28 @@ export async function checkCaseForDuplicatesAction(
       const dispAmount = disbursement.amount || 0;
 
       // Check if vendor, invoice number, and date match (exact duplicate)
-      const vendorMatches = normalizedPayeeName === normalizedVendorName;
-      const invoiceNumberMatches = normalizedDispInvoiceNumber === normalizedInvoiceNumber;
-      const dateMatches = normalizedDispInvoiceDate && normalizedInvoiceDate
-        ? normalizedDispInvoiceDate === normalizedInvoiceDate
-        : false;
+      // Only check fields that are provided (non-empty)
+      const vendorMatches = !normalizedVendorName || normalizedPayeeName === normalizedVendorName;
+      const invoiceNumberMatches = !normalizedInvoiceNumber || normalizedDispInvoiceNumber === normalizedInvoiceNumber;
+      const dateMatches = !normalizedInvoiceDate || !normalizedDispInvoiceDate
+        ? false // If either is missing, can't match on date
+        : normalizedDispInvoiceDate === normalizedInvoiceDate;
 
-      // Check for exact duplicate (all three match)
-      if (vendorMatches && invoiceNumberMatches && dateMatches) {
+      // Check for exact duplicate - need at least 2 matching fields (if provided)
+      const providedFields = [
+        normalizedVendorName ? 1 : 0,
+        normalizedInvoiceNumber ? 1 : 0,
+        normalizedInvoiceDate ? 1 : 0,
+      ].reduce((sum, val) => sum + val, 0);
+      
+      const matchingFields = [
+        vendorMatches && normalizedVendorName ? 1 : 0,
+        invoiceNumberMatches && normalizedInvoiceNumber ? 1 : 0,
+        dateMatches && normalizedInvoiceDate ? 1 : 0,
+      ].reduce((sum, val) => sum + val, 0);
+
+      // Consider it an exact duplicate if all provided fields match (need at least 2 fields provided)
+      if (providedFields >= 2 && matchingFields === providedFields) {
         duplicates.push({
           disbursementID: disbursement.disbursementID,
           invoiceNumber: disbursement.invoiceNumber,
@@ -312,8 +360,8 @@ export async function checkCaseForDuplicatesAction(
       }
 
       // Check for partial match: vendor name strongly matches AND amount matches
-      if (inputAmount > 0 && dispAmount > 0) {
-        const vendorStrongMatch = isVendorNameStrongMatch(vendorName, payeeName);
+      if (inputAmount > 0 && dispAmount > 0 && normalizedVendorName) {
+        const vendorStrongMatch = isVendorNameStrongMatch(normalizedVendorName, payeeName);
         const amountMatches = Math.abs(inputAmount - dispAmount) < 0.01; // Allow for floating point precision
         
         if (vendorStrongMatch && amountMatches) {

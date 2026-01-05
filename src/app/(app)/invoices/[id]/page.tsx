@@ -262,16 +262,32 @@ export default function InvoiceDetailPage() {
       const currentCaseNumber = invoiceData?.caseNumber;
       if (currentCaseNumber) {
         try {
+          console.log('[Case Lookup] Fetching case info for:', currentCaseNumber);
           const result = await getCaseInfoAction(currentCaseNumber);
           if (result.data) {
+            const fetchedCaseID = result.data.caseID;
+            console.log('[Case Lookup] Case info retrieved:', {
+              caseNumber: currentCaseNumber,
+              caseID: fetchedCaseID,
+              caseName: result.data.caseName,
+            });
             setCaseName(result.data.caseName || null);
-            setCaseID(result.data.caseID || null);
+            // Validate caseID is a positive number before setting
+            if (fetchedCaseID && typeof fetchedCaseID === 'number' && fetchedCaseID > 0) {
+              setCaseID(fetchedCaseID);
+            } else {
+              console.warn('[Case Lookup] Invalid caseID received:', fetchedCaseID);
+              setCaseID(null);
+            }
           } else {
+            console.warn('[Case Lookup] No case data returned for:', currentCaseNumber);
             setCaseName(null);
             setCaseID(null);
           }
         } catch (error) {
-          console.error('Failed to fetch case info:', error);
+          console.error('[Case Lookup] Failed to fetch case info:', error);
+          const errorMessage = error instanceof Error ? error.message : String(error);
+          console.error('[Case Lookup] Error details:', errorMessage);
           setCaseName(null);
           setCaseID(null);
         }
@@ -307,11 +323,12 @@ export default function InvoiceDetailPage() {
 
   // Check for duplicates in case
   const handleCheckDuplicates = async () => {
-    if (!caseID) {
+    // Validate caseID - must be a positive number
+    if (!caseID || typeof caseID !== 'number' || caseID <= 0 || !Number.isInteger(caseID)) {
       toast({
         variant: 'destructive',
-        title: 'Case ID Required',
-        description: 'Please ensure the case number is valid and case information is loaded.',
+        title: 'Invalid Case ID',
+        description: `Case ID is invalid: ${caseID}. Please ensure the case number is valid and case information is loaded.`,
       });
       return;
     }
@@ -342,11 +359,12 @@ export default function InvoiceDetailPage() {
       ? invoiceData.amount.value
       : invoiceData.amount || invoiceData.totalAmount?.value || 0;
 
-    if (!vendorName || !invoiceNumber || !invoiceDate) {
+    // Allow checking with partial information - proceed with whatever is available
+    if (!vendorName && !invoiceNumber && !invoiceDate) {
       toast({
         variant: 'destructive',
         title: 'Missing Information',
-        description: 'Please ensure vendor name, invoice number, and invoice date are available.',
+        description: 'At least one of vendor name, invoice number, or invoice date is required to check for duplicates.',
       });
       return;
     }
@@ -355,6 +373,14 @@ export default function InvoiceDetailPage() {
     setDuplicateCheckResult(null);
 
     try {
+      console.log('[Duplicate Check] Starting check with:', {
+        caseID,
+        vendorName,
+        invoiceNumber,
+        invoiceDate,
+        amount,
+      });
+
       const result = await checkCaseForDuplicatesAction(
         caseID,
         vendorName,
@@ -848,7 +874,7 @@ export default function InvoiceDetailPage() {
                     type="button"
                     variant="outline"
                     onClick={handleCheckDuplicates}
-                    disabled={isCheckingDuplicates || !caseID || !invoiceData?.vendorName || !invoiceData?.invoiceNumber || !invoiceData?.invoiceDate}
+                    disabled={isCheckingDuplicates}
                     className="w-full"
                   >
                     {isCheckingDuplicates ? (

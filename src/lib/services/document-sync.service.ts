@@ -67,12 +67,46 @@ const SUPPORTED_FILE_TYPES = [
   'image/png',
   'image/jpg',
   'image/heic',
+  'application/msword', // .doc
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
 ];
+
+const SUPPORTED_FILE_EXTENSIONS = ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'doc', 'docx'];
 
 const DEFAULT_CATEGORY_IDS = [78, 1080]; // Invoices (78) and Receipts (1080)
 const DEFAULT_PAGE_SIZE = 100;
 const DOCUMENT_DELAY_MS = 500;
 const PAGE_DELAY_MS = 1000;
+
+/**
+ * Get file extension from filename
+ */
+function getFileExtension(filename: string): string {
+  const parts = filename.split('.');
+  return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+}
+
+/**
+ * Check if file type is supported based on content type and file extension
+ */
+function isFileTypeSupported(contentType: string, documentName?: string): { supported: boolean; fileExtension: string } {
+  const fileExtension = getFileExtension(documentName || '');
+  
+  // Allow if content type is supported
+  const isContentTypeSupported = SUPPORTED_FILE_TYPES.includes(contentType);
+  
+  // Allow if file extension suggests a supported document type
+  const isExtensionSupported = SUPPORTED_FILE_EXTENSIONS.includes(fileExtension);
+  
+  // Special handling: if content type is octet-stream but extension suggests a document, allow it
+  const isOctetStreamWithDocExtension = contentType === 'application/octet-stream' && 
+    (fileExtension === 'doc' || fileExtension === 'docx');
+  
+  return {
+    supported: isContentTypeSupported || isExtensionSupported || isOctetStreamWithDocExtension,
+    fileExtension,
+  };
+}
 
 /**
  * Extract document metadata for logging
@@ -238,10 +272,12 @@ export async function syncDocumentsCore(
           `[Document Sync] Fetched content for document ${metadata.documentID} (${content.size} bytes, ${content.contentType})`
         );
 
-        // Skip unsupported file types
-        if (!SUPPORTED_FILE_TYPES.includes(content.contentType)) {
+        // Check if file type is supported (by content type or file extension)
+        const { supported: isSupported, fileExtension } = isFileTypeSupported(content.contentType, metadata.documentName);
+        
+        if (!isSupported) {
           result.failed++;
-          const errorMessage = `Unsupported file type: ${content.contentType}. Only PDF and images are supported.`;
+          const errorMessage = `Unsupported file type: ${content.contentType}${fileExtension ? ` (extension: .${fileExtension})` : ''}. Only PDF, images, and Word documents are supported.`;
           result.errors.push({
             documentID: metadata.documentID,
             error: errorMessage,

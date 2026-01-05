@@ -12,6 +12,7 @@
  *   - SA_DOCUMENT_SYNC_TO_DATE (e.g., "2024-12-31")
  *   - SA_DOCUMENT_SYNC_PAGE_SIZE (default: 100)
  *   - SA_DOCUMENT_SYNC_CATEGORY_IDS (comma-separated, default: "78,1080")
+ *   - EXCLUDE_CASE_NUMBER_PREFIX (default: "TBF-") - Case numbers starting with this prefix will be excluded
  */
 
 import 'dotenv/config';
@@ -215,6 +216,14 @@ async function syncDocuments() {
           // Extract metadata
           const metadata = extractDocumentMetadata(doc);
           
+          // Skip documents with excluded case number prefix
+          const excludePrefix = process.env.EXCLUDE_CASE_NUMBER_PREFIX || 'TBF-';
+          if (metadata.caseNumber && metadata.caseNumber.startsWith(excludePrefix)) {
+            result.skipped++;
+            console.log(`⏭️  Skipping document ${metadata.documentID} (Case: ${metadata.caseNumber} - excluded prefix: ${excludePrefix})`);
+            continue;
+          }
+          
           // Generate hash from document ID and case number
           const documentHash = generateDocumentHash(metadata.documentID, metadata.caseNumber);
           
@@ -233,11 +242,28 @@ async function syncDocuments() {
           const content = await getDocumentContent(metadata.documentID);
           console.log(`   Fetched content: ${content.size} bytes, ${content.contentType}`);
 
+          // Check file extension for additional type detection
+          const getFileExtension = (filename: string): string => {
+            const parts = filename.split('.');
+            return parts.length > 1 ? parts[parts.length - 1].toLowerCase() : '';
+          };
+          const fileExtension = getFileExtension(metadata.documentName || '');
+
           // Skip unsupported file types
           const supportedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'image/heic'];
-          if (!supportedTypes.includes(content.contentType)) {
+          const supportedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'doc', 'docx'];
+          
+          // Allow if content type is supported OR if file extension suggests a supported document type
+          const isContentTypeSupported = supportedTypes.includes(content.contentType);
+          const isExtensionSupported = supportedExtensions.includes(fileExtension);
+          
+          // Special handling: if content type is octet-stream but extension suggests a document, allow it
+          const isOctetStreamWithDocExtension = content.contentType === 'application/octet-stream' && 
+            (fileExtension === 'doc' || fileExtension === 'docx');
+          
+          if (!isContentTypeSupported && !isExtensionSupported && !isOctetStreamWithDocExtension) {
             result.failed++;
-            const errorMessage = `Unsupported file type: ${content.contentType}`;
+            const errorMessage = `Unsupported file type: ${content.contentType}${fileExtension ? ` (extension: .${fileExtension})` : ''}`;
             result.errors.push({
               documentID: metadata.documentID,
               error: errorMessage,
