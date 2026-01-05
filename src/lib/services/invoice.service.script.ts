@@ -9,7 +9,7 @@ import { getOverallConfidence, parseInvoiceAmount } from '../utils/invoice-utils
 import { sanitizeId } from '../utils/id-utils';
 import { CONFIDENCE_THRESHOLDS, HIGH_VALUE_THRESHOLDS } from '../domain/constants';
 import type { StoredInvoice } from '../domain/types';
-import { convertPdfToImageServer } from '../pdf-to-image-server';
+import { convertPdfToImageServer, getPdfPageCount } from '../pdf-to-image-server';
 import { convertWordToPdf } from '../word-to-pdf-server';
 
 // Use direct database access for scripts (bypassing 'server-only' repositories)
@@ -278,14 +278,86 @@ export async function processInvoice(
       return { error: 'Invalid file type. Please upload an image, PDF, or Word document.' };
     }
     
-    // Convert Word documents to PDF first, then to images
+    // Get max pages limit from environment variable (default: 10)
+    const maxPages = parseInt(process.env.MAX_DOCUMENT_PAGES || '10', 10);
+    
+    // Check page count for PDFs and Word documents before processing
+    let pageCount: number | null = null;
+    let originalPdfDataUri: string | null = null;
+    
+    // Convert Word documents to PDF first to check page count
     if (isDoc || isDocx) {
       try {
         console.log(`Converting ${isDoc ? '.doc' : '.docx'} to PDF...`);
         const pdfDataUri = await convertWordToPdf(invoiceDataUri, isDocx);
         console.log('Word document converted to PDF successfully');
+        originalPdfDataUri = pdfDataUri;
         
-        // Now convert PDF to image
+        // Check page count
+        console.log('Checking PDF page count...');
+        pageCount = await getPdfPageCount(pdfDataUri);
+        console.log(`PDF has ${pageCount} page(s)`);
+        
+        // If page count exceeds limit, save document but skip AI processing
+        if (pageCount > maxPages) {
+          console.log(`Document has ${pageCount} pages, exceeding limit of ${maxPages}. Saving for manual processing.`);
+          
+          // Save the document without AI processing
+          // Generate a basic invoice record for viewing
+          const rawInvoiceId = `INV-${Date.now()}`;
+          const invoiceId = sanitizeId(rawInvoiceId);
+          
+          // Save the original PDF file
+          let filePath: string;
+          try {
+            filePath = await saveInvoiceFile(pdfDataUri, invoiceId);
+          } catch (fileError) {
+            filePath = pdfDataUri;
+          }
+          
+          // Create a minimal invoice record for manual processing
+          const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+          
+          // Generate document hash if documentID is provided
+          let documentHash: string | undefined = undefined;
+          if (options?.documentID !== undefined) {
+            const { generateDocumentHash } = await import('../utils/document-hash');
+            documentHash = generateDocumentHash(options.documentID, options.caseNumber);
+          }
+          
+          const manualProcessingInvoice: StoredInvoice = {
+            id: invoiceId,
+            invoiceDataUri: filePath,
+            status: 'Review',
+            requiresSpecialHandling: true,
+            specialHandlingReason: 'other',
+            comment: `Document has ${pageCount} pages (exceeds limit of ${maxPages}). Requires manual processing.`,
+            caseNumber: options?.caseNumber || undefined,
+            documentID: options?.documentID,
+            documentHash: documentHash,
+            description: options?.description ? { value: options.description, confidence: 1.0, reasoning: 'From SmartAdvocate API', bbox: null } : undefined,
+            // Required ExtractedDataOnly fields with null values
+            invoiceNumber: null,
+            invoiceDate: null,
+            vendorName: null,
+            vendorAddress: null,
+            amount: null,
+            clientName: null,
+            createdAt: now,
+            updatedAt: now,
+            ...(options?.smartAdvocateMetadata || {}),
+          };
+          
+          // Save to database
+          await upsertInvoice(manualProcessingInvoice);
+          
+          return { 
+            data: manualProcessingInvoice,
+            error: `Document has ${pageCount} pages, exceeding the limit of ${maxPages}. Document saved for manual processing.`
+          };
+        }
+        
+        // If within limit, convert PDF to image for AI processing
         console.log('Converting PDF to image...');
         invoiceDataUri = await convertPdfToImageServer(pdfDataUri);
         console.log('PDF converted to image successfully');
@@ -296,9 +368,73 @@ export async function processInvoice(
         };
       }
     }
-    // Convert PDFs to images before processing (AI model only accepts images)
+    // Check page count for PDFs before processing
     else if (mimeType === 'application/pdf') {
       try {
+        console.log('Checking PDF page count...');
+        pageCount = await getPdfPageCount(invoiceDataUri);
+        console.log(`PDF has ${pageCount} page(s)`);
+        
+        // If page count exceeds limit, save document but skip AI processing
+        if (pageCount > maxPages) {
+          console.log(`Document has ${pageCount} pages, exceeding limit of ${maxPages}. Saving for manual processing.`);
+          
+          // Save the document without AI processing
+          // Generate a basic invoice record for viewing
+          const rawInvoiceId = `INV-${Date.now()}`;
+          const invoiceId = sanitizeId(rawInvoiceId);
+          
+          // Save the original PDF file
+          let filePath: string;
+          try {
+            filePath = await saveInvoiceFile(invoiceDataUri, invoiceId);
+          } catch (fileError) {
+            filePath = invoiceDataUri;
+          }
+          
+          // Create a minimal invoice record for manual processing
+          const now = new Date(Math.floor(Date.now() / 1000) * 1000);
+          
+          // Generate document hash if documentID is provided
+          let documentHash: string | undefined = undefined;
+          if (options?.documentID !== undefined) {
+            const { generateDocumentHash } = await import('../utils/document-hash');
+            documentHash = generateDocumentHash(options.documentID, options.caseNumber);
+          }
+          
+          const manualProcessingInvoice: StoredInvoice = {
+            id: invoiceId,
+            invoiceDataUri: filePath,
+            status: 'Review',
+            requiresSpecialHandling: true,
+            specialHandlingReason: 'other',
+            comment: `Document has ${pageCount} pages (exceeds limit of ${maxPages}). Requires manual processing.`,
+            caseNumber: options?.caseNumber || undefined,
+            documentID: options?.documentID,
+            documentHash: documentHash,
+            description: options?.description ? { value: options.description, confidence: 1.0, reasoning: 'From SmartAdvocate API', bbox: null } : undefined,
+            // Required ExtractedDataOnly fields with null values
+            invoiceNumber: null,
+            invoiceDate: null,
+            vendorName: null,
+            vendorAddress: null,
+            amount: null,
+            clientName: null,
+            createdAt: now,
+            updatedAt: now,
+            ...(options?.smartAdvocateMetadata || {}),
+          };
+          
+          // Save to database
+          await upsertInvoice(manualProcessingInvoice);
+          
+          return { 
+            data: manualProcessingInvoice,
+            error: `Document has ${pageCount} pages, exceeding the limit of ${maxPages}. Document saved for manual processing.`
+          };
+        }
+        
+        // If within limit, convert PDF to image for AI processing
         console.log('Converting PDF to image...');
         invoiceDataUri = await convertPdfToImageServer(invoiceDataUri);
         console.log('PDF converted to image successfully');
