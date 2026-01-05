@@ -3,6 +3,7 @@
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { UserNav } from "@/components/user-nav";
 import { ThemeToggle } from "./theme-toggle";
+import { SyncProgressIndicator } from "./document-sync/sync-progress-indicator";
 
 export function Header() {
   return (
@@ -13,6 +14,7 @@ export function Header() {
         </div>
         <div className="flex-1" />
         <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-2">
+          <SyncProgressIndicator />
           <div className="flex-shrink-0">
             <ThemeToggle />
           </div>
