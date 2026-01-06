@@ -229,7 +229,7 @@ export async function getDocumentContent(
   });
 
   // Get content type
-  const contentType = response.headers.get('content-type') || 'application/octet-stream';
+  let contentType = response.headers.get('content-type') || 'application/octet-stream';
   
   // Get content as array buffer
   const arrayBuffer = await response.arrayBuffer();
@@ -241,7 +241,31 @@ export async function getDocumentContent(
     throw new Error(`Document content is empty (0 bytes). The document may not exist or may be corrupted.`);
   }
 
-  console.log(`[SmartAdvocate] Document ${documentID} fetched successfully: ${buffer.length} bytes`);
+  // If content type is generic, try to detect from file signature (magic bytes)
+  if (contentType === 'application/octet-stream' || !contentType.includes('/')) {
+    // Check for PDF (PDF files start with %PDF)
+    if (buffer.length >= 4 && buffer[0] === 0x25 && buffer[1] === 0x50 && buffer[2] === 0x44 && buffer[3] === 0x46) {
+      contentType = 'application/pdf';
+      console.log(`[SmartAdvocate] Document ${documentID} detected as PDF from magic bytes`);
+    }
+    // Check for JPEG
+    else if (buffer.length >= 3 && buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) {
+      contentType = 'image/jpeg';
+      console.log(`[SmartAdvocate] Document ${documentID} detected as JPEG from magic bytes`);
+    }
+    // Check for PNG
+    else if (buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+      contentType = 'image/png';
+      console.log(`[SmartAdvocate] Document ${documentID} detected as PNG from magic bytes`);
+    }
+    // Check for HEIC (may start with various signatures, but common one is ftyp)
+    else if (buffer.length >= 12 && buffer[4] === 0x66 && buffer[5] === 0x74 && buffer[6] === 0x79 && buffer[7] === 0x70) {
+      contentType = 'image/heic';
+      console.log(`[SmartAdvocate] Document ${documentID} detected as HEIC from magic bytes`);
+    }
+  }
+
+  console.log(`[SmartAdvocate] Document ${documentID} fetched successfully: ${buffer.length} bytes, content-type: ${contentType}`);
 
   // Convert to base64 data URI
   const base64 = buffer.toString('base64');

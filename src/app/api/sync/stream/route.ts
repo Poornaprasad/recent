@@ -280,10 +280,19 @@ export async function GET(request: NextRequest) {
               const isOctetStreamWordDoc = content.contentType === 'application/octet-stream' && 
                 (fileExtension === 'doc' || fileExtension === 'docx');
               
-              if (!SUPPORTED_FILE_TYPES.includes(content.contentType) && !isOctetStreamWordDoc) {
+              // Allow application/octet-stream if it's a PDF (detected by extension)
+              // This handles cases where PDFs are returned as octet-stream but magic byte detection didn't run
+              const isOctetStreamPdf = content.contentType === 'application/octet-stream' && 
+                fileExtension === 'pdf';
+              
+              // Allow application/octet-stream if it's an image (detected by extension)
+              const isOctetStreamImage = content.contentType === 'application/octet-stream' && 
+                (fileExtension === 'jpg' || fileExtension === 'jpeg' || fileExtension === 'png' || fileExtension === 'heic');
+              
+              if (!SUPPORTED_FILE_TYPES.includes(content.contentType) && !isOctetStreamWordDoc && !isOctetStreamPdf && !isOctetStreamImage) {
                 result.failed++;
                 result.processedDocuments++;
-                const errorMessage = `Unsupported file type: ${content.contentType}`;
+                const errorMessage = `Invalid file type. Please upload an image, PDF, or Word document.`;
 
                 await createDocumentSyncError({
                   documentID: doc.documentID,
