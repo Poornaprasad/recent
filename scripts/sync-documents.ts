@@ -249,6 +249,39 @@ async function syncDocuments() {
           };
           const fileExtension = getFileExtension(metadata.documentName || '');
 
+          // Check for .msg format (Microsoft Outlook message files) - unsupported
+          const isMsgFile = fileExtension === 'msg' || 
+                            content.contentType === 'application/vnd.ms-outlook' ||
+                            content.contentType === 'message/rfc822';
+          
+          if (isMsgFile) {
+            result.failed++;
+            const errorMessage = 'Unsupported format';
+            result.errors.push({
+              documentID: metadata.documentID,
+              error: errorMessage,
+            });
+            
+            await createDocumentSyncError({
+              documentID: metadata.documentID,
+              error: errorMessage,
+              errorType: 'Unsupported File Type',
+              caseID: metadata.caseID,
+              caseNumber: metadata.caseNumber,
+              documentName: metadata.documentName,
+              contentType: content.contentType,
+              fileSize: content.size,
+              categoryID: metadata.categoryID,
+              description: metadata.description ?? undefined,
+              createdDate: metadata.createdDate ? new Date(metadata.createdDate) : undefined,
+              modifiedDate: metadata.modifiedDate ? new Date(metadata.modifiedDate) : undefined,
+              ...mapSmartAdvocateDocumentToInvoice(doc),
+            });
+            
+            console.log(`   ❌ ${errorMessage}\n`);
+            continue;
+          }
+
           // Skip unsupported file types
           const supportedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg', 'image/heic'];
           const supportedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'heic', 'doc', 'docx'];

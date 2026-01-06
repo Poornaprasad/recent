@@ -85,11 +85,15 @@ import {
   getDocumentSyncErrorsAction,
   resolveDocumentSyncErrorAction,
   getDocumentSyncErrorStatsAction,
+  getDocumentContentAction,
+  deleteAllDocumentSyncErrorsAction,
+  deleteResolvedDocumentSyncErrorsAction,
 } from '@/lib/actions/document-sync-error.actions';
 import type { DocumentSyncError } from '@/lib/db/schema';
+import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
 
 export default function SyncErrorsPage() {
-  const { user } = useAuthStore();
+  const { user, token } = useAuthStore();
   const { toast } = useToast();
   const [errors, setErrors] = useState<DocumentSyncError[]>([]);
   const [allErrors, setAllErrors] = useState<DocumentSyncError[]>([]); // For client-side filtering
@@ -112,6 +116,10 @@ export default function SyncErrorsPage() {
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [isResolving, setIsResolving] = useState(false);
   const [selectedErrors, setSelectedErrors] = useState<Set<string>>(new Set());
+  const [documentDataUri, setDocumentDataUri] = useState<string | null>(null);
+  const [isLoadingDocument, setIsLoadingDocument] = useState(false);
+  const [showDocumentViewer, setShowDocumentViewer] = useState(false);
+  const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
   const [sortField, setSortField] = useState<'syncDate' | 'documentID' | 'errorType' | 'caseNumber'>('syncDate');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -256,6 +264,73 @@ export default function SyncErrorsPage() {
 
   const totalPages = Math.ceil(filteredCount() / rowsPerPage);
 
+  const handleLoadDocument = async () => {
+    if (!selectedError) return;
+
+    setIsLoadingDocument(true);
+    setDocumentDataUri(null);
+    setDocumentLoadError(null);
+    setShowDocumentViewer(false);
+    
+    try {
+      const result = await getDocumentContentAction(selectedError.documentID);
+      if (result.error) {
+        const errorMsg = result.error;
+        setDocumentLoadError(errorMsg);
+        toast({
+          variant: "destructive",
+          title: "Error Loading Document",
+          description: errorMsg,
+        });
+      } else if (result.data) {
+        // Use URL if provided (for large documents), otherwise use data URI
+        let documentUri = result.data.url || result.data.dataUri;
+        
+        // If it's a URL (starts with /api/), append auth token for PDF viewer
+        if (documentUri.startsWith('/api/') || documentUri.startsWith('http')) {
+          // Append token to URL for authentication (PDF viewers can't send headers)
+          if (token && documentUri.startsWith('/api/')) {
+            const separator = documentUri.includes('?') ? '&' : '?';
+            documentUri = `${documentUri}${separator}token=${encodeURIComponent(token)}`;
+          }
+          setDocumentDataUri(documentUri);
+          setDocumentLoadError(null);
+          setShowDocumentViewer(true);
+          return;
+        }
+        
+        // Otherwise, validate data URI format
+        if (documentUri.startsWith('data:')) {
+          const dataUriMatch = documentUri.match(/^data:([^;]+);base64,(.+)$/);
+          if (!dataUriMatch || !dataUriMatch[2] || dataUriMatch[2].length === 0) {
+            const errorMsg = "The document data is invalid or incomplete. The document may be corrupted or empty.";
+            setDocumentLoadError(errorMsg);
+            toast({
+              variant: "destructive",
+              title: "Invalid Document Data",
+              description: errorMsg,
+            });
+            return;
+          }
+        }
+        
+        setDocumentDataUri(documentUri);
+        setDocumentLoadError(null);
+        setShowDocumentViewer(true);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load document. Please try again.';
+      setDocumentLoadError(errorMessage);
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: errorMessage,
+      });
+    } finally {
+      setIsLoadingDocument(false);
+    }
+  };
+
   const handleResolve = async () => {
     if (!selectedError || !user) return;
 
@@ -281,6 +356,8 @@ export default function SyncErrorsPage() {
         setIsResolveDialogOpen(false);
         setSelectedError(null);
         setResolutionNotes('');
+        setDocumentDataUri(null);
+        setShowDocumentViewer(false);
         await loadErrors(false);
         await loadStats();
         // Announce to screen readers
@@ -564,6 +641,81 @@ export default function SyncErrorsPage() {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" aria-label="Clear errors menu">
+                <MoreVertical className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={async () => {
+                  if (confirm('Are you sure you want to delete all resolved errors? This action cannot be undone.')) {
+                    try {
+                      const result = await deleteResolvedDocumentSyncErrorsAction();
+                      if (result.error) {
+                        toast({
+                          variant: "destructive",
+                          title: "Error",
+                          description: result.error,
+                        });
+                      } else {
+                        toast({
+                          title: "Success",
+                          description: `Deleted ${result.data?.deletedCount || 0} resolved errors.`,
+                        });
+                        await loadErrors(false);
+                        await loadStats();
+                      }
+                    } catch (error) {
+                      toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: "Failed to delete resolved errors.",
+                      });
+                    }
+                  }
+                }}
+              >
+                <CheckCircle2 className="h-4 w-4 mr-2" />
+                Clear Resolved Errors
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={async () => {
+                  if (confirm('Are you sure you want to delete ALL errors? This action cannot be undone.')) {
+                    try {
+                      const result = await deleteAllDocumentSyncErrorsAction();
+                      if (result.error) {
+                        toast({
+                          variant: "destructive",
+                          title: "Error",
+                          description: result.error,
+                        });
+                      } else {
+                        toast({
+                          title: "Success",
+                          description: `Deleted ${result.data?.deletedCount || 0} errors.`,
+                        });
+                        await loadErrors(false);
+                        await loadStats();
+                      }
+                    } catch (error) {
+                      toast({
+                        variant: "destructive",
+                        title: "Error",
+                        description: "Failed to delete all errors.",
+                      });
+                    }
+                  }
+                }}
+                className="text-destructive focus:text-destructive"
+              >
+                <XCircle className="h-4 w-4 mr-2" />
+                Clear All Errors
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -1115,7 +1267,7 @@ export default function SyncErrorsPage() {
                                     setIsResolveDialogOpen(true);
                                     setResolutionNotes('');
                                   }}
-                                  disabled={error.resolved}
+                                  disabled={error.resolved === true}
                                   aria-label={`View details and resolve error for ${error.documentName || `Document ${error.documentID}`}`}
                                 >
                                   <Eye className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -1198,8 +1350,21 @@ export default function SyncErrorsPage() {
       </div>
 
       {/* Resolve Dialog */}
-      <Dialog open={isResolveDialogOpen} onOpenChange={setIsResolveDialogOpen}>
-        <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto">
+      <Dialog 
+        open={isResolveDialogOpen} 
+        onOpenChange={(open) => {
+          setIsResolveDialogOpen(open);
+          if (!open) {
+            setShowDocumentViewer(false);
+            setDocumentDataUri(null);
+            setDocumentLoadError(null);
+          }
+        }}
+      >
+        <DialogContent className={cn(
+          "max-h-[90vh] overflow-hidden flex flex-col",
+          showDocumentViewer ? "sm:max-w-[95vw] w-[95vw] h-[90vh]" : "sm:max-w-[700px]"
+        )}>
           <DialogHeader>
             <DialogTitle>Error Details</DialogTitle>
             <DialogDescription>
@@ -1213,7 +1378,63 @@ export default function SyncErrorsPage() {
               )}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4" role="region" aria-label="Error details">
+          
+          {showDocumentViewer ? (
+            <div className="flex-1 flex flex-col overflow-hidden min-h-0">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold">Document Viewer</h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setShowDocumentViewer(false);
+                    setDocumentDataUri(null);
+                    setDocumentLoadError(null);
+                  }}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Close Viewer
+                </Button>
+              </div>
+              {documentLoadError ? (
+                <div className="flex-1 flex items-center justify-center border rounded-lg bg-muted/40">
+                  <div className="text-center space-y-4 p-8">
+                    <AlertTriangle className="h-12 w-12 mx-auto text-destructive" />
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">Document Cannot Be Loaded</h3>
+                      <p className="text-sm text-muted-foreground mt-2 max-w-md">
+                        {documentLoadError}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : documentDataUri ? (
+                <div className="flex-1 overflow-hidden border rounded-lg" style={{ minHeight: 0, height: '100%' }}>
+                  <InvoiceViewer
+                    invoiceDataUri={documentDataUri}
+                    invoiceId={selectedError?.documentID.toString() || ''}
+                    highlightBox={null}
+                    hoveredField={null}
+                    hoveredConfidence={null}
+                    fullWidth={true}
+                  />
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center border rounded-lg bg-muted/40">
+                  <div className="text-center space-y-4 p-8">
+                    <Loader2 className="h-12 w-12 mx-auto text-muted-foreground animate-spin" />
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">Loading Document...</h3>
+                      <p className="text-sm text-muted-foreground mt-2">
+                        Please wait while we fetch the document content.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-4 py-4 overflow-y-auto flex-1" role="region" aria-label="Error details">
             {/* Basic Information */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-foreground">Basic Information</h3>
@@ -1254,7 +1475,7 @@ export default function SyncErrorsPage() {
                     Status
                   </Label>
                   <div id="detail-status" className="mt-1">
-                    <Badge variant={selectedError?.resolved ? "default" : "destructive"} className="gap-1">
+                    <Badge variant={selectedError?.resolved === true ? "default" : "destructive"} className="gap-1">
                       {selectedError?.resolved ? (
                         <>
                           <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
@@ -1532,13 +1753,37 @@ export default function SyncErrorsPage() {
               </div>
             </div>
           </div>
+          )}
           <DialogFooter>
+            {!showDocumentViewer && (
+              <Button
+                variant="outline"
+                onClick={handleLoadDocument}
+                disabled={isLoadingDocument || !selectedError}
+                aria-label="View document"
+              >
+                {isLoadingDocument ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                    Loading...
+                  </>
+                ) : (
+                  <>
+                    <Eye className="h-4 w-4 mr-2" aria-hidden="true" />
+                    View Document
+                  </>
+                )}
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => {
                 setIsResolveDialogOpen(false);
                 setSelectedError(null);
                 setResolutionNotes('');
+                setShowDocumentViewer(false);
+                setDocumentDataUri(null);
+                setDocumentLoadError(null);
               }}
               aria-label="Close dialog"
             >

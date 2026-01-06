@@ -17,7 +17,7 @@ import type { SmartAdvocateDocument } from '@/lib/crm/smartadvocate/types';
 import { findInvoiceByDocumentHash } from '@/lib/repositories/invoice.repository';
 import { createDocumentSyncError } from '@/lib/repositories/document-sync-error.repository';
 import { generateDocumentHash } from '@/lib/utils/document-hash';
-import { convertPdfToImageServer } from '@/lib/pdf-to-image-server';
+import { convertWordToPdf } from '@/lib/word-to-pdf-server';
 import { revalidatePath } from 'next/cache';
 import type { SyncEvent } from '@/lib/types/sync.types';
 
@@ -27,6 +27,8 @@ export const runtime = 'nodejs';
 const SUPPORTED_FILE_TYPES = [
   'application/pdf',
   'application/octet-stream',
+  'application/msword', // .doc
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
   'image/jpeg',
   'image/png',
   'image/jpg',
@@ -224,8 +226,61 @@ export async function GET(request: NextRequest) {
               // Fetch document content
               const content = await getDocumentContent(metadata.documentID);
 
+              // Check for .msg format (Microsoft Outlook message files)
+              const fileExtension = metadata.documentName?.split('.').pop()?.toLowerCase() || '';
+              const isMsgFile = fileExtension === 'msg' || 
+                                content.contentType === 'application/vnd.ms-outlook' ||
+                                content.contentType === 'message/rfc822';
+              
+              if (isMsgFile) {
+                result.failed++;
+                result.processedDocuments++;
+                const errorMessage = 'Unsupported format';
+
+                await createDocumentSyncError({
+                  documentID: doc.documentID,
+                  error: errorMessage,
+                  errorType: 'Unsupported File Type',
+                  caseID: doc.caseID,
+                  caseNumber: doc.caseNumber,
+                  documentName: doc.documentName,
+                  contentType: content.contentType,
+                  fileSize: content.size,
+                  categoryID: doc.categoryID,
+                  categoryName: doc.categoryName,
+                  subCategoryID: doc.subCategoryID,
+                  subCategoryName: doc.subCategoryName,
+                });
+
+                sendEvent({
+                  type: 'document_error',
+                  timestamp: new Date().toISOString(),
+                  data: {
+                    currentDocument: documentCounter,
+                    totalDocuments: result.filteredDocuments,
+                    processedDocuments: result.processedDocuments,
+                    successful: result.successful,
+                    failed: result.failed,
+                    skipped: result.skipped,
+                    updated: result.updated,
+                    documentId: metadata.documentID,
+                    documentName: metadata.documentName,
+                    caseNumber: metadata.caseNumber,
+                    status: 'error',
+                    error: errorMessage,
+                  },
+                });
+
+                await new Promise(resolve => setTimeout(resolve, DOCUMENT_DELAY_MS));
+                continue;
+              }
+
               // Check file type
-              if (!SUPPORTED_FILE_TYPES.includes(content.contentType)) {
+              // Allow application/octet-stream if it's a Word document (detected by extension)
+              const isOctetStreamWordDoc = content.contentType === 'application/octet-stream' && 
+                (fileExtension === 'doc' || fileExtension === 'docx');
+              
+              if (!SUPPORTED_FILE_TYPES.includes(content.contentType) && !isOctetStreamWordDoc) {
                 result.failed++;
                 result.processedDocuments++;
                 const errorMessage = `Unsupported file type: ${content.contentType}`;
@@ -268,23 +323,81 @@ export async function GET(request: NextRequest) {
                 continue;
               }
 
-              // Convert PDF to image if needed
+              // Convert Word documents to PDF first, then convert PDF to image if needed
               let invoiceDataUri = content.dataUri;
+              
+              // Detect Word documents by both MIME type and file extension
+              // Word documents might come as application/octet-stream with .doc/.docx extension
+              const isWordDocumentByMime = 
+                content.contentType === 'application/msword' ||
+                content.contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+              const isWordDocumentByExtension = 
+                fileExtension === 'doc' || fileExtension === 'docx';
+              const isWordDocument = isWordDocumentByMime || 
+                (content.contentType === 'application/octet-stream' && isWordDocumentByExtension);
+              
               const isPdfOrOctetStream =
                 content.contentType === 'application/pdf' ||
-                content.contentType === 'application/octet-stream';
+                (content.contentType === 'application/octet-stream' && !isWordDocument);
 
-              if (isPdfOrOctetStream) {
+              // Convert Word documents to PDF first
+              if (isWordDocument) {
                 try {
-                  invoiceDataUri = await convertPdfToImageServer(content.dataUri);
+                  // Determine if it's .docx or .doc
+                  // Check MIME type first, then file extension, then default to docx
+                  let isDocx = content.contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+                  if (!isDocx && content.contentType !== 'application/msword') {
+                    // If MIME type is octet-stream, use file extension
+                    isDocx = fileExtension === 'docx';
+                  }
+                  
+                  console.log(`[Document Sync] Converting ${isDocx ? '.docx' : '.doc'} to PDF for document ${metadata.documentID}...`);
+                  const convertedPdf = await convertWordToPdf(content.dataUri, isDocx);
+                  
+                  // Validate that the conversion actually produced a PDF
+                  // Use same parsing as pdf-to-image-server.ts
+                  const dataUriMatch = convertedPdf.match(/^data:(.+?);base64,(.+)$/);
+                  if (!dataUriMatch || !dataUriMatch[2]) {
+                    throw new Error(`Word-to-PDF conversion returned invalid data URI format: ${convertedPdf.substring(0, 50)}...`);
+                  }
+                  
+                  const pdfBase64 = dataUriMatch[2];
+                  let pdfBuffer: Buffer;
+                  try {
+                    pdfBuffer = Buffer.from(pdfBase64, 'base64');
+                  } catch (error) {
+                    throw new Error(`Failed to decode base64 PDF data: ${error instanceof Error ? error.message : String(error)}`);
+                  }
+                  
+                  // Check if it's actually a PDF (starts with %PDF)
+                  if (pdfBuffer.length < 4) {
+                    throw new Error(`Word-to-PDF conversion returned invalid PDF - buffer too short (${pdfBuffer.length} bytes)`);
+                  }
+                  
+                  if (pdfBuffer[0] !== 0x25 || pdfBuffer[1] !== 0x50 || 
+                      pdfBuffer[2] !== 0x44 || pdfBuffer[3] !== 0x46) {
+                    const firstBytes = Array.from(pdfBuffer.slice(0, Math.min(10, pdfBuffer.length)))
+                      .map(b => `0x${b.toString(16).padStart(2, '0')}`)
+                      .join(' ');
+                    throw new Error(
+                      `Word-to-PDF conversion failed - returned invalid PDF data. ` +
+                      `Expected PDF signature (0x25 0x50 0x44 0x46) but got: ${firstBytes}. ` +
+                      `Buffer length: ${pdfBuffer.length} bytes. ` +
+                      `This indicates LibreOffice conversion failed or returned the original Word document.`
+                    );
+                  }
+                  
+                  invoiceDataUri = convertedPdf;
+                  console.log(`[Document Sync] Successfully converted Word document to PDF for document ${metadata.documentID} (${pdfBuffer.length} bytes)`);
                 } catch (error) {
                   const errorMsg = error instanceof Error ? error.message : String(error);
+                  console.error(`[Document Sync] Word-to-PDF conversion failed for document ${metadata.documentID}:`, errorMsg);
                   result.failed++;
                   result.processedDocuments++;
 
                   await createDocumentSyncError({
                     documentID: doc.documentID,
-                    error: `Failed to convert PDF: ${errorMsg}`,
+                    error: `Failed to convert Word document to PDF: ${errorMsg}`,
                     errorType: 'Processing Error',
                     caseID: doc.caseID,
                     caseNumber: doc.caseNumber,
@@ -310,7 +423,57 @@ export async function GET(request: NextRequest) {
                       documentName: metadata.documentName,
                       caseNumber: metadata.caseNumber,
                       status: 'error',
-                      error: `PDF conversion failed: ${errorMsg}`,
+                      error: `Word document conversion failed: ${errorMsg}`,
+                    },
+                  });
+
+                  await new Promise(resolve => setTimeout(resolve, DOCUMENT_DELAY_MS));
+                  continue;
+                }
+              }
+
+              // Skip PDF-to-image conversion - save PDFs directly
+              // The invoice viewer supports PDFs natively, so no conversion is needed
+              // This avoids canvas dependency issues and preserves original document quality
+              console.log(`[Document Sync] Using original document format for document ${metadata.documentID} (PDF/image)`);
+
+              // Validate data URI before processing
+              if (invoiceDataUri.startsWith('data:')) {
+                const dataUriMatch = invoiceDataUri.match(/^data:([^;]+);base64,(.+)$/);
+                if (!dataUriMatch || !dataUriMatch[2] || dataUriMatch[2].length === 0) {
+                  result.failed++;
+                  result.processedDocuments++;
+
+                  const errorMsg = 'Invalid or incomplete data URI - document data is missing';
+                  await createDocumentSyncError({
+                    documentID: doc.documentID,
+                    error: errorMsg,
+                    errorType: 'Processing Error',
+                    caseID: doc.caseID,
+                    caseNumber: doc.caseNumber,
+                    documentName: doc.documentName,
+                    contentType: content.contentType,
+                    fileSize: content.size,
+                    categoryID: doc.categoryID,
+                    categoryName: doc.categoryName,
+                  });
+
+                  sendEvent({
+                    type: 'document_error',
+                    timestamp: new Date().toISOString(),
+                    data: {
+                      currentDocument: documentCounter,
+                      totalDocuments: result.filteredDocuments,
+                      processedDocuments: result.processedDocuments,
+                      successful: result.successful,
+                      failed: result.failed,
+                      skipped: result.skipped,
+                      updated: result.updated,
+                      documentId: metadata.documentID,
+                      documentName: metadata.documentName,
+                      caseNumber: metadata.caseNumber,
+                      status: 'error',
+                      error: errorMsg,
                     },
                   });
 

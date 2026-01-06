@@ -480,3 +480,33 @@ export async function getDocumentSyncErrorStats(): Promise<{
   return stats;
 }
 
+/**
+ * Delete a document sync error by ID
+ */
+export async function deleteDocumentSyncError(id: string): Promise<void> {
+  const db = await getDatabase();
+  await db
+    .delete(documentSyncErrors)
+    .where(eq(documentSyncErrors.id, id));
+}
+
+/**
+ * Delete all document sync errors (use with caution)
+ */
+export async function deleteAllDocumentSyncErrors(): Promise<number> {
+  const db = await getDatabase();
+  const result = await db.delete(documentSyncErrors);
+  return result.rowCount || 0;
+}
+
+/**
+ * Delete all resolved document sync errors
+ */
+export async function deleteResolvedDocumentSyncErrors(): Promise<number> {
+  const db = await getDatabase();
+  const result = await db
+    .delete(documentSyncErrors)
+    .where(eq(documentSyncErrors.resolved, true));
+  return result.rowCount || 0;
+}
+

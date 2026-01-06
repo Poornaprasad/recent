@@ -71,12 +71,27 @@ export async function findInvoiceById(id: string): Promise<StoredInvoice | undef
 
 /**
  * Create or update an invoice (upsert)
+ * Handles conflicts on both id and document_hash
  */
 export async function upsertInvoice(invoice: StoredInvoice): Promise<void> {
   const db = await getDatabase();
 
   const row = mapInvoiceToDbRow(invoice) as Invoice;
 
+  // If document_hash is provided, check if an invoice with that hash already exists
+  if (invoice.documentHash) {
+    const existingByHash = await findInvoiceByDocumentHash(invoice.documentHash);
+    if (existingByHash) {
+      // Update the existing invoice by its ID
+      await db
+        .update(invoices)
+        .set(row)
+        .where(eq(invoices.id, existingByHash.id));
+      return;
+    }
+  }
+
+  // Otherwise, do normal upsert on id
   await db
     .insert(invoices)
     .values(row)

@@ -206,6 +206,17 @@ export async function getDocumentContent(
         throw createHttpError(res.status, errorText || res.statusText);
       }
 
+      // Check content length header
+      const contentLength = res.headers.get('content-length');
+      if (contentLength) {
+        const length = parseInt(contentLength, 10);
+        if (length === 0) {
+          console.error(`[SmartAdvocate] Document ${documentID} has Content-Length: 0`);
+          throw new Error(`Document content is empty (Content-Length: 0). The document may not exist or may be corrupted.`);
+        }
+        console.log(`[SmartAdvocate] Document ${documentID} Content-Length: ${length} bytes`);
+      }
+
       return res;
     } catch (error: unknown) {
       if (error instanceof Error && error.name === 'AbortError') {
@@ -224,9 +235,39 @@ export async function getDocumentContent(
   const arrayBuffer = await response.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
 
+  // Validate buffer is not empty
+  if (buffer.length === 0) {
+    console.error(`[SmartAdvocate] Document ${documentID} has empty content`);
+    throw new Error(`Document content is empty (0 bytes). The document may not exist or may be corrupted.`);
+  }
+
+  console.log(`[SmartAdvocate] Document ${documentID} fetched successfully: ${buffer.length} bytes`);
+
   // Convert to base64 data URI
   const base64 = buffer.toString('base64');
+  
+  // Validate base64 conversion
+  if (!base64 || base64.length === 0) {
+    console.error(`[SmartAdvocate] Document ${documentID} base64 conversion failed. Buffer length: ${buffer.length}`);
+    throw new Error(`Failed to convert document to base64. Buffer length: ${buffer.length} bytes`);
+  }
+  
+  // Validate base64 string is reasonable length (should be ~4/3 of buffer size)
+  const expectedBase64Length = Math.ceil(buffer.length * 4 / 3);
+  if (base64.length < expectedBase64Length * 0.9) {
+    console.warn(`[SmartAdvocate] Document ${documentID} base64 length (${base64.length}) is shorter than expected (${expectedBase64Length})`);
+  }
+  
   const dataUri = `data:${contentType};base64,${base64}`;
+
+  // Validate data URI format
+  const dataUriMatch = dataUri.match(/^data:([^;]+);base64,(.+)$/);
+  if (!dataUriMatch || !dataUriMatch[2] || dataUriMatch[2].length === 0) {
+    console.error(`[SmartAdvocate] Document ${documentID} invalid data URI format. Data URI length: ${dataUri.length}, Base64 length: ${base64.length}, Buffer length: ${buffer.length}`);
+    throw new Error(`Invalid data URI format. Document size: ${buffer.length} bytes, Base64 length: ${base64.length}`);
+  }
+  
+  console.log(`[SmartAdvocate] Document ${documentID} data URI created successfully: ${dataUri.length} chars (base64: ${base64.length} chars)`);
 
   return {
     documentID,

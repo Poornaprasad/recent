@@ -26,6 +26,7 @@ interface InvoiceViewerProps {
   hoveredField: string | null;
   hoveredConfidence: number | null;
   onImageLoad?: (dimensions: { width: number; height: number; left: number; top: number }) => void;
+  fullWidth?: boolean; // If true, use full width instead of 50% (for dialogs)
 }
 
 export function InvoiceViewer({
@@ -35,6 +36,7 @@ export function InvoiceViewer({
   hoveredField,
   hoveredConfidence,
   onImageLoad,
+  fullWidth = false,
 }: InvoiceViewerProps) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -129,6 +131,33 @@ export function InvoiceViewer({
 
   // Convert relative file paths to absolute URLs for PDF viewer
   const getAbsoluteUri = (uri: string): string => {
+    // If it's already a full URL (http/https) or API route, use it directly
+    if (uri.startsWith('http://') || uri.startsWith('https://') || uri.startsWith('/api/')) {
+      if (uri.startsWith('/api/') && typeof window !== 'undefined') {
+        return `${window.location.origin}${uri}`;
+      }
+      return uri;
+    }
+    
+    // Validate data URI format - check if it's complete
+    if (uri.startsWith('data:')) {
+      // Check if data URI has the base64 data part
+      const dataUriMatch = uri.match(/^data:([^;]+);base64,(.+)$/);
+      if (!dataUriMatch || !dataUriMatch[2] || dataUriMatch[2].length === 0) {
+        console.error(`Invalid or incomplete data URI for invoice ${invoiceId}:`, uri.substring(0, 100));
+        console.error(`Data URI length: ${uri.length}, Missing base64 data`);
+        // Return empty string to trigger error handling
+        return '';
+      }
+      
+      // Additional validation: check if base64 data is reasonable length
+      const base64Data = dataUriMatch[2];
+      if (base64Data.length < 10) {
+        console.error(`Data URI has suspiciously short base64 data (${base64Data.length} chars) for invoice ${invoiceId}`);
+        return '';
+      }
+    }
+    
     if (uri.startsWith('/uploads/')) {
       // Convert /uploads/... to /api/uploads/... to use the API route handler
       const apiPath = uri.replace('/uploads/', '/api/uploads/');
@@ -142,7 +171,14 @@ export function InvoiceViewer({
   };
 
   const absoluteUri = invoiceDataUri ? getAbsoluteUri(invoiceDataUri) : '';
-  const isPdf = absoluteUri && (absoluteUri.startsWith('data:application/pdf') || absoluteUri.endsWith('.pdf'));
+  const isPdf = absoluteUri && (
+    absoluteUri.startsWith('data:application/pdf') || 
+    absoluteUri.endsWith('.pdf') ||
+    absoluteUri.includes('/api/documents/') // API route for documents (could be PDF or other formats)
+  );
+  
+  // Check if we have a valid URI to display
+  const hasValidUri = absoluteUri && absoluteUri.length > 0;
 
   const renderHighlightBox = () => {
     if (!highlightBox || highlightBox.length < 4) return null;
@@ -247,10 +283,15 @@ export function InvoiceViewer({
     );
   };
 
-  // Show error message if no document URI is provided
-  if (!invoiceDataUri) {
+  // Show error message if no document URI is provided or if data URI is invalid/incomplete
+  if (!invoiceDataUri || !hasValidUri) {
+    // Check if it's an incomplete data URI
+    const isIncompleteDataUri = invoiceDataUri?.startsWith('data:') && 
+                                 invoiceDataUri.includes('base64,') && 
+                                 invoiceDataUri.split('base64,')[1]?.length === 0;
+    
     return (
-      <div className="w-1/2 border-r flex flex-col bg-muted/40 relative overflow-hidden" ref={containerRef}>
+      <div className={fullWidth ? "w-full flex flex-col bg-muted/40 relative overflow-hidden" : "w-1/2 border-r flex flex-col bg-muted/40 relative overflow-hidden"} ref={containerRef} style={fullWidth ? { width: '100%', height: '100%' } : undefined}>
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="text-center space-y-4">
             <div className="text-muted-foreground">
@@ -272,7 +313,11 @@ export function InvoiceViewer({
             <div>
               <h3 className="text-lg font-semibold text-foreground">Document Not Available</h3>
               <p className="text-sm text-muted-foreground mt-2">
-                The invoice document could not be loaded. The file may have been deleted or is missing.
+                {!invoiceDataUri 
+                  ? 'The invoice document could not be loaded. The file may have been deleted or is missing.'
+                  : isIncompleteDataUri
+                  ? 'The document data is incomplete or corrupted. The document may be empty or the download failed. Please try again or contact support.'
+                  : 'The invoice document data is invalid or incomplete. Please contact support if this issue persists.'}
               </p>
             </div>
           </div>
@@ -283,9 +328,15 @@ export function InvoiceViewer({
 
   return (
     <div 
-      className="w-1/2 border-r flex flex-col bg-muted/40 relative overflow-hidden" 
+      className={fullWidth ? "w-full flex flex-col bg-muted/40 relative overflow-hidden" : "w-1/2 border-r flex flex-col bg-muted/40 relative overflow-hidden"} 
       ref={containerRef}
-      style={{ 
+      style={fullWidth ? {
+        width: '100%',
+        maxWidth: '100%',
+        minWidth: 0,
+        flex: 1,
+        height: '100%'
+      } : {
         maxWidth: '50%',
         minWidth: 0,
         width: '50%',
@@ -438,7 +489,23 @@ export function InvoiceViewer({
                   }, 100);
                 }}
                 onError={(e) => {
-                  console.error(`Failed to load invoice image for ${invoiceId}:`, absoluteUri);
+                  const errorDetails = {
+                    invoiceId,
+                    uriLength: absoluteUri?.length || 0,
+                    uriPreview: absoluteUri?.substring(0, 100) || 'empty',
+                    isDataUri: absoluteUri?.startsWith('data:') || false,
+                    hasBase64: absoluteUri?.includes('base64,') || false,
+                  };
+                  console.error(`Failed to load invoice image for ${invoiceId}:`, errorDetails);
+                  
+                  // If it's an incomplete data URI, log more details
+                  if (absoluteUri?.startsWith('data:') && absoluteUri.includes('base64,')) {
+                    const base64Part = absoluteUri.split('base64,')[1];
+                    console.error(`Base64 data length: ${base64Part?.length || 0} characters`);
+                    if (!base64Part || base64Part.length === 0) {
+                      console.error('ERROR: Data URI is missing base64 data entirely!');
+                    }
+                  }
                 }}
               />
               {/* Bounding box overlay for images - positioned relative to scaled image container */}

@@ -89,8 +89,21 @@ function getFileExtension(filename: string): string {
 /**
  * Check if file type is supported based on content type and file extension
  */
-function isFileTypeSupported(contentType: string, documentName?: string): { supported: boolean; fileExtension: string } {
+function isFileTypeSupported(contentType: string, documentName?: string): { supported: boolean; fileExtension: string; errorMessage?: string } {
   const fileExtension = getFileExtension(documentName || '');
+  
+  // Check for .msg format (Microsoft Outlook message files) - unsupported
+  const isMsgFile = fileExtension === 'msg' || 
+                    contentType === 'application/vnd.ms-outlook' ||
+                    contentType === 'message/rfc822';
+  
+  if (isMsgFile) {
+    return {
+      supported: false,
+      fileExtension,
+      errorMessage: 'Unsupported format',
+    };
+  }
   
   // Allow if content type is supported
   const isContentTypeSupported = SUPPORTED_FILE_TYPES.includes(contentType);
@@ -273,11 +286,12 @@ export async function syncDocumentsCore(
         );
 
         // Check if file type is supported (by content type or file extension)
-        const { supported: isSupported, fileExtension } = isFileTypeSupported(content.contentType, metadata.documentName);
+        const { supported: isSupported, fileExtension, errorMessage: customErrorMessage } = isFileTypeSupported(content.contentType, metadata.documentName);
         
         if (!isSupported) {
           result.failed++;
-          const errorMessage = `Unsupported file type: ${content.contentType}${fileExtension ? ` (extension: .${fileExtension})` : ''}. Only PDF, images, and Word documents are supported.`;
+          // Use custom error message for .msg files, otherwise use default message
+          const errorMessage = customErrorMessage || `Unsupported file type: ${content.contentType}${fileExtension ? ` (extension: .${fileExtension})` : ''}. Only PDF, images, and Word documents are supported.`;
           result.errors.push({
             documentID: metadata.documentID,
             error: errorMessage,

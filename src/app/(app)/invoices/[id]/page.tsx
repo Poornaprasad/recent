@@ -173,6 +173,20 @@ export default function InvoiceDetailPage() {
           } else {
             // Check if it's already a valid URI (data URI or URL)
             if (originalUri.startsWith('data:') || originalUri.startsWith('http://') || originalUri.startsWith('https://')) {
+              // Validate data URI format - check if it's complete
+              if (originalUri.startsWith('data:')) {
+                const dataUriMatch = originalUri.match(/^data:([^;]+);base64,(.+)$/);
+                if (!dataUriMatch || !dataUriMatch[2] || dataUriMatch[2].length === 0) {
+                  console.error(`Invalid or incomplete data URI for invoice ${id}:`, originalUri.substring(0, 100));
+                  toast({
+                    variant: 'destructive',
+                    title: 'Invalid Document Data',
+                    description: 'The invoice document data is invalid or incomplete. Please try syncing the document again.',
+                  });
+                  setInvoiceDataUri('');
+                  return;
+                }
+              }
               // Already a valid URI, use it directly
               setInvoiceDataUri(originalUri);
             } else if (originalUri.startsWith('/uploads/')) {

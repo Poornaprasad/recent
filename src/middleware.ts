@@ -12,7 +12,8 @@ import type { NextRequest } from 'next/server';
 const PUBLIC_API_ROUTES = ['/api/auth/login', '/api/uploads'];
 
 // Routes that accept token via query parameter (for SSE/EventSource which doesn't support headers)
-const QUERY_TOKEN_ROUTES = ['/api/sync/stream'];
+// Also for document viewing where PDF viewers can't send custom headers
+const QUERY_TOKEN_ROUTES = ['/api/sync/stream', '/api/documents'];
 
 export function middleware(request: NextRequest) {
   const { pathname, searchParams } = request.nextUrl;

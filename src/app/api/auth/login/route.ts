@@ -1,61 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserByEmail } from '@/lib/repositories/user.repository';
 import bcrypt from 'bcryptjs';
-import { randomUUID, randomBytes } from 'crypto';
-import jwt from 'jsonwebtoken';
+import { randomUUID } from 'crypto';
 import type { User } from '@/lib/domain/types';
 import { auditService } from '@/lib/core/audit/audit.service';
-
-// JWT configuration
-const JWT_EXPIRY = '24h';
-const JWT_ALGORITHM = 'HS256' as const;
-
-/**
- * Get JWT secret from environment variable
- * In development, falls back to a randomly generated secret (not persistent across restarts)
- * In production, JWT_SECRET environment variable is REQUIRED
- */
-function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-
-  if (secret) {
-    return secret;
-  }
-
-  // In production, JWT_SECRET is required
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error(
-      'SECURITY: JWT_SECRET environment variable is required in production. ' +
-      'Please set a strong, random secret (at least 32 characters).'
-    );
-  }
-
-  // Development fallback - generate a temporary secret
-  // Warning: This means tokens won't persist across server restarts in development
-  console.warn('[AUTH] JWT_SECRET not set, using temporary development secret');
-  return randomBytes(32).toString('hex');
-}
-
-/**
- * Generate a signed JWT token for authentication
- * Uses HS256 algorithm with a secret key
- */
-function generateToken(userId: string, email: string, role: string): string {
-  const secret = getJwtSecret();
-
-  const payload = {
-    sub: userId,      // Subject (user ID)
-    email,            // User email
-    role,             // User role for authorization
-    type: 'access',   // Token type
-  };
-
-  return jwt.sign(payload, secret, {
-    algorithm: JWT_ALGORITHM,
-    expiresIn: JWT_EXPIRY,
-    issuer: 'invoice-management-system',
-  });
-}
+import { generateToken } from '@/lib/utils/jwt';
 
 export async function POST(request: NextRequest) {
   // Get client IP address for audit logging

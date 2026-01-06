@@ -1,18 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getUserById } from '@/lib/repositories/user.repository';
-
-// Parse token to extract userId (matching login route format)
-function parseToken(token: string): { userId: string } | null {
-  try {
-    const payload = JSON.parse(Buffer.from(token, 'base64').toString('utf-8'));
-    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) {
-      return null; // Token expired
-    }
-    return { userId: payload.userId };
-  } catch {
-    return null;
-  }
-}
+import { verifyToken } from '@/lib/utils/jwt';
 
 export async function GET(request: NextRequest) {
   try {
@@ -26,7 +14,7 @@ export async function GET(request: NextRequest) {
     }
 
     const token = authHeader.substring(7);
-    const tokenData = parseToken(token);
+    const tokenData = verifyToken(token);
 
     if (!tokenData) {
       return NextResponse.json(
