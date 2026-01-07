@@ -265,8 +265,9 @@ export default function SyncErrorsPage() {
 
   const totalPages = Math.ceil(filteredCount() / rowsPerPage);
 
-  const handleLoadDocument = async () => {
-    if (!selectedError) return;
+  const handleLoadDocument = async (error?: DocumentSyncError) => {
+    const targetError = error || selectedError;
+    if (!targetError) return;
 
     setIsLoadingDocument(true);
     setDocumentDataUri(null);
@@ -275,7 +276,7 @@ export default function SyncErrorsPage() {
     setShowDocumentViewer(false);
     
     try {
-      const result = await getDocumentContentAction(selectedError.documentID);
+      const result = await getDocumentContentAction(targetError.documentID);
       if (result.error) {
         const errorMsg = result.error;
         setDocumentLoadError(errorMsg);
@@ -335,6 +336,14 @@ export default function SyncErrorsPage() {
     } finally {
       setIsLoadingDocument(false);
     }
+  };
+
+  const handleViewDocument = async (error: DocumentSyncError) => {
+    setSelectedError(error);
+    setIsResolveDialogOpen(true);
+    setResolutionNotes('');
+    // Automatically load the document when opening the dialog
+    await handleLoadDocument(error);
   };
 
   const handleResolve = async () => {
@@ -1117,6 +1126,7 @@ export default function SyncErrorsPage() {
                         </Button>
                       </TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>View Document</TableHead>
                       <TableHead>
                         <span className="sr-only">Actions</span>
                       </TableHead>
@@ -1254,6 +1264,36 @@ export default function SyncErrorsPage() {
                                 </>
                               )}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleViewDocument(error)}
+                                    disabled={isLoadingDocument && selectedError?.id === error.id}
+                                    aria-label={`View document for ${error.documentName || `Document ${error.documentID}`}`}
+                                  >
+                                    {isLoadingDocument && selectedError?.id === error.id ? (
+                                      <>
+                                        <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                                        <span className="sr-only sm:not-sr-only">Loading...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Eye className="h-4 w-4 mr-2" aria-hidden="true" />
+                                        <span className="sr-only sm:not-sr-only">View</span>
+                                      </>
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>View document</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </TableCell>
                           <TableCell>
                             <DropdownMenu>
@@ -1767,7 +1807,7 @@ export default function SyncErrorsPage() {
             {!showDocumentViewer && (
               <Button
                 variant="outline"
-                onClick={handleLoadDocument}
+                onClick={() => handleLoadDocument()}
                 disabled={isLoadingDocument || !selectedError}
                 aria-label="View document"
               >
