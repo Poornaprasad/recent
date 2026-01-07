@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -54,11 +54,17 @@ export function DisbursementFormModal({
   const [isLoadingContacts, setIsLoadingContacts] = useState(false);
   const [isCheckingDuplicates, setIsCheckingDuplicates] = useState(false);
   const [duplicateCheckResult, setDuplicateCheckResult] = useState<DuplicateCheckResult | null>(null);
+  const hasAutoCheckedRef = useRef(false);
 
   // Debug: Log when modal opens
   useEffect(() => {
     if (isOpen) {
       console.log('DisbursementFormModal opened for invoice:', invoice?.id, 'Case number:', invoice?.caseNumber);
+      // Reset auto-check flag when modal opens
+      hasAutoCheckedRef.current = false;
+    } else {
+      // Reset when modal closes
+      hasAutoCheckedRef.current = false;
     }
   }, [isOpen, invoice]);
 
@@ -272,6 +278,24 @@ export function DisbursementFormModal({
       }
     }
   }, [isOpen, invoiceNumber, invoice.invoiceNumber?.value, invoice.caseNumber, plaintiffName]);
+
+  // Auto-trigger duplicate check when modal opens and all required fields are available
+  useEffect(() => {
+    if (
+      isOpen && 
+      caseID && 
+      payeeName && 
+      invoiceNumber && 
+      invoiceDate && 
+      !isCheckingDuplicates && 
+      !hasAutoCheckedRef.current
+    ) {
+      // Only trigger once when all required fields are present
+      console.log('Auto-triggering duplicate check on modal open');
+      hasAutoCheckedRef.current = true;
+      handleCheckDuplicates();
+    }
+  }, [isOpen, caseID, payeeName, invoiceNumber, invoiceDate, isCheckingDuplicates]);
 
   // Load case info to get caseID and plaintiff ID
   const loadCaseInfo = async (caseNumber: string) => {
