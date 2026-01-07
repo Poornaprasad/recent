@@ -227,10 +227,32 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
     tempPdfPath = path.join(tempDir, `pdf-${uniqueId}.pdf`);
     await writeFile(tempPdfPath, pdfBuffer);
     
+    // Adaptive DPI based on PDF size to prevent stack overflow
+    // Larger PDFs need lower DPI to keep image sizes manageable
+    const pdfSizeMB = pdfBuffer.length / (1024 * 1024);
+    let density = 200; // Default DPI
+    if (pdfSizeMB > 8) {
+      density = 150; // Reduce DPI for large PDFs (>8MB) to prevent stack overflow
+    } else if (pdfSizeMB > 5) {
+      density = 175; // Slightly reduce for medium-large PDFs (5-8MB)
+    }
+    
+    // Check page count and further reduce DPI if many pages
+    try {
+      const pageCount = await getPdfPageCount(pdfDataUri);
+      if (pageCount > 20) {
+        density = Math.min(density, 150); // Cap at 150 DPI for PDFs with many pages
+      } else if (pageCount > 10) {
+        density = Math.min(density, 175); // Cap at 175 DPI for PDFs with 10-20 pages
+      }
+    } catch (error) {
+      // If page count check fails, use default density
+      console.warn(`[PDF-to-Image] Could not check page count, using density ${density}`);
+    }
+    
     // Use pdftoppm to convert PDF to JPEG images
     // pdftoppm converts all pages and names them with -1, -2, etc.
     const outputPrefix = path.join(tempDir, `page-${uniqueId}`);
-    const density = 200; // DPI
     
     // Run pdftoppm: pdftoppm -jpeg -r 200 input.pdf output-prefix
     // This will create output-prefix-1.jpg, output-prefix-2.jpg, etc.
@@ -273,8 +295,20 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
     
     console.log(`Successfully converted PDF to ${pageImages.length} page(s)`);
     
-    // If single page, return it directly
+    // If single page, check size and return it directly
     if (pageImages.length === 1) {
+      const singlePageSizeMB = (pageImages[0].length * 3) / (4 * 1024 * 1024); // Approximate binary size
+      const maxImageSizeMB = 20; // Limit to 20MB for single page images
+      
+      if (singlePageSizeMB > maxImageSizeMB) {
+        throw new Error(
+          `Converted image is too large (${Math.round(singlePageSizeMB)}MB). ` +
+          `Maximum size is ${maxImageSizeMB}MB. ` +
+          `The PDF page may be too large or high resolution. ` +
+          `Please use a smaller file or reduce the PDF resolution.`
+        );
+      }
+      
       return `data:image/jpeg;base64,${pageImages[0]}`;
     }
     
@@ -309,10 +343,35 @@ export async function convertPdfToImageServer(pdfDataUri: string): Promise<strin
       currentY += img.height + pageGap;
     }
     
-    // Convert to JPEG data URI with compression
-    const quality = pageImages.length === 1 ? 0.9 : pageImages.length <= 3 ? 0.8 : 0.75;
+    // Convert to JPEG data URI with adaptive compression
+    // Lower quality for more pages or larger images to prevent stack overflow
+    let quality = pageImages.length === 1 ? 0.9 : pageImages.length <= 3 ? 0.8 : 0.75;
+    
+    // Further reduce quality for very large combined images
+    const estimatedImageSizeMB = (maxWidth * totalHeight * 3) / (1024 * 1024); // Rough estimate (RGB)
+    if (estimatedImageSizeMB > 50) {
+      quality = 0.6; // Very low quality for huge images
+    } else if (estimatedImageSizeMB > 30) {
+      quality = 0.7; // Low quality for large images
+    } else if (estimatedImageSizeMB > 15) {
+      quality = Math.min(quality, 0.75); // Cap quality for medium-large images
+    }
+    
     const buffer = canvas.toBuffer('image/jpeg', { quality });
     const base64 = buffer.toString('base64');
+    
+    // Check final image size to prevent stack overflow
+    const finalImageSizeMB = (base64.length * 3) / (4 * 1024 * 1024); // Approximate binary size
+    const maxImageSizeMB = 20; // Limit to 20MB for final image to prevent stack overflow
+    
+    if (finalImageSizeMB > maxImageSizeMB) {
+      throw new Error(
+        `Converted image is too large (${Math.round(finalImageSizeMB)}MB). ` +
+        `Maximum size is ${maxImageSizeMB}MB. ` +
+        `The PDF may be too large or have too many pages. ` +
+        `Please split the document or use a smaller file.`
+      );
+    }
     
     return `data:image/jpeg;base64,${base64}`;
   } catch (error) {

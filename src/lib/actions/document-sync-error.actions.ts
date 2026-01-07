@@ -163,6 +163,34 @@ export async function retryDocumentSyncAction(
     // Fetch document content
     const content = await getDocumentContent(documentID);
 
+    // Check document size before processing to prevent stack overflow
+    // Note: This check only applies to processing/retry, NOT to viewing
+    // Documents can always be viewed regardless of size
+    const dataUriMatch = content.dataUri.match(/^data:([^;]+);base64,(.+)$/);
+    if (dataUriMatch && dataUriMatch[2]) {
+      const base64Data = dataUriMatch[2];
+      const estimatedSize = (base64Data.length * 3) / 4; // Approximate binary size
+      const maxSize = 50 * 1024 * 1024; // 50MB
+      if (estimatedSize > maxSize) {
+        throw new Error(
+          `Document is too large for processing (${Math.round(estimatedSize / 1024 / 1024)}MB). ` +
+          `Maximum size for processing is ${maxSize / 1024 / 1024}MB. ` +
+          `Note: You can still view this document, but it cannot be automatically processed. ` +
+          `Please split the document into smaller files or process it manually.`
+        );
+      }
+    } else {
+      // If content.size is available, check that instead (for non-data-URI content)
+      if (content.size && content.size > 50 * 1024 * 1024) {
+        throw new Error(
+          `Document is too large for processing (${Math.round(content.size / 1024 / 1024)}MB). ` +
+          `Maximum size for processing is 50MB. ` +
+          `Note: You can still view this document, but it cannot be automatically processed. ` +
+          `Please split the document into smaller files or process it manually.`
+        );
+      }
+    }
+
     // Check for unsupported file types
     const fileExtension = syncError.documentName?.split('.').pop()?.toLowerCase() || '';
     const isMsgFile = fileExtension === 'msg' || 
@@ -216,7 +244,47 @@ export async function retryDocumentSyncAction(
       (content.contentType === 'application/octet-stream' && !isWordDocument);
 
     if (isPdfOrOctetStream) {
+      // Check PDF page count before conversion to prevent stack overflow
+      // Large PDFs with many pages can cause stack overflow during processing
+      try {
+        const { getPdfPageCount } = await import('../pdf-to-image-server');
+        const pageCount = await getPdfPageCount(invoiceDataUri);
+        const maxPages = 50; // Limit to 50 pages to prevent stack overflow
+        if (pageCount > maxPages) {
+          throw new Error(
+            `PDF has too many pages for processing (${pageCount} pages). ` +
+            `Maximum supported for processing is ${maxPages} pages. ` +
+            `Note: You can still view this document, but it cannot be automatically processed. ` +
+            `Please split the document into smaller files or process it manually.`
+          );
+        }
+      } catch (error) {
+        // If page count check fails, log but continue (might not be a PDF or check failed)
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        if (errorMessage.includes('too many pages')) {
+          throw error; // Re-throw page count errors
+        }
+        // Otherwise, continue with conversion (page count check is optional)
+        console.warn(`[Retry] Could not check PDF page count: ${errorMessage}`);
+      }
+      
       invoiceDataUri = await convertPdfToImageServer(invoiceDataUri);
+      
+      // Check the converted image size to prevent stack overflow during AI processing
+      const imageDataUriMatch = invoiceDataUri.match(/^data:([^;]+);base64,(.+)$/);
+      if (imageDataUriMatch && imageDataUriMatch[2]) {
+        const base64Data = imageDataUriMatch[2];
+        const estimatedSize = (base64Data.length * 3) / 4; // Approximate binary size
+        const maxImageSize = 20 * 1024 * 1024; // 20MB limit for images
+        if (estimatedSize > maxImageSize) {
+          throw new Error(
+            `Converted image is too large (${Math.round(estimatedSize / 1024 / 1024)}MB). ` +
+            `Maximum size is ${maxImageSize / 1024 / 1024}MB. ` +
+            `The PDF may be too large or have too many pages. ` +
+            `Please split the document or use a smaller file.`
+          );
+        }
+      }
     }
 
     // Reconstruct SmartAdvocate metadata from sync error
@@ -257,9 +325,21 @@ export async function retryDocumentSyncAction(
     });
 
     if (result.error) {
+      // Provide more helpful error messages for stack overflow errors
+      let errorMessage = result.error;
+      if (result.error.includes('Maximum call stack size exceeded') || 
+          result.error.includes('stack overflow') ||
+          result.error.includes('Document processing failed due to size or complexity')) {
+        errorMessage = 
+          'Document processing failed due to size or complexity. This document may be too large, have too many pages, or be too complex for automatic processing. ' +
+          'Note: You can still view this document using the "View Document" button. ' +
+          'To process it, please try: (1) Splitting the document into smaller files, (2) Reducing the file size, or (3) Using a simpler document format. ' +
+          'If this is a PDF, try reducing the number of pages or compressing the file.';
+      }
+      
       return {
         success: false,
-        error: result.error,
+        error: errorMessage,
       };
     }
 
