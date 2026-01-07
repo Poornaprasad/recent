@@ -252,9 +252,82 @@ export class InvoiceService {
           };
         }
       }
+      // For images (PNG, JPEG, etc.), validate size before processing
+      else if (mimeType.startsWith('image/')) {
+        // Validate data URI format
+        const dataUriMatch = invoiceDataUri.match(/^data:([^;]+);base64,(.+)$/);
+        if (!dataUriMatch || !dataUriMatch[2] || dataUriMatch[2].length === 0) {
+          return { error: 'Invalid image data URI format. The image data is missing or corrupted.' };
+        }
+        
+        // Check image size to prevent stack overflow (limit to 20MB base64 for images)
+        const base64Data = dataUriMatch[2];
+        const estimatedSize = (base64Data.length * 3) / 4; // Approximate binary size
+        const maxImageSize = 20 * 1024 * 1024; // 20MB for images
+        if (estimatedSize > maxImageSize) {
+          return { error: `Image is too large (${Math.round(estimatedSize / 1024 / 1024)}MB). Maximum size is ${maxImageSize / 1024 / 1024}MB. Please compress the image or use a smaller file.` };
+        }
+        
+        // Validate PNG/JPEG magic bytes to ensure it's a valid image
+        try {
+          const buffer = Buffer.from(base64Data, 'base64');
+          if (buffer.length === 0) {
+            return { error: 'Image data is empty. The file may be corrupted.' };
+          }
+          
+          // Check for PNG signature (89 50 4E 47 0D 0A 1A 0A)
+          const isPng = buffer.length >= 8 && 
+            buffer[0] === 0x89 && buffer[1] === 0x50 && 
+            buffer[2] === 0x4E && buffer[3] === 0x47 &&
+            buffer[4] === 0x0D && buffer[5] === 0x0A &&
+            buffer[6] === 0x1A && buffer[7] === 0x0A;
+          
+          // Check for JPEG signature (FF D8 FF)
+          const isJpeg = buffer.length >= 3 && 
+            buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF;
+          
+          // If it's supposed to be an image but doesn't have valid signatures, warn but continue
+          if (!isPng && !isJpeg && mimeType.startsWith('image/')) {
+            console.warn(`[Invoice Service] Image file may be corrupted or in unsupported format. MIME type: ${mimeType}`);
+          }
+        } catch (bufferError) {
+          console.error('[Invoice Service] Error validating image buffer:', bufferError);
+          return { error: 'Failed to validate image data. The file may be corrupted.' };
+        }
+      }
       
-      // Extract invoice data using AI
-      const data = await extractInvoiceData({ invoiceDataUri });
+      // Validate data URI before AI extraction (for all file types)
+      const dataUriMatch = invoiceDataUri.match(/^data:([^;]+);base64,(.+)$/);
+      if (!dataUriMatch || !dataUriMatch[2] || dataUriMatch[2].length === 0) {
+        return { error: 'Invalid document data URI format. The document data is missing or corrupted.' };
+      }
+      
+      // Check data URI size to prevent stack overflow (limit to 50MB base64)
+      const base64Data = dataUriMatch[2];
+      const estimatedSize = (base64Data.length * 3) / 4; // Approximate binary size
+      const maxSize = 50 * 1024 * 1024; // 50MB
+      if (estimatedSize > maxSize) {
+        return { error: `Document is too large (${Math.round(estimatedSize / 1024 / 1024)}MB). Maximum size is ${maxSize / 1024 / 1024}MB.` };
+      }
+      
+      // Extract invoice data using AI with error handling
+      let data;
+      try {
+        data = await extractInvoiceData({ invoiceDataUri });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        console.error('[Invoice Service] AI extraction error:', errorMessage);
+        
+        // Handle specific error types
+        if (errorMessage.includes('Maximum call stack size exceeded') || errorMessage.includes('stack overflow')) {
+          return { error: 'Document processing failed due to size or complexity. Please try a smaller or simpler document.' };
+        }
+        if (errorMessage.includes('Schema validation') || errorMessage.includes('INVALID_ARGUMENT')) {
+          return { error: 'AI extraction failed: Invalid document format. The document may be corrupted or in an unsupported format.' };
+        }
+        
+        return { error: `AI extraction failed: ${errorMessage}` };
+      }
 
       // Validate that we extracted some data
       const hasExtractedData = Object.values(data).some(value => {

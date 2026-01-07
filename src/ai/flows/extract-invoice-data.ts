@@ -535,8 +535,41 @@ const extractInvoiceDataFlow = ai.defineFlow(
     outputSchema: ExtractInvoiceDataOutputSchema,
   },
   async input => {
+    // Validate input data URI format before processing
+    if (!input.invoiceDataUri || typeof input.invoiceDataUri !== 'string') {
+      throw new Error('Invalid invoice data URI: must be a non-empty string');
+    }
+    
+    // Validate data URI format
+    const dataUriMatch = input.invoiceDataUri.match(/^data:([^;]+);base64,(.+)$/);
+    if (!dataUriMatch || !dataUriMatch[2] || dataUriMatch[2].length === 0) {
+      throw new Error('Invalid data URI format: must be in format data:<mimetype>;base64,<data>');
+    }
+    
     // Step 1: Extract the data from the invoice.
-    const {output: extractedData} = await extractInvoiceDataPrompt(input);
+    let extractedData;
+    try {
+      const result = await extractInvoiceDataPrompt(input);
+      extractedData = result.output;
+      
+      // Handle case where AI returns null directly
+      if (extractedData === null || extractedData === undefined) {
+        console.warn('[AI Extraction] AI returned null/undefined, using fallback structure');
+        extractedData = null;
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error('[AI Extraction] Error during extraction:', errorMessage);
+      
+      // If it's a schema validation error, return fallback structure
+      if (errorMessage.includes('Schema validation') || errorMessage.includes('INVALID_ARGUMENT') || errorMessage.includes('must be object')) {
+        console.warn('[AI Extraction] Schema validation error, using fallback structure');
+        extractedData = null;
+      } else {
+        // Re-throw other errors
+        throw error;
+      }
+    }
     
     if (!extractedData) {
       // Return a valid structure with null fields if extraction fails

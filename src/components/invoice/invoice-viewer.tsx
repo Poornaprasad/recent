@@ -27,6 +27,7 @@ interface InvoiceViewerProps {
   hoveredConfidence: number | null;
   onImageLoad?: (dimensions: { width: number; height: number; left: number; top: number }) => void;
   fullWidth?: boolean; // If true, use full width instead of 50% (for dialogs)
+  contentType?: string; // Optional content type to help determine if document is PDF or image
 }
 
 export function InvoiceViewer({
@@ -37,6 +38,7 @@ export function InvoiceViewer({
   hoveredConfidence,
   onImageLoad,
   fullWidth = false,
+  contentType,
 }: InvoiceViewerProps) {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -171,10 +173,28 @@ export function InvoiceViewer({
   };
 
   const absoluteUri = invoiceDataUri ? getAbsoluteUri(invoiceDataUri) : '';
+  
+  // Extract content type from data URI if not provided
+  let detectedContentType = contentType;
+  if (!detectedContentType && absoluteUri.startsWith('data:')) {
+    const dataUriMatch = absoluteUri.match(/^data:([^;]+);/);
+    if (dataUriMatch && dataUriMatch[1]) {
+      detectedContentType = dataUriMatch[1];
+    }
+  }
+  
+  // Determine if document is PDF based on content type, URI, or file extension
   const isPdf = absoluteUri && (
+    // Check content type first (most reliable)
+    (detectedContentType && detectedContentType === 'application/pdf') ||
+    // Check data URI MIME type
     absoluteUri.startsWith('data:application/pdf') || 
+    // Check file extension
     absoluteUri.endsWith('.pdf') ||
-    absoluteUri.includes('/api/documents/') // API route for documents (could be PDF or other formats)
+    // For API routes, only treat as PDF if content type indicates PDF
+    // If no content type, default to treating as PDF for backward compatibility
+    // but this should be avoided - content type should always be provided
+    (absoluteUri.includes('/api/documents/') && detectedContentType && detectedContentType === 'application/pdf')
   );
   
   // Check if we have a valid URI to display

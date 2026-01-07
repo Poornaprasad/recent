@@ -117,6 +117,7 @@ export default function SyncErrorsPage() {
   const [isResolving, setIsResolving] = useState(false);
   const [selectedErrors, setSelectedErrors] = useState<Set<string>>(new Set());
   const [documentDataUri, setDocumentDataUri] = useState<string | null>(null);
+  const [documentContentType, setDocumentContentType] = useState<string | null>(null);
   const [isLoadingDocument, setIsLoadingDocument] = useState(false);
   const [showDocumentViewer, setShowDocumentViewer] = useState(false);
   const [documentLoadError, setDocumentLoadError] = useState<string | null>(null);
@@ -269,6 +270,7 @@ export default function SyncErrorsPage() {
 
     setIsLoadingDocument(true);
     setDocumentDataUri(null);
+    setDocumentContentType(null);
     setDocumentLoadError(null);
     setShowDocumentViewer(false);
     
@@ -283,6 +285,10 @@ export default function SyncErrorsPage() {
           description: errorMsg,
         });
       } else if (result.data) {
+        // Store content type for proper document type detection
+        const contentType = result.data.contentType;
+        setDocumentContentType(contentType);
+        
         // Use URL if provided (for large documents), otherwise use data URI
         let documentUri = result.data.url || result.data.dataUri;
         
@@ -1357,6 +1363,7 @@ export default function SyncErrorsPage() {
           if (!open) {
             setShowDocumentViewer(false);
             setDocumentDataUri(null);
+            setDocumentContentType(null);
             setDocumentLoadError(null);
           }
         }}
@@ -1389,6 +1396,7 @@ export default function SyncErrorsPage() {
                   onClick={() => {
                     setShowDocumentViewer(false);
                     setDocumentDataUri(null);
+                    setDocumentContentType(null);
                     setDocumentLoadError(null);
                   }}
                 >
@@ -1417,6 +1425,7 @@ export default function SyncErrorsPage() {
                     hoveredField={null}
                     hoveredConfidence={null}
                     fullWidth={true}
+                    contentType={documentContentType || undefined}
                   />
                 </div>
               ) : (
@@ -1783,6 +1792,7 @@ export default function SyncErrorsPage() {
                 setResolutionNotes('');
                 setShowDocumentViewer(false);
                 setDocumentDataUri(null);
+                setDocumentContentType(null);
                 setDocumentLoadError(null);
               }}
               aria-label="Close dialog"
