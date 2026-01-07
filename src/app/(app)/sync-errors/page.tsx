@@ -81,6 +81,8 @@ import { cn } from '@/lib/utils/utils';
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuthStore } from "@/hooks/use-auth-store";
+import { useRouter } from "next/navigation";
+import { encodeId } from '@/lib/utils/id-utils';
 import {
   getDocumentSyncErrorsAction,
   resolveDocumentSyncErrorAction,
@@ -88,6 +90,7 @@ import {
   getDocumentContentAction,
   deleteAllDocumentSyncErrorsAction,
   deleteResolvedDocumentSyncErrorsAction,
+  retryDocumentSyncAction,
 } from '@/lib/actions/document-sync-error.actions';
 import type { DocumentSyncError } from '@/lib/db/schema';
 import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
@@ -95,6 +98,7 @@ import { InvoiceViewer } from '@/components/invoice/invoice-viewer';
 export default function SyncErrorsPage() {
   const { user, token } = useAuthStore();
   const { toast } = useToast();
+  const router = useRouter();
   const [errors, setErrors] = useState<DocumentSyncError[]>([]);
   const [allErrors, setAllErrors] = useState<DocumentSyncError[]>([]); // For client-side filtering
   const [stats, setStats] = useState<{
@@ -115,6 +119,7 @@ export default function SyncErrorsPage() {
   const [isResolveDialogOpen, setIsResolveDialogOpen] = useState(false);
   const [resolutionNotes, setResolutionNotes] = useState('');
   const [isResolving, setIsResolving] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [selectedErrors, setSelectedErrors] = useState<Set<string>>(new Set());
   const [documentDataUri, setDocumentDataUri] = useState<string | null>(null);
   const [documentContentType, setDocumentContentType] = useState<string | null>(null);
@@ -346,6 +351,79 @@ export default function SyncErrorsPage() {
     await handleLoadDocument(error);
   };
 
+  const handleRetry = async () => {
+    if (!selectedError || !user) return;
+
+    setIsRetrying(true);
+    try {
+      const retryResult = await retryDocumentSyncAction(selectedError.documentID);
+      
+      if (retryResult.error) {
+        toast({
+          variant: "destructive",
+          title: "Retry Failed",
+          description: retryResult.error,
+        });
+      } else if (retryResult.data?.success) {
+        // Automatically resolve the error after successful retry
+        const resolveResult = await resolveDocumentSyncErrorAction(
+          selectedError.id,
+          user.id,
+          'Automatically resolved after successful retry'
+        );
+
+        if (resolveResult.error) {
+          toast({
+            variant: "destructive",
+            title: "Retry Successful but Resolution Failed",
+            description: `Document synced successfully but failed to mark error as resolved: ${resolveResult.error}`,
+          });
+        } else {
+          toast({
+            title: "Retry Successful",
+            description: retryResult.data.invoiceId 
+              ? `Document has been processed and sent to Invoice review. The error has been automatically resolved.`
+              : "Document has been processed and sent to Invoice review. The error has been automatically resolved.",
+          });
+        }
+
+        // Reload errors to reflect changes
+        await loadErrors(false);
+        await loadStats();
+
+        // Navigate to invoice review page if invoice ID is available
+        if (retryResult.data?.invoiceId) {
+          const encodedInvoiceId = encodeId(retryResult.data.invoiceId);
+          router.push(`/invoices/${encodedInvoiceId}?source=sync-errors`);
+        } else {
+          // Close dialog if no invoice ID (shouldn't happen, but handle gracefully)
+          setIsResolveDialogOpen(false);
+          setSelectedError(null);
+          setResolutionNotes('');
+        }
+
+        // Announce to screen readers
+        if (statusAnnouncementRef.current) {
+          statusAnnouncementRef.current.textContent = 'Document retry successful, sent to review and error resolved';
+        }
+      } else {
+        toast({
+          variant: "destructive",
+          title: "Retry Failed",
+          description: retryResult.data?.error || "Failed to sync document.",
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to retry document sync.",
+      });
+    } finally {
+      setIsRetrying(false);
+    }
+  };
+
   const handleResolve = async () => {
     if (!selectedError || !user) return;
 
@@ -384,7 +462,7 @@ export default function SyncErrorsPage() {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Failed to resolve error.",
+        description: error instanceof Error ? error.message : "Failed to resolve error.",
       });
     } finally {
       setIsResolving(false);
@@ -1405,6 +1483,7 @@ export default function SyncErrorsPage() {
             setDocumentDataUri(null);
             setDocumentContentType(null);
             setDocumentLoadError(null);
+            setResolutionNotes('');
           }
         }}
       >
@@ -1710,20 +1789,48 @@ export default function SyncErrorsPage() {
             {/* Resolution Section */}
             {!selectedError?.resolved ? (
               <div className="space-y-3">
-                <Label htmlFor="resolution-notes" className="text-sm font-semibold">
-                  Resolution Notes <span className="text-muted-foreground font-normal">(Optional)</span>
-                </Label>
-                <Textarea
-                  id="resolution-notes"
-                  value={resolutionNotes}
-                  onChange={(e) => setResolutionNotes(e.target.value)}
-                  placeholder="Add notes about how this error was resolved..."
-                  className="min-h-[100px]"
-                  aria-describedby="resolution-notes-description"
-                />
-                <p id="resolution-notes-description" className="text-xs text-muted-foreground">
-                  Optional notes about how this error was resolved or why it occurred.
-                </p>
+                <div className="flex items-center justify-between pb-3 border-b">
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">Retry Sync</h3>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Retry processing this document. If successful, it will be sent to Invoice processing for review.
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={handleRetry}
+                    disabled={isRetrying || isResolving}
+                    aria-label="Retry document sync"
+                  >
+                    {isRetrying ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" aria-hidden="true" />
+                        Retrying...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" aria-hidden="true" />
+                        Retry
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <div className="space-y-3">
+                  <Label htmlFor="resolution-notes" className="text-sm font-semibold">
+                    Resolution Notes <span className="text-muted-foreground font-normal">(Optional)</span>
+                  </Label>
+                  <Textarea
+                    id="resolution-notes"
+                    value={resolutionNotes}
+                    onChange={(e) => setResolutionNotes(e.target.value)}
+                    placeholder="Add notes about how this error was resolved..."
+                    className="min-h-[100px]"
+                    aria-describedby="resolution-notes-description"
+                  />
+                  <p id="resolution-notes-description" className="text-xs text-muted-foreground">
+                    Optional notes about how this error was resolved or why it occurred.
+                  </p>
+                </div>
               </div>
             ) : (
               <div className="space-y-3">
