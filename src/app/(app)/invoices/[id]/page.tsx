@@ -929,6 +929,7 @@ export default function InvoiceDetailPage() {
                               <div><strong>Vendor:</strong> {dup.payeeName || 'N/A'}</div>
                               {dup.amount && <div><strong>Amount:</strong> {formatCurrency(dup.amount)}</div>}
                               {dup.checkNumber && <div><strong>Check #:</strong> {dup.checkNumber}</div>}
+                              {dup.status && <div><strong>Status:</strong> {dup.status}</div>}
                             </div>
                           ))}
                         </div>
@@ -944,6 +945,7 @@ export default function InvoiceDetailPage() {
                               <div><strong>Vendor:</strong> {dup.payeeName || 'N/A'}</div>
                               {dup.amount && <div><strong>Amount:</strong> {formatCurrency(dup.amount)}</div>}
                               {dup.checkNumber && <div><strong>Check #:</strong> {dup.checkNumber}</div>}
+                              {dup.status && <div><strong>Status:</strong> {dup.status}</div>}
                             </div>
                           ))}
                         </div>

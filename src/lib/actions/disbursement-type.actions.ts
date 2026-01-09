@@ -158,6 +158,7 @@ export interface DuplicateCheckResult {
     payeeName?: string;
     amount?: number;
     checkNumber?: string;
+    status?: string;
     matchType?: 'exact' | 'partial';
   }>;
   partialMatches?: Array<{
@@ -167,6 +168,7 @@ export interface DuplicateCheckResult {
     payeeName?: string;
     amount?: number;
     checkNumber?: string;
+    status?: string;
     matchType?: 'exact' | 'partial';
   }>;
   message?: string;
@@ -324,6 +326,17 @@ export async function checkCaseForDuplicatesAction(
       // Get amount
       const dispAmount = disbursement.amount || 0;
 
+      // Get status description
+      let statusDescription: string | undefined;
+      if (disbursement.status) {
+        if (typeof disbursement.status === 'string') {
+          statusDescription = disbursement.status;
+        } else if (typeof disbursement.status === 'object' && disbursement.status !== null) {
+          const statusObj = disbursement.status as { description?: string; id?: number };
+          statusDescription = statusObj.description || (statusObj.id ? `Status ID: ${statusObj.id}` : undefined);
+        }
+      }
+
       // Check if vendor, invoice number, and date match (exact duplicate)
       // Only check fields that are provided (non-empty)
       const vendorMatches = !normalizedVendorName || normalizedPayeeName === normalizedVendorName;
@@ -354,6 +367,7 @@ export async function checkCaseForDuplicatesAction(
           payeeName: payeeName,
           amount: disbursement.amount,
           checkNumber: disbursement.checkNumber,
+          status: statusDescription,
           matchType: 'exact',
         });
         continue; // Skip partial match check for exact duplicates
@@ -378,6 +392,7 @@ export async function checkCaseForDuplicatesAction(
               payeeName: payeeName,
               amount: disbursement.amount,
               checkNumber: disbursement.checkNumber,
+              status: statusDescription,
               matchType: 'partial',
             });
           }
