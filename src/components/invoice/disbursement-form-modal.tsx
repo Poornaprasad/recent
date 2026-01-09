@@ -14,9 +14,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Combobox, type ComboboxOption } from '@/components/ui/combobox';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/hooks/use-auth-store';
-import { Loader2, Search } from 'lucide-react';
+import { Loader2, Search, Building2, Users } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { StoredInvoice } from '@/lib/domain/types';
 import {
@@ -24,6 +25,7 @@ import {
   fetchDisbursementStatusesAction,
   createDisbursementAction,
   lookupContactsAction,
+  getCaseContactsAction,
   getCaseInfoAction,
   getPreviousDisbursementTypeForVendorAction,
   updateInvoiceDisbursementResponseAction,
@@ -93,9 +95,11 @@ export function DisbursementFormModal({
   // Options
   const [disbursementTypes, setDisbursementTypes] = useState<DisbursementOption[]>([]);
   const [disbursementStatuses, setDisbursementStatuses] = useState<DisbursementOption[]>([]);
-  const [contactSearchResults, setContactSearchResults] = useState<ContactLookupResult[]>([]);
-  const [isContactSearchOpen, setIsContactSearchOpen] = useState(false);
-  const [contactSearchError, setContactSearchError] = useState<string>('');
+  const [caseContactResults, setCaseContactResults] = useState<ContactLookupResult[]>([]);
+  const [crmContactResults, setCrmContactResults] = useState<ContactLookupResult[]>([]);
+  const [contactSearchType, setContactSearchType] = useState<'case' | 'crm'>('case');
+  const [caseContactError, setCaseContactError] = useState<string>('');
+  const [crmContactError, setCrmContactError] = useState<string>('');
 
   // Get default status based on document type
   const getDefaultStatusForDocumentType = (docType: string | undefined): { id: number; description: string } | null => {
@@ -221,17 +225,29 @@ export function DisbursementFormModal({
         setCaseID(null);
         setPlaintiffId(null);
         setPlaintiffName('');
-        loadCaseInfo(caseNum.trim());
+        loadCaseInfo(caseNum.trim()).then(() => {
+          // After case info loads, auto-search in case contacts if vendor name exists
+          if (invoice.vendorName?.value) {
+            setContactSearchType('case');
+            // Use setTimeout to ensure caseID state is updated
+            setTimeout(() => {
+              const vendorName = invoice.vendorName?.value;
+              if (vendorName) {
+                searchCaseContacts(vendorName);
+              }
+            }, 100);
+          }
+        });
       } else {
         console.warn('No case number found in invoice:', invoice);
         setCaseID(null);
         setPlaintiffId(null);
         setPlaintiffName('');
-      }
-
-      // Search for vendor contact
-      if (invoice.vendorName?.value) {
-        searchVendorContact(invoice.vendorName.value);
+        // If no case number, search in CRM contacts
+        if (invoice.vendorName?.value) {
+          setContactSearchType('crm');
+          searchCrmContacts(invoice.vendorName.value);
+        }
       }
     } else {
       // Reset all fields when modal closes
@@ -255,6 +271,11 @@ export function DisbursementFormModal({
       setWaived(false);
       setIsLienor(false);
       setCustomField1('');
+      setCaseContactResults([]);
+      setCrmContactResults([]);
+      setCaseContactError('');
+      setCrmContactError('');
+      setContactSearchType('case');
     }
   }, [isOpen, invoice, invoice?.documentID]);
 
@@ -356,28 +377,148 @@ export function DisbursementFormModal({
     }
   };
 
-  // Search for vendor contact using CRM lookup API
-  const searchVendorContact = async (vendorName: string) => {
+  // Helper function to match vendor name with contact
+  const matchContactName = (contact: ContactLookupResult, vendorName: string): boolean => {
+    const vendorNameLower = vendorName.toLowerCase().trim();
+    const contactName = (contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim()).toLowerCase();
+    
+    // Exact match
+    if (contactName === vendorNameLower) {
+      return true;
+    }
+    
+    // Check if vendor name contains contact name or vice versa
+    if (contactName.includes(vendorNameLower) || vendorNameLower.includes(contactName)) {
+      return true;
+    }
+    
+    // For person names, check first and last name separately
+    if (contact.firstName && contact.lastName) {
+      const firstNameLower = contact.firstName.toLowerCase();
+      const lastNameLower = contact.lastName.toLowerCase();
+      const vendorParts = vendorNameLower.split(/\s+/);
+      
+      // Check if all vendor name parts match contact name parts
+      if (vendorParts.every(part => firstNameLower.includes(part) || lastNameLower.includes(part) || contactName.includes(part))) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  // Helper function to filter and sort contacts by address
+  const filterContactsByAddress = (
+    contacts: ContactLookupResult[],
+    vendorAddress: string
+  ): ContactLookupResult[] => {
+    if (!vendorAddress || !vendorAddress.trim()) {
+      return contacts;
+    }
+
+    const addressLower = vendorAddress.toLowerCase();
+    const exactMatches: ContactLookupResult[] = [];
+    const partialMatches: ContactLookupResult[] = [];
+    const noAddressMatches: ContactLookupResult[] = [];
+
+    contacts.forEach(contact => {
+      const contactAddress = (contact.address || '').toLowerCase();
+
+      if (!contactAddress) {
+        noAddressMatches.push(contact);
+      } else if (contactAddress === addressLower || contactAddress.includes(addressLower) || addressLower.includes(contactAddress)) {
+        exactMatches.push(contact);
+      } else {
+        // Check for partial match (e.g., city, state, zip)
+        const addressWords = addressLower.split(/\s+/).filter((w: string) => w.length > 2);
+        const contactWords = contactAddress.split(/\s+/).filter((w: string) => w.length > 2);
+        const hasCommonWords = addressWords.some((word: string) => contactWords.includes(word));
+
+        if (hasCommonWords) {
+          partialMatches.push(contact);
+        } else {
+          noAddressMatches.push(contact);
+        }
+      }
+    });
+
+    return [...exactMatches, ...partialMatches, ...noAddressMatches];
+  };
+
+  // Search case contacts
+  const searchCaseContacts = async (vendorName: string) => {
     if (!vendorName || !vendorName.trim()) {
-      setContactSearchResults([]);
+      setCaseContactResults([]);
+      setCaseContactError('');
+      return;
+    }
+
+    if (!caseID) {
+      setCaseContactError('Case ID is required to search case contacts');
+      setCaseContactResults([]);
       return;
     }
 
     setIsLoadingContacts(true);
-    setContactSearchError('');
-    
+    setCaseContactError('');
+
+    try {
+      const trimmedName = vendorName.trim();
+      console.log(`Searching case contacts for caseID: ${caseID}, vendor: ${trimmedName}`);
+
+      const caseContactsResult = await getCaseContactsAction(caseID);
+
+      if (caseContactsResult.error) {
+        setCaseContactError(caseContactsResult.error);
+        setCaseContactResults([]);
+      } else if (caseContactsResult.data && caseContactsResult.data.length > 0) {
+        // Filter contacts by vendor name
+        const matchingContacts = caseContactsResult.data.filter(contact => matchContactName(contact, trimmedName));
+
+        if (matchingContacts.length > 0) {
+          // Filter by address if available
+          const vendorAddress = invoice.vendorAddress?.value || '';
+          const filteredResults = filterContactsByAddress(matchingContacts, vendorAddress);
+          setCaseContactResults(filteredResults);
+        } else {
+          setCaseContactResults([]);
+          setCaseContactError('No matching contacts found in case');
+        }
+      } else {
+        setCaseContactResults([]);
+        setCaseContactError('No contacts found in case');
+      }
+    } catch (error) {
+      console.error('Error searching case contacts:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Failed to search case contacts';
+      setCaseContactError(errorMsg);
+      setCaseContactResults([]);
+    } finally {
+      setIsLoadingContacts(false);
+    }
+  };
+
+  // Search CRM contacts
+  const searchCrmContacts = async (vendorName: string) => {
+    if (!vendorName || !vendorName.trim()) {
+      setCrmContactResults([]);
+      setCrmContactError('');
+      return;
+    }
+
+    setIsLoadingContacts(true);
+    setCrmContactError('');
+
     try {
       const trimmedName = vendorName.trim();
       const params: { name?: string; firstName?: string; lastName?: string } = {};
 
-      // Check if it looks like a company name (contains LLC, Inc, Corp, etc. or has a comma)
+      // Check if it looks like a company name
       const isCompanyName = /(LLC|Inc|Corp|Ltd|Company|Co\.|,)/i.test(trimmedName);
-      
+
       if (isCompanyName) {
-        // For company names, use the name parameter directly
         params.name = trimmedName;
       } else {
-        // For person names, try to split into first/last
         const nameParts = trimmedName.split(/\s+/);
         if (nameParts.length === 1) {
           params.name = nameParts[0];
@@ -387,108 +528,56 @@ export function DisbursementFormModal({
         }
       }
 
-      console.log('Searching contacts in CRM with params:', params);
+      console.log('Searching CRM contacts with params:', params);
       const result = await lookupContactsAction({
         ...params,
-        rowLimit: 50, // Increased limit to avoid missing results
+        rowLimit: 50,
       });
 
       if (result.error) {
-        setContactSearchError(result.error);
-        setContactSearchResults([]);
-        toast({
-          variant: 'destructive',
-          title: 'Contact Search Failed',
-          description: result.error,
-        });
+        setCrmContactError(result.error);
+        setCrmContactResults([]);
       } else if (result.data && result.data.length > 0) {
-        console.log('Found contacts:', result.data.length);
-        
-        // Get vendor address from invoice for matching
+        // Filter by address if available
         const vendorAddress = invoice.vendorAddress?.value || '';
-        
-        // Filter and sort results: prioritize matches by address if available
-        let filteredResults = result.data;
-        
-        if (vendorAddress && vendorAddress.trim()) {
-          const addressLower = vendorAddress.toLowerCase();
-          
-          // Separate results into: exact address match, partial address match, no address match
-          const exactMatches: ContactLookupResult[] = [];
-          const partialMatches: ContactLookupResult[] = [];
-          const noAddressMatches: ContactLookupResult[] = [];
-          
-          result.data.forEach(contact => {
-            const contactAddress = (contact.address || '').toLowerCase();
-            
-            if (!contactAddress) {
-              noAddressMatches.push(contact);
-            } else if (contactAddress === addressLower || contactAddress.includes(addressLower) || addressLower.includes(contactAddress)) {
-              exactMatches.push(contact);
-            } else {
-              // Check for partial match (e.g., city, state, zip)
-              const addressWords = addressLower.split(/\s+/).filter((w: string) => w.length > 2);
-              const contactWords = contactAddress.split(/\s+/).filter((w: string) => w.length > 2);
-              const hasCommonWords = addressWords.some((word: string) => contactWords.includes(word));
-              
-              if (hasCommonWords) {
-                partialMatches.push(contact);
-              } else {
-                noAddressMatches.push(contact);
-              }
-            }
-          });
-          
-          // Combine: exact matches first, then partial, then no address match
-          filteredResults = [...exactMatches, ...partialMatches, ...noAddressMatches];
-          
-          console.log(`Address matching: ${exactMatches.length} exact, ${partialMatches.length} partial, ${noAddressMatches.length} no match`);
-        }
-        
-        setContactSearchResults(filteredResults);
-        
-        // Auto-select first match if only one
-        if (filteredResults.length === 1) {
-          const contact = filteredResults[0];
-          setPayeeContactId(contact.contactId);
-          const contactName = contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
-          setPayeeName(contactName);
-          toast({
-            title: 'Contact Found',
-            description: `Selected: ${contactName}`,
-          });
-        } else if (filteredResults.length > 0 && vendorAddress) {
-          // If we have address matches, show a toast indicating matches were prioritized
-          const addressMatches = filteredResults.filter(c => {
-            const contactAddress = (c.address || '').toLowerCase();
-            const addressLower = vendorAddress.toLowerCase();
-            return contactAddress && (contactAddress === addressLower || contactAddress.includes(addressLower) || addressLower.includes(contactAddress));
-          });
-          
-          if (addressMatches.length > 0) {
-            toast({
-              title: 'Contacts Found',
-              description: `${addressMatches.length} contact(s) matched by address, ${filteredResults.length} total results.`,
-            });
-          }
-        }
+        const filteredResults = filterContactsByAddress(result.data, vendorAddress);
+        setCrmContactResults(filteredResults);
       } else {
-        setContactSearchResults([]);
-        setContactSearchError('No contacts found matching the search criteria.');
+        setCrmContactResults([]);
+        setCrmContactError('No contacts found matching the search criteria');
       }
     } catch (error) {
-      console.error('Failed to search vendor contact:', error);
-      const errorMsg = error instanceof Error ? error.message : 'Failed to search contacts';
-      setContactSearchError(errorMsg);
-      setContactSearchResults([]);
-      toast({
-        variant: 'destructive',
-        title: 'Search Error',
-        description: errorMsg,
-      });
+      console.error('Error searching CRM contacts:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Failed to search CRM contacts';
+      setCrmContactError(errorMsg);
+      setCrmContactResults([]);
     } finally {
       setIsLoadingContacts(false);
     }
+  };
+
+  // Unified search function that searches based on selected tab
+  const searchVendorContact = async (vendorName: string) => {
+    if (contactSearchType === 'case') {
+      await searchCaseContacts(vendorName);
+    } else {
+      await searchCrmContacts(vendorName);
+    }
+  };
+
+  // Handle contact selection
+  const handleContactSelect = (contact: ContactLookupResult, source: 'case' | 'crm') => {
+    setPayeeContactId(contact.contactId);
+    const contactName = contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+    setPayeeName(contactName);
+    setCaseContactResults([]);
+    setCrmContactResults([]);
+    setCaseContactError('');
+    setCrmContactError('');
+    toast({
+      title: 'Contact Selected',
+      description: `Selected: ${contactName} (from ${source === 'case' ? 'case contacts' : 'CRM contacts'})`,
+    });
   };
 
   // Check for duplicates in case
@@ -933,7 +1022,7 @@ export function DisbursementFormModal({
             )}
           </div>
 
-          {/* Payee - Searchable with CRM Lookup */}
+          {/* Payee - Searchable with Case Contacts and CRM Lookup */}
           <div>
             <Label>Payee (Vendor) *</Label>
             <div className="space-y-2">
@@ -943,12 +1032,12 @@ export function DisbursementFormModal({
                   onChange={(e) => {
                     setPayeeName(e.target.value);
                     // Clear previous results when typing
-                    if (contactSearchResults.length > 0) {
-                      setContactSearchResults([]);
-                    }
-                    setContactSearchError('');
+                    setCaseContactResults([]);
+                    setCrmContactResults([]);
+                    setCaseContactError('');
+                    setCrmContactError('');
                   }}
-                  placeholder="Enter vendor name and click search to lookup in CRM"
+                  placeholder="Enter vendor name and click search"
                   className="flex-1"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && payeeName.trim()) {
@@ -972,7 +1061,7 @@ export function DisbursementFormModal({
                     }
                   }}
                   disabled={isLoadingContacts || !payeeName.trim()}
-                  title="Search in CRM"
+                  title={`Search in ${contactSearchType === 'case' ? 'Case Contacts' : 'CRM'}`}
                 >
                   {isLoadingContacts ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -981,136 +1070,263 @@ export function DisbursementFormModal({
                   )}
                 </Button>
               </div>
-              
-              {payeeContactId && (
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 border-green-300 text-green-700 dark:text-green-400">
-                    ✓ Contact ID: {payeeContactId}
-                  </Badge>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setPayeeContactId(null);
-                      setContactSearchResults([]);
-                    }}
-                    className="h-6 text-xs"
-                  >
-                    Clear
-                  </Button>
-                </div>
-              )}
 
-              {contactSearchError && (
-                <div className="text-xs text-destructive bg-destructive/10 p-2 rounded">
-                  {contactSearchError}
-                </div>
-              )}
+              {/* Tabs for Case Contacts vs CRM Contacts */}
+              <Tabs value={contactSearchType} onValueChange={(value) => {
+                setContactSearchType(value as 'case' | 'crm');
+                // Clear results when switching tabs
+                setCaseContactResults([]);
+                setCrmContactResults([]);
+                setCaseContactError('');
+                setCrmContactError('');
+              }}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="case" disabled={!caseID} className="flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Case Contacts
+                    {!caseID && <span className="text-xs text-muted-foreground">(Case ID required)</span>}
+                  </TabsTrigger>
+                  <TabsTrigger value="crm" className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4" />
+                    CRM Contacts
+                  </TabsTrigger>
+                </TabsList>
 
-              {contactSearchResults.length > 0 && (() => {
-                const vendorAddress = invoice.vendorAddress?.value || '';
-                const addressLower = vendorAddress.toLowerCase();
-                
-                return (
-                  <div className="mt-2 space-y-1 max-h-64 overflow-y-auto border rounded p-2 bg-muted/30">
-                    <Label className="text-xs text-muted-foreground mb-2 block font-medium">
-                      CRM Search Results ({contactSearchResults.length}):
-                      {vendorAddress && (
-                        <span className="text-xs text-muted-foreground ml-2">
-                          (Filtered by address: {vendorAddress})
-                        </span>
-                      )}
-                    </Label>
-                    {contactSearchResults.map((contact, index) => {
-                      const contactName = contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
-                      // Use a unique key combining contactId and index to avoid duplicate key errors
-                      const uniqueKey = `contact-${contact.contactId || 'unknown'}-${index}-${contactName}`;
-                      
-                      // Check if address matches
-                      const contactAddress = (contact.address || '').toLowerCase();
-                      const isAddressMatch = vendorAddress && contactAddress && (
-                        contactAddress === addressLower || 
-                        contactAddress.includes(addressLower) || 
-                        addressLower.includes(contactAddress)
-                      );
-                      
-                      // Check for partial address match
-                      let isPartialMatch = false;
-                      if (vendorAddress && contactAddress && !isAddressMatch) {
-                        const addressWords = addressLower.split(/\s+/).filter((w: string) => w.length > 2);
-                        const contactWords = contactAddress.split(/\s+/).filter((w: string) => w.length > 2);
-                        isPartialMatch = addressWords.some((word: string) => contactWords.includes(word));
-                      }
-                      
-                      return (
-                        <div
-                          key={uniqueKey}
-                          className={cn(
-                            "p-2 border rounded cursor-pointer hover:bg-muted transition-colors",
-                            isAddressMatch 
-                              ? "bg-green-50 dark:bg-green-900/20 border-green-300" 
-                              : isPartialMatch
-                              ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300"
-                              : "bg-background"
+                {/* Case Contacts Tab */}
+                <TabsContent value="case" className="space-y-2">
+                  {payeeContactId && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 border-green-300 text-green-700 dark:text-green-400">
+                        ✓ Contact ID: {payeeContactId}
+                      </Badge>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setPayeeContactId(null);
+                          setCaseContactResults([]);
+                          setCrmContactResults([]);
+                        }}
+                        className="h-6 text-xs"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  )}
+
+                  {caseContactError && (
+                    <div className="text-xs text-destructive bg-destructive/10 p-2 rounded">
+                      {caseContactError}
+                    </div>
+                  )}
+
+                  {caseContactResults.length > 0 && (() => {
+                    const vendorAddress = invoice.vendorAddress?.value || '';
+                    const addressLower = vendorAddress.toLowerCase();
+                    
+                    return (
+                      <div className="mt-2 space-y-1 max-h-64 overflow-y-auto border rounded p-2 bg-muted/30">
+                        <Label className="text-xs text-muted-foreground mb-2 block font-medium">
+                          Case Contacts ({caseContactResults.length}):
+                          {vendorAddress && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              (Filtered by address: {vendorAddress})
+                            </span>
                           )}
-                          onClick={() => {
-                            setPayeeContactId(contact.contactId);
-                            setPayeeName(contactName);
-                            setContactSearchResults([]); // Clear results after selection
-                            setContactSearchError('');
-                            toast({
-                              title: 'Contact Selected',
-                              description: `Selected: ${contactName} (ID: ${contact.contactId})`,
-                            });
-                          }}
-                        >
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <div className="text-sm font-medium">{contactName}</div>
-                                {isAddressMatch && (
-                                  <Badge variant="outline" className="text-xs bg-green-100 dark:bg-green-900/30 border-green-400 text-green-700 dark:text-green-400">
-                                    ✓ Address Match
-                                  </Badge>
-                                )}
-                                {isPartialMatch && !isAddressMatch && (
-                                  <Badge variant="outline" className="text-xs bg-yellow-100 dark:bg-yellow-900/30 border-yellow-400 text-yellow-700 dark:text-yellow-400">
-                                    ~ Partial Address
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                                <div>Contact ID: {contact.contactId}</div>
-                                {contact.address && (
-                                  <div className={cn(
-                                    isAddressMatch && "font-medium text-green-700 dark:text-green-400",
-                                    isPartialMatch && !isAddressMatch && "text-yellow-700 dark:text-yellow-400"
-                                  )}>
-                                    Address: {contact.address}
+                        </Label>
+                        {caseContactResults.map((contact, index) => {
+                          const contactName = contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+                          const uniqueKey = `case-contact-${contact.contactId || 'unknown'}-${index}-${contactName}`;
+                          
+                          const contactAddress = (contact.address || '').toLowerCase();
+                          const isAddressMatch = vendorAddress && contactAddress && (
+                            contactAddress === addressLower || 
+                            contactAddress.includes(addressLower) || 
+                            addressLower.includes(contactAddress)
+                          );
+                          
+                          let isPartialMatch = false;
+                          if (vendorAddress && contactAddress && !isAddressMatch) {
+                            const addressWords = addressLower.split(/\s+/).filter((w: string) => w.length > 2);
+                            const contactWords = contactAddress.split(/\s+/).filter((w: string) => w.length > 2);
+                            isPartialMatch = addressWords.some((word: string) => contactWords.includes(word));
+                          }
+                          
+                          return (
+                            <div
+                              key={uniqueKey}
+                              className={cn(
+                                "p-2 border rounded cursor-pointer hover:bg-muted transition-colors",
+                                isAddressMatch 
+                                  ? "bg-green-50 dark:bg-green-900/20 border-green-300" 
+                                  : isPartialMatch
+                                  ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300"
+                                  : "bg-background"
+                              )}
+                              onClick={() => handleContactSelect(contact, 'case')}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-sm font-medium">{contactName}</div>
+                                    <Badge variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900/30 border-blue-400 text-blue-700 dark:text-blue-400">
+                                      Case Contact
+                                    </Badge>
+                                    {isAddressMatch && (
+                                      <Badge variant="outline" className="text-xs bg-green-100 dark:bg-green-900/30 border-green-400 text-green-700 dark:text-green-400">
+                                        ✓ Address Match
+                                      </Badge>
+                                    )}
+                                    {isPartialMatch && !isAddressMatch && (
+                                      <Badge variant="outline" className="text-xs bg-yellow-100 dark:bg-yellow-900/30 border-yellow-400 text-yellow-700 dark:text-yellow-400">
+                                        ~ Partial Address
+                                      </Badge>
+                                    )}
                                   </div>
-                                )}
-                                {contact.email && (
-                                  <div>Email: {contact.email}</div>
-                                )}
-                                {contact.phone && (
-                                  <div>Phone: {contact.phone}</div>
-                                )}
-                                {contact.contactType && (
-                                  <div>Type: {contact.contactType}</div>
-                                )}
+                                  <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                    <div>Contact ID: {contact.contactId}</div>
+                                    {contact.address && (
+                                      <div className={cn(
+                                        isAddressMatch && "font-medium text-green-700 dark:text-green-400",
+                                        isPartialMatch && !isAddressMatch && "text-yellow-700 dark:text-yellow-400"
+                                      )}>
+                                        Address: {contact.address}
+                                      </div>
+                                    )}
+                                    {contact.email && <div>Email: {contact.email}</div>}
+                                    {contact.phone && <div>Phone: {contact.phone}</div>}
+                                    {contact.contactType && <div>Type: {contact.contactType}</div>}
+                                  </div>
+                                </div>
+                                <Badge variant="outline" className="text-xs ml-2">
+                                  Select
+                                </Badge>
                               </div>
                             </div>
-                            <Badge variant="outline" className="text-xs ml-2">
-                              Select
-                            </Badge>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
-              })()}
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </TabsContent>
+
+                {/* CRM Contacts Tab */}
+                <TabsContent value="crm" className="space-y-2">
+                  {payeeContactId && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs bg-green-50 dark:bg-green-900/30 border-green-300 text-green-700 dark:text-green-400">
+                        ✓ Contact ID: {payeeContactId}
+                      </Badge>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => {
+                          setPayeeContactId(null);
+                          setCaseContactResults([]);
+                          setCrmContactResults([]);
+                        }}
+                        className="h-6 text-xs"
+                      >
+                        Clear
+                      </Button>
+                    </div>
+                  )}
+
+                  {crmContactError && (
+                    <div className="text-xs text-destructive bg-destructive/10 p-2 rounded">
+                      {crmContactError}
+                    </div>
+                  )}
+
+                  {crmContactResults.length > 0 && (() => {
+                    const vendorAddress = invoice.vendorAddress?.value || '';
+                    const addressLower = vendorAddress.toLowerCase();
+                    
+                    return (
+                      <div className="mt-2 space-y-1 max-h-64 overflow-y-auto border rounded p-2 bg-muted/30">
+                        <Label className="text-xs text-muted-foreground mb-2 block font-medium">
+                          CRM Search Results ({crmContactResults.length}):
+                          {vendorAddress && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              (Filtered by address: {vendorAddress})
+                            </span>
+                          )}
+                        </Label>
+                        {crmContactResults.map((contact, index) => {
+                          const contactName = contact.name || `${contact.firstName || ''} ${contact.lastName || ''}`.trim();
+                          const uniqueKey = `crm-contact-${contact.contactId || 'unknown'}-${index}-${contactName}`;
+                          
+                          const contactAddress = (contact.address || '').toLowerCase();
+                          const isAddressMatch = vendorAddress && contactAddress && (
+                            contactAddress === addressLower || 
+                            contactAddress.includes(addressLower) || 
+                            addressLower.includes(contactAddress)
+                          );
+                          
+                          let isPartialMatch = false;
+                          if (vendorAddress && contactAddress && !isAddressMatch) {
+                            const addressWords = addressLower.split(/\s+/).filter((w: string) => w.length > 2);
+                            const contactWords = contactAddress.split(/\s+/).filter((w: string) => w.length > 2);
+                            isPartialMatch = addressWords.some((word: string) => contactWords.includes(word));
+                          }
+                          
+                          return (
+                            <div
+                              key={uniqueKey}
+                              className={cn(
+                                "p-2 border rounded cursor-pointer hover:bg-muted transition-colors",
+                                isAddressMatch 
+                                  ? "bg-green-50 dark:bg-green-900/20 border-green-300" 
+                                  : isPartialMatch
+                                  ? "bg-yellow-50 dark:bg-yellow-900/20 border-yellow-300"
+                                  : "bg-background"
+                              )}
+                              onClick={() => handleContactSelect(contact, 'crm')}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1">
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-sm font-medium">{contactName}</div>
+                                    {isAddressMatch && (
+                                      <Badge variant="outline" className="text-xs bg-green-100 dark:bg-green-900/30 border-green-400 text-green-700 dark:text-green-400">
+                                        ✓ Address Match
+                                      </Badge>
+                                    )}
+                                    {isPartialMatch && !isAddressMatch && (
+                                      <Badge variant="outline" className="text-xs bg-yellow-100 dark:bg-yellow-900/30 border-yellow-400 text-yellow-700 dark:text-yellow-400">
+                                        ~ Partial Address
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                                    <div>Contact ID: {contact.contactId}</div>
+                                    {contact.address && (
+                                      <div className={cn(
+                                        isAddressMatch && "font-medium text-green-700 dark:text-green-400",
+                                        isPartialMatch && !isAddressMatch && "text-yellow-700 dark:text-yellow-400"
+                                      )}>
+                                        Address: {contact.address}
+                                      </div>
+                                    )}
+                                    {contact.email && <div>Email: {contact.email}</div>}
+                                    {contact.phone && <div>Phone: {contact.phone}</div>}
+                                    {contact.contactType && <div>Type: {contact.contactType}</div>}
+                                  </div>
+                                </div>
+                                <Badge variant="outline" className="text-xs ml-2">
+                                  Select
+                                </Badge>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                </TabsContent>
+              </Tabs>
             </div>
           </div>
 

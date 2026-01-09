@@ -103,5 +103,6 @@ export {
 
 export {
   lookupContactsAction,
+  getCaseContactsAction,
 } from './contact.actions';
 

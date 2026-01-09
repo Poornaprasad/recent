@@ -5,7 +5,7 @@
 
 'use server';
 
-import { lookupContacts } from '../crm/smartadvocate';
+import { lookupContacts, getCaseContacts } from '../crm/smartadvocate';
 import { withActionHandler, type ActionResult } from '../utils/action-wrapper';
 import type { ContactLookupResult, ContactLookupParams } from '../crm/smartadvocate/types';
 
@@ -34,4 +34,20 @@ export async function lookupContactsAction(
   }, 'Failed to lookup contacts');
 }
 
+/**
+ * Get contacts for a specific case from SmartAdvocate API
+ * Fetches all contacts associated with a case
+ */
+export async function getCaseContactsAction(
+  caseId: number
+): Promise<ActionResult<ContactLookupResult[]>> {
+  return withActionHandler(async () => {
+    if (!caseId || caseId <= 0) {
+      throw new Error('Valid case ID is required');
+    }
+
+    const results = await getCaseContacts(caseId);
+    return results;
+  }, 'Failed to get case contacts');
+}
 
